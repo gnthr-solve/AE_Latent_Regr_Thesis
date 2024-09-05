@@ -7,9 +7,30 @@ from torch.utils.data import Dataset
 from itertools import product
 from pathlib import Path
 from collections import namedtuple
+from dataclasses import dataclass, field
 
+from helper_tools import default_index_map, default_X_col_map, default_y_col_map
 from info import process_metadata_cols, identifier_col
 
+"""
+DataSets - Alignment
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+@dataclass(slots=True)
+class Alignment:
+
+    index_map: dict[int, str] = field(default_factory = default_index_map)
+
+    X_col_map: dict[int, str] = field(default_factory = default_X_col_map)
+    y_col_map: dict[int, str] = field(default_factory = default_y_col_map)
+
+    X_cols: list[str] = field(init=False)
+    y_cols: list[str] = field(init=False)
+
+    def __post_init__(self):
+
+        self.X_cols = list(self.X_col_map.values())
+        self.y_cols = list(self.y_col_map.values())
 
 
 """
@@ -20,18 +41,14 @@ DataPoint = namedtuple('DataPoint', ['metadata', 'X', 'y'])
 
 class DataFrameNamedTupleDataset(Dataset):
 
-    def __init__(self, X_data_df: pd.DataFrame, y_data_df: pd.DataFrame):
+    def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment = Alignment()):
 
-        #merge X_data_df ID column with y_data_df to have indices alligned 
-        y_data_df = X_data_df[[identifier_col]].merge(y_data_df, on=[identifier_col], how='left')
+        self.alignm = alignment
+        self.data_df = joint_data_df
 
-        self.metadata_df = X_data_df[process_metadata_cols]
-        self.X_data_df = X_data_df.drop(columns=process_metadata_cols)
-
-        self.X_column_names = self.X_data_df.columns.tolist() 
-        self.y_column_names = y_data_df.columns.tolist() 
-
-        self.y_data_df = y_data_df.drop(columns=[identifier_col])
+        self.X_data_df = self.data_df[self.alignm.X_cols]
+        self.y_data_df = self.data_df[self.alignm.y_cols]
+        self.metadata_df = self.data_df.drop(columns = self.alignm.X_cols + self.alignm.y_cols)
 
         
     def __len__(self):
@@ -62,18 +79,14 @@ DataSets - DataFrameDataset
 
 class DataFrameDataset(Dataset):
 
-    def __init__(self, X_data_df: pd.DataFrame, y_data_df: pd.DataFrame):
+    def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment = Alignment()):
 
-        self.X_column_names = X_data_df.columns.tolist() 
-        self.y_column_names = y_data_df.columns.tolist() 
+        self.alignm = alignment
+        self.data_df = joint_data_df
 
-        #merge X_data_df ID column with y_data_df to have indices alligned 
-        data_df = X_data_df.merge(y_data_df, on=[identifier_col], how='left')
-        print(data_df.head(10))
-
-        self.metadata_df_active = data_df[process_metadata_cols]
-        self.X_data_df_active = data_df.drop(columns = process_metadata_cols + self.y_column_names)
-        self.y_data_df_active = data_df[self.y_column_names]
+        # self.metadata_df_active = data_df[process_metadata_cols]
+        # self.X_data_df_active = data_df.drop(columns = process_metadata_cols + self.y_column_names)
+        # self.y_data_df_active = data_df[self.y_column_names]
 
 
     def __len__(self):
@@ -93,25 +106,16 @@ DataSets - TensorDataset
 
 class TensorDataset(Dataset):
 
-    def __init__(self, X_data_df: pd.DataFrame, y_data_df: pd.DataFrame):
-        """
-        Initializes the MetadataAwareDataset.
+    def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment = Alignment()):
 
-        Args:
-            dataframe (pandas.DataFrame): The input dataframe containing both metadata and data.
-            metadata_cols (list): List of column names representing the metadata.
-        """
+        self.alignm = alignment
+        self.data_df = joint_data_df
 
-        y_data_df = X_data_df[[identifier_col]].merge(y_data_df, on=[identifier_col], how='left')
-        y_data_df.drop(columns=[identifier_col], inplace=True)
+        X_data_df = self.data_df[self.alignm.X_cols]
+        y_data_df = self.data_df[self.alignm.y_cols]
 
-        X_metadata_df = X_data_df[process_metadata_cols]
-        X_data_df = X_data_df.drop(columns=process_metadata_cols)
+        self.metadata_df = self.data_df.drop(columns = self.alignm.X_cols + self.alignm.y_cols)
 
-        self.X_column_names = X_data_df.columns.tolist() 
-        self.y_column_names = y_data_df.columns.tolist() 
-
-        self.metadata = X_metadata_df.reset_index().set_index('index').to_dict(orient='index')
         self.X_data = torch.tensor(X_data_df.values, dtype=torch.float32)  
         self.y_data = torch.tensor(y_data_df.values, dtype=torch.float32)  
 
@@ -120,7 +124,8 @@ class TensorDataset(Dataset):
         """
         Returns the total number of samples in the dataset.
         """
-        return len(self.X_data)
+        return len(self.data_df)
+
 
     def __getitem__(self, ndx):
         """
@@ -131,11 +136,11 @@ class TensorDataset(Dataset):
 
         Returns:
             tuple: A tuple containing:
-                - data (torch.Tensor): The tensor representation of the data sample.
-                - metadata (dict): The metadata associated with the data sample.
-                - column_names (list): The list of column names corresponding to the tensor's dimensions
+                - X_data (torch.Tensor): The tensor representation of the data sample.
+                - y_data (torch.Tensor): The tensor representation of the data sample.
         """
-        return self.X_data[ndx], self.y_data[ndx], self.metadata[ndx], self.X_column_names, self.y_column_names
+
+        return self.X_data[ndx], self.y_data[ndx]
 
 
 
@@ -152,6 +157,11 @@ Tests
 
 if __name__=="__main__":
 
+    #--- Test Alignment ---#
     
+    alignment = Alignment()
+    print(alignment.index_map)
+    print(alignment.X_col_map)
+    print(alignment.y_col_map)
 
     pass
