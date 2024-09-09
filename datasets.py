@@ -117,7 +117,10 @@ class TensorDataset(Dataset):
         self.metadata_df = self.data_df.drop(columns = self.alignm.X_cols + self.alignm.y_cols)
 
         self.X_data = torch.tensor(X_data_df.values, dtype=torch.float32)  
-        self.y_data = torch.tensor(y_data_df.values, dtype=torch.float32)  
+        self.y_data = torch.tensor(y_data_df.values, dtype=torch.float32)
+
+        self.X_dim = self.X_data.shape[1:]
+        self.y_dim = self.y_data.shape[1:]
 
 
     def __len__(self):
@@ -157,7 +160,7 @@ Tests
 
 if __name__=="__main__":
 
-    #--- Test Alignment ---#
+    ###--- Test Alignment ---###
     
     alignment = Alignment()
     print(alignment.index_map)
