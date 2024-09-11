@@ -9,6 +9,7 @@ from itertools import product
 from functools import wraps
 
 
+
 """
 Miscellaneous
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -33,18 +34,22 @@ def print_dict(d: dict):
     print('\n'.join(dict_strs))
 
 
-"""
-AND Mask
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-def AND_mask(df, col_value_dict):
-    #print(df)
-    value_masks = [
-        df[col] == value
-        for col, value in col_value_dict.items()
+
+
+def print_iter_types(iterable_obj):
+    
+    iter_types = [
+        type(item)
+        for item in iterable_obj
     ]
 
-    return np.logical_and.reduce(value_masks)
+    print(
+        f"Type of iterable object: {type(iterable_obj)}\n"
+        f"Types in iterable object:\n"
+        f"----------------------------------------------\n"
+        f"{iter_types}\n"
+        f"----------------------------------------------\n"
+    )
 
 
 
