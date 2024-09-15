@@ -5,7 +5,6 @@ import numpy as np
 import yaml
 import json
 
-from torch.utils.data import Dataset
 from itertools import product
 from pathlib import Path
 from collections import namedtuple

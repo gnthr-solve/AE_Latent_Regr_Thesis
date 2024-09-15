@@ -10,7 +10,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 
 from helper_tools import default_index_map, default_X_col_map, default_y_col_map
-from info import process_metadata_cols, identifier_col
+from preprocessing.info import process_metadata_cols, identifier_col
 
 """
 DataSets - Alignment

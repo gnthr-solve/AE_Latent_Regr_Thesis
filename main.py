@@ -24,7 +24,7 @@ from helper_tools import get_valid_batch_size, plot_training_characteristics
 
 
 """
-Main Functions
+Main Functions - Training
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def main_test_view():
@@ -319,4 +319,6 @@ if __name__=="__main__":
     #--- main_test ---#
     #main_test_view()
     #main_test_simple()
-    main_test_lin_relu()
+    #main_test_lin_relu()
+
+    pass
