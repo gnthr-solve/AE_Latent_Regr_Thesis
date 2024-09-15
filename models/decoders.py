@@ -45,7 +45,7 @@ class SimpleLinearReluDecoder(nn.Module):
         self.lin_in = nn.Linear(in_features = latent_dim, out_features = 40, bias = True)
         self.lin_one = nn.Linear(in_features = 40, out_features = 120, bias = True)
         self.lin_two = nn.Linear(in_features = 120, out_features = 200, bias = True)
-        self.lin_out = nn.Linear(in_features = 200, out_features = 297)
+        self.lin_out = nn.Linear(in_features = 200, out_features = 297, bias = False)
 
 
     def forward(self, x: Tensor):

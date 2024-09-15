@@ -19,10 +19,11 @@ Preprocessing - I. Preprocessing Raw DataFrames to Organised pytorch Tensors
     2. Extract Column/Parameter Names for X, y
         2.1. Create Column Maps
         2.2. Export Column Maps
-    3. Merge X and y DataFrames on Identifier & Export
+    3. Merge X and y DataFrames on Identifier
         3.1. Eliminate NaN-Containing Rows
-        3.2. Export Joint DataFrame
     4. Create Index Map and Export
+        4.1. Export Index Map
+        4.2. Export Joint DataFrame
     5. Separate and Export DataFrames
         5.1. Split Joint DataFrame
         5.2. Export DataFrames
@@ -114,16 +115,17 @@ def preprocess_raw():
     isna_any_mask = data_df.isna().any(axis = 1)
     data_df = data_df[~isna_any_mask]
 
-    #--- 3.2. Export Joint DataFrame ---#
-    data_df.to_csv(data_dir / joint_data_df_name, index=False)
-
 
     ###--- 4. Create Index Map and Export ---###
     index_id_map = data_df[identifier_col].to_dict()
     data_df['mapping_idx'] = data_df.index
 
+    #--- 4.1. Export Index Map ---#
     with open(alignment_info_dir / 'index_id_map.json', 'w') as f:
         json.dump(index_id_map, f)
+    
+    #--- 4.2. Export Joint DataFrame ---#
+    data_df.to_csv(data_dir / joint_data_df_name, index=False)
 
 
     ###--- 5. Separate and Export DataFrames ---###

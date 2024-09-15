@@ -132,7 +132,7 @@ def plot_param_norms(
         label = f"{param_name}"
         
         #norms = tensor_list_to_numpy_array(norms)
-        print(f"Norms: {norms}")
+        #print(f"Norms: {norms}")
         axes.plot(norms, linestyle = linestyle, marker = marker, label = label)
 
     title = f"Parameter {kind} Norms"
