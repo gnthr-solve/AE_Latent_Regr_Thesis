@@ -353,8 +353,8 @@ def main_test_lin_relu_two():
     model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
 
     #reconstr_loss = SimpleLoss()
-    #reconstr_loss = MeanLpLoss(p = 2)
-    reconstr_loss = RelativeMeanLpLoss(p = 2)
+    reconstr_loss = MeanLpLoss(p = 2)
+    #reconstr_loss = RelativeMeanLpLoss(p = 2)
 
     ###--- Optimizer & Scheduler ---###
     optimizer = Adam(model.parameters(), lr = 1e-2)
@@ -377,7 +377,7 @@ def main_test_lin_relu_two():
 
             #--- Forward Pass ---#
             optimizer.zero_grad()
-
+            
             X_hat_batch = model(X_batch)
 
             loss_reconst = reconstr_loss(X_batch, X_hat_batch)
