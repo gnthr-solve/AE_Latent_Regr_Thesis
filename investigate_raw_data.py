@@ -158,7 +158,7 @@ def completion_time_hist(df_X: pd.DataFrame):
 
 if __name__=="__main__":
 
-    #--- Data Paths ---#
+    #--- DataFrame Paths ---#
     joint_data_path = Path("data/data_joint.csv")
     metadata_path = Path("data/metadata.csv")
     X_data_path = Path("data/X_data.csv")
@@ -168,10 +168,17 @@ if __name__=="__main__":
     y_data_df = pd.read_csv(y_data_path)
     metadata_df = pd.read_csv(metadata_path)
 
-    #--- Investigate Raw Data ---#
+    #--- Investigate DataFrames ---#
     #count_NaN_cols_X(X_data_df)
     #NaN_rows_X(X_data_df)
     #identify_const_cols_X(X_data_df)
-    identify_const_zero_cols_X(X_data_df)
+    #identify_const_zero_cols_X(X_data_df)
     #set_value_cols(X_data_df)
     #completion_time_hist(X_data_df)
+
+
+    #--- Investigate MinMax NaN Cols ---#
+    with open('info_files/min_max_nan_cols.yaml', 'r') as file:
+        cols = yaml.safe_load(file)
+
+    print(X_data_df[cols].drop_duplicates())

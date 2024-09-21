@@ -3,6 +3,7 @@ import torch
 import pandas as pd
 import numpy as np
 
+from torch import Tensor
 from torch.utils.data import Dataset
 from itertools import product
 from pathlib import Path
@@ -33,43 +34,6 @@ class Alignment:
         self.y_cols = list(self.y_col_map.values())
 
 
-"""
-DataSets - DataFrameNamedTupleDataset
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-DataPoint = namedtuple('DataPoint', ['metadata', 'X', 'y'])
-
-class DataFrameNamedTupleDataset(Dataset):
-
-    def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment = Alignment()):
-
-        self.alignm = alignment
-        self.data_df = joint_data_df
-
-        self.X_data_df = self.data_df[self.alignm.X_cols]
-        self.y_data_df = self.data_df[self.alignm.y_cols]
-        self.metadata_df = self.data_df.drop(columns = self.alignm.X_cols + self.alignm.y_cols)
-
-        
-    def __len__(self):
-
-        return len(self.X_data_df)
-    
-
-    def __getitem__(self, ndx):
-        
-        metadata = self.metadata_df.iloc[ndx]
-        X_data = self.X_data_df.iloc[ndx]
-        y_data = self.y_data_df.iloc[ndx]
-
-        X_data = torch.tensor(X_data.to_numpy(), dtype=torch.float32)
-        y_data = torch.tensor(y_data.to_numpy(), dtype=torch.float32)
-
-        data = DataPoint(metadata.to_dict(), X_data, y_data)
-        
-        return data
-
-
 
 
 """
@@ -78,33 +42,6 @@ DataSets - DataFrameDataset
 """
 
 class DataFrameDataset(Dataset):
-
-    def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment = Alignment()):
-
-        self.alignm = alignment
-        self.data_df = joint_data_df
-
-        # self.metadata_df_active = data_df[process_metadata_cols]
-        # self.X_data_df_active = data_df.drop(columns = process_metadata_cols + self.y_column_names)
-        # self.y_data_df_active = data_df[self.y_column_names]
-
-
-    def __len__(self):
-
-        pass
-    
-
-    def __getitem__(self, ndx):
-        
-        pass
-
-
-"""
-DataSets - TensorDataset
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-
-class TensorDataset(Dataset):
 
     def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment = Alignment()):
 
@@ -148,6 +85,68 @@ class TensorDataset(Dataset):
 
 
 
+"""
+DataSets - TensorDataset
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+
+class TensorDataset(Dataset):
+
+    def __init__(self, X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame, alignment: Alignment = Alignment()):
+
+        self.alignm = alignment
+
+        self.metadata_df = metadata_df
+
+        self.X_data = X_data
+        self.y_data = y_data
+
+        self.X_dim = self.X_data.shape[-1]
+        self.y_dim = self.y_data.shape[-1]
+
+
+    def __len__(self):
+        """
+        Returns the total number of samples in the dataset.
+        """
+        return len(self.X_data)
+
+
+    def __getitem__(self, ndx):
+        """
+        Retrieves a data sample and its associated metadata.
+
+        Args:
+            ndx (int): Index of the sample to retrieve.
+
+        Returns:
+            tuple: A tuple containing:
+                - X_data (torch.Tensor): The tensor representation of the data sample.
+                - y_data (torch.Tensor): The tensor representation of the data sample.
+        """
+
+        return self.X_data[ndx], self.y_data[ndx]
+
+
+
+
+"""
+Datasets - Idea - SubsetFactory
+-------------------------------------------------------------------------------------------------------------------------------------------
+Subset from torch.utils.data allows to train or test on subset of dataset.
+Metadata gives a lot of options to create conditional subsets.
+
+Idea 1:
+    Create a factory class that takes conditions on the metadata dataframe 
+    and selects the indices where conditions hold true. 
+    Then return corresponding subset of Dataset
+
+Idea 2:
+    Create a factory class that produces subsets for different model compositions.
+    E.g. Sequential composition (i.e. Train Autoencoder first, then regression)
+    could filter for indices where y_data is NaN for autoencoder training,
+    then subset where it is not NaN for joint/End-To-End training
+"""
 
 
 
