@@ -14,23 +14,23 @@ from pathlib import Path
 Normalisation - Min-Max
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def min_max_normalization(tensor: Tensor) -> Tensor:
+def min_max_normalisation(tensor: Tensor) -> Tensor:
     """
-    Performs Min-Max normalization on a tensor.
+    Performs Min-Max normalisation on a tensor.
 
     Args:
         tensor (torch.Tensor): The input tensor of shape (m, n).
 
     Returns:
-        torch.Tensor: The normalized tensor.
+        torch.Tensor: The normalised tensor.
     """
 
     min_val = tensor.min(dim = 0, keepdim = True)[0]
     max_val = tensor.max(dim = 0, keepdim = True)[0]
     
-    normalized_tensor = (tensor - min_val) / (max_val - min_val)
+    normalised_tensor = (tensor - min_val) / (max_val - min_val)
     
-    return normalized_tensor
+    return normalised_tensor
 
 
 
@@ -38,23 +38,23 @@ def min_max_normalization(tensor: Tensor) -> Tensor:
 Normalisation - Z-Score
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def z_score_normalization(tensor: Tensor) -> Tensor:
+def z_score_normalisation(tensor: Tensor) -> Tensor:
     """
-    Performs Z-Score normalization (Standardization) on a tensor.
+    Performs Z-Score normalisation (Standardization) on a tensor.
 
     Args:
         tensor (torch.Tensor): The input tensor of shape (m, n).
 
     Returns:
-        torch.Tensor: The normalized tensor.
+        torch.Tensor: The normalised tensor.
     """
     
     mean = tensor.mean(dim = 0, keepdim = True)
     std = tensor.std(dim = 0, keepdim = True)
     
-    normalized_tensor = (tensor - mean) / std
+    normalised_tensor = (tensor - mean) / std
     
-    return normalized_tensor
+    return normalised_tensor
 
 
 
@@ -70,15 +70,15 @@ def robust_scaling(tensor: Tensor) -> Tensor:
         tensor (torch.Tensor): The input tensor of shape (m, n).
 
     Returns:
-        torch.Tensor: The normalized tensor.
+        torch.Tensor: The normalised tensor.
     """
     
     median = tensor.median(dim = 0, keepdim = True)[0]
     iqr = tensor.quantile(0.75, dim = 0, keepdim = True) - tensor.quantile(0.25, dim=0, keepdim=True)
     
-    normalized_tensor = (tensor - median) / iqr
+    normalised_tensor = (tensor - median) / iqr
     
-    return normalized_tensor
+    return normalised_tensor
 
 
 
@@ -100,7 +100,7 @@ def normalise_stored_tensors():
 
     X_values = X_data[:, 1:] if tensor_one_mapping else X_data
 
-    X_values_normalised = min_max_normalization(X_values)
+    X_values_normalised = min_max_normalisation(X_values)
 
     if tensor_one_mapping:
         X_data[:, 1:] = X_values_normalised

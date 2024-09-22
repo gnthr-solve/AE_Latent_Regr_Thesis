@@ -111,14 +111,14 @@ def preprocess_raw():
     ###--- 3. Merge X and y DataFrames on Identifier ---###
     data_df = X_data_df.merge(y_data_df, on = [identifier_col], how = 'left')
 
-    #--- 3.1. Eliminate NaN-Containing Rows ---#
-    isna_any_mask = data_df.isna().any(axis = 1)
+    #--- 3.1. Eliminate Rows Containing NaN in X Columns ---#
+    isna_any_mask = data_df[X_data_cols].isna().any(axis = 1)
     data_df = data_df[~isna_any_mask]
 
 
     ###--- 4. Create Index Map and Export ---###
     index_id_map = data_df[identifier_col].to_dict()
-    data_df['mapping_idx'] = data_df.index
+    data_df.insert(0, 'mapping_idx', data_df.index) 
 
     #--- 4.1. Export Index Map ---#
     with open(alignment_info_dir / 'index_id_map.json', 'w') as f:

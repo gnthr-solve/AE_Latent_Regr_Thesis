@@ -25,6 +25,7 @@ from models import (
 )
 
 from ae_param_observer import AEParameterObserver
+from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
 from helper_tools import get_valid_batch_size, plot_training_characteristics
 
@@ -284,7 +285,7 @@ def main_test_lin_relu():
 
 
 
-def main():
+def main_tensor():
 
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -293,25 +294,41 @@ def main():
 
     ###--- Load Data ---###
     data_dir = Path("./data")
-    joint_data_df = pd.read_csv(data_dir / "data_joint.csv")
+    tensor_dir = data_dir / "tensors"
+
+    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+
+    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
+    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
 
 
-    ###--- Dataset & DataLoader ---###
-    batch_size = 200
+    ###--- Normalise ---###
+    normaliser = MinMaxNormaliser()
 
-    dataset = DataFrameDataset(joint_data_df)
+    X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+    print(X_data.shape)
+
+    X_data_isnan = X_data.isnan().all(dim = 0)
+    X_data = X_data[:, ~X_data_isnan]
+    print(X_data.shape)
+
+    ###--- Dataset---###
+    dataset = TensorDataset(X_data, y_data, metadata_df)
     
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
+
+    ###--- DataLoader ---###
+    batch_size = 200
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
     ###--- Models ---###
     latent_dim = 10
-    input_dim = dataset.X_dim[0] - 1
-    print(f"input_dim: {input_dim}")
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
 
     encoder = SimpleLinearReluEncoder(latent_dim = latent_dim)
     decoder = SimpleLinearReluDecoder(latent_dim = latent_dim)
@@ -376,6 +393,6 @@ if __name__=="__main__":
     #main_test_view()
     #main_test_simple()
     #main_test_lin_relu()
-    main_test_lin_relu()
+    main_tensor()
 
     pass

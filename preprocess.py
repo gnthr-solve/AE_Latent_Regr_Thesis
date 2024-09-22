@@ -10,8 +10,8 @@ from preprocessing.investigate import investigate_tensor
 if __name__=="__main__":
     
     #--- Preprocessing ---#
-    #preprocess_raw()
+    preprocess_raw()
 
     #normalise_stored_tensors()
 
-    investigate_tensor()
+    #investigate_tensor()
