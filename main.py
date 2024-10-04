@@ -14,21 +14,27 @@ from pathlib import Path
 from tqdm import tqdm
 
 from datasets import TensorDataset, DataFrameDataset
-from models import (
-    SimpleEncoder, 
+
+from models.encoders import (
     SimpleLinearReluEncoder,
     LinearReluEncoder,
     GeneralLinearReluEncoder,
-    SimpleDecoder,
+)
+
+from models.decoders import (
     SimpleLinearReluDecoder,
     LinearReluDecoder,
     GeneralLinearReluDecoder,
-    SimpleAutoencoder,
 )
+
+from models.regressors import LinearRegr
+from models import SimpleAutoencoder, EnRegrComposite
+
 from models.loss_funcs import (
-    SimpleLoss,
+    WeightedCompositeLoss,
     MeanLpLoss,
     RelativeMeanLpLoss,
+    HuberLoss,
 )
 
 from ae_param_observer import AEParameterObserver
@@ -94,7 +100,7 @@ def main_test_view_DataFrameDS():
 
 
     ###--- Loss ---###
-    #reconstr_loss = SimpleLoss()
+    #
     #reconstr_loss = MeanLpLoss(p = 2)
     reconstr_loss = RelativeMeanLpLoss(p = 2)
 
@@ -238,7 +244,7 @@ def main_test_view_TensorDS():
 
 
     ###--- Loss ---###
-    #reconstr_loss = SimpleLoss()
+    #
     #reconstr_loss = MeanLpLoss(p = 2)
     reconstr_loss = RelativeMeanLpLoss(p = 2)
 
@@ -338,6 +344,7 @@ def main_train_AE():
         X_data = X_data[:, ~X_data_isnan]
         print(X_data.shape)
 
+
     ###--- Dataset---###
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
@@ -364,9 +371,12 @@ def main_train_AE():
 
     model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
 
-    #reconstr_loss = SimpleLoss()
+
+    ###--- Loss ---###
+    #
     #reconstr_loss = MeanLpLoss(p = 2)
     reconstr_loss = RelativeMeanLpLoss(p = 2)
+
 
     ###--- Optimizer & Scheduler ---###
     optimizer = Adam(model.parameters(), lr = 1e-2)
@@ -378,6 +388,7 @@ def main_train_AE():
     pbar = tqdm(range(epochs))
 
     observer = AEParameterObserver()
+
 
     ###--- Training Loop ---###
     for it in pbar:
@@ -422,6 +433,132 @@ def main_train_AE():
 
 
 
+
+def main_train_composite_seq(): #NOTE: Blueprint
+
+    # check computation backend to use
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("-device:", device)
+
+
+    ###--- Load Data ---###
+    data_dir = Path("./data")
+    tensor_dir = data_dir / "tensors"
+
+    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+
+    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
+    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
+
+
+    ###--- Normalise ---###
+    #normaliser = MinMaxNormaliser()
+    normaliser = ZScoreNormaliser()
+    #normaliser = RobustScalingNormaliser()
+
+    with torch.no_grad():
+        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+        print(X_data.shape)
+
+        X_data_isnan = X_data.isnan().all(dim = 0)
+        X_data = X_data[:, ~X_data_isnan]
+        print(X_data.shape)
+
+
+    ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
+    dataset = TensorDataset(X_data, y_data, metadata_df)
+    
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+
+    ###--- DataLoader ---###
+    batch_size = 50
+    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    latent_dim = 10
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+    encoder = LinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim)
+    #encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+
+    decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
+    #decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+
+    regressor = LinearRegr(latent_dim = latent_dim)
+
+    regr_model = EnRegrComposite(encoder = encoder, regressor = regressor)
+    ae_model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
+
+
+    ###--- Losses ---###
+    #reconstr_loss = MeanLpLoss(p = 2)
+    reconstr_loss = RelativeMeanLpLoss(p = 2)
+    regr_loss = HuberLoss(delta = 1)
+
+
+    ###--- Optimizer & Scheduler ---###
+    optimizer = Adam(ae_model.parameters(), lr = 1e-2)
+    scheduler = ExponentialLR(optimizer, gamma = 0.1)
+
+
+    ###--- Meta ---###
+    epochs = 5
+    pbar = tqdm(range(epochs))
+
+    observer = AEParameterObserver()
+
+
+    ###--- Training Loop ---###
+    for it in pbar:
+        
+        for b_ind, (X_batch, y_batch) in enumerate(dataloader):
+            
+            X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimizer.zero_grad()
+            
+            X_hat_batch = ae_model(X_batch)
+
+            loss_reconst = reconstr_loss(X_batch, X_hat_batch)
+
+            #--- Backward Pass ---#
+            loss_reconst.backward()
+
+            #print(f"{it}_{b_ind+1}/{epochs}")
+            observer(loss = loss_reconst, ae_model = ae_model)
+
+
+            optimizer.step()
+
+
+        scheduler.step()
+
+    observer.plot_results()
+
+
+    ###--- Test Loss ---###
+    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    y_test = test_dataset.dataset.y_data[test_dataset.indices]
+    X_test = X_test[:, 1:]
+    y_test = y_test[:, 1:]
+    X_test_hat = ae_model(X_test)
+
+    loss_reconst = reconstr_loss(X_test, X_test_hat)
+    print(
+        f"After {epochs} epochs with {len(dataloader)} iterations each\n"
+        f"Avg. Loss on testing subset: {loss_reconst}\n"
+    )
+
+
+
+
 """
 Main Executions
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -431,6 +568,7 @@ if __name__=="__main__":
     #--- Test Main Functions (AE only) ---#
     #main_test_view_DataFrameDS()
     #main_test_view_TensorDS()
-    main_train_AE()
+    #main_train_AE()
+    main_train_composite_seq()
 
     pass

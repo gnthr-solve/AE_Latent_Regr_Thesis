@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 
 from torch import Tensor
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, random_split
+
 from itertools import product
 from pathlib import Path
 from collections import namedtuple
@@ -147,6 +148,33 @@ Idea 2:
     could filter for indices where y_data is NaN for autoencoder training,
     then subset where it is not NaN for joint/End-To-End training
 """
+
+class SplitSubsetFactory:
+
+    def __init__(self, dataset, train_size=0.8):
+
+        self.dataset = dataset
+        self.train_size = train_size
+
+
+    def create_splits(self):
+
+        train_size = int(self.train_size * len(self.dataset))
+        test_size = len(self.dataset) - train_size
+
+        train_indices, test_indices = random_split(range(len(self.dataset)), [train_size, test_size])
+
+        labeled_indices = [i for i, y in enumerate(self.dataset.y_data) if not torch.isnan(y).any()]
+        unlabeled_indices = [i for i in range(len(self.dataset)) if i not in labeled_indices]
+
+        splits = {
+            'train_labeled': list(set(train_indices).intersection(labeled_indices)),
+            'train_unlabeled': list(set(train_indices).intersection(unlabeled_indices)),
+            'test_labeled': list(set(test_indices).intersection(labeled_indices)),
+            'test_unlabeled': list(set(test_indices).intersection(unlabeled_indices))
+        }
+        
+        return splits
 
 
 

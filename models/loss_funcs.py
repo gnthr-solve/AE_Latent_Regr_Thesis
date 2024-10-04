@@ -33,6 +33,32 @@ class SimpleLoss(nn.Module):
     
 
 
+
+"""
+Loss Functions - Composite Loss
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class WeightedCompositeLoss:
+
+    def __init__(self, loss_regr, loss_reconstr, w_regr, w_reconstr):
+        
+        self.loss_regr = loss_regr
+        self.loss_reconstr = loss_reconstr
+
+        self.w_regr = w_regr
+        self.w_reconstr = w_reconstr
+
+
+    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor):
+
+        regr_component = self.w_regr * self.loss_regr(t_in_batch, t_out_batch)
+        reconstr_component = self.w_reconstr * self.loss_reconstr(t_in_batch, t_out_batch)
+
+        return regr_component + reconstr_component
+    
+
+
+
 """
 Loss Functions - MeanLpLoss
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -77,3 +103,24 @@ class RelativeMeanLpLoss:
         batch_norms: Tensor = tla.norm(t_batch, ord = self.p, dim = 1)
         
         return batch_norms.mean()
+    
+
+
+"""
+Loss Functions - HuberLoss
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class HuberLoss:
+
+    reduction = 'mean'
+
+    def __init__(self, delta: float):
+        
+        self.loss_fn = nn.HuberLoss(reduction =  self.reduction, delta = delta)
+
+
+    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor):
+
+        loss = self.loss_fn(t_in_batch, t_out_batch)
+
+        return loss
