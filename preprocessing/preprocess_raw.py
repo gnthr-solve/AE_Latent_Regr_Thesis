@@ -20,7 +20,7 @@ Preprocessing - I. Preprocessing Raw DataFrames to Organised pytorch Tensors
         2.1. Create Column Maps
         2.2. Export Column Maps
     3. Merge X and y DataFrames on Identifier
-        3.1. Eliminate NaN-Containing Rows
+        3.1. Eliminate Rows Containing NaN in X Columns
     4. Create Index Map and Export
         4.1. Export Index Map
         4.2. Export Joint DataFrame

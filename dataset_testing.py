@@ -3,74 +3,78 @@ import torch
 import pandas as pd
 import numpy as np
 
-from torch.utils.data import Dataset, DataLoader
+from torch import Tensor
+from torch.utils.data import Dataset, Subset, DataLoader, random_split
 from itertools import product
 from pathlib import Path
 
-from datasets import DataFrameNamedTupleDataset, DataFrameDataset, TensorDataset
+from datasets import DataFrameDataset, TensorDataset
 
 """
 Test Functions
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def properties_test(X_data_df: pd.DataFrame, y_data_df: pd.DataFrame):
+
+def DataFrameDataset_test(joint_data_df: pd.DataFrame):
     
     #--- Instantiate Dataset Subclass ---#
-    dataset = DataFrameDataset(X_data_df, y_data_df)
+    batch_size = 200
+
+    dataset = DataFrameDataset(joint_data_df)
+    dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = True)
 
     
-
-
-
-def standard_test(X_data_df: pd.DataFrame, y_data_df: pd.DataFrame):
-    
-    #--- Instantiate Dataset Subclass ---#
-    dataset = TensorDataset(X_data_df, y_data_df)
-
-    #--- Instantiate Dataset Subclass ---#
-    data_loader = DataLoader(dataset, batch_size=5, shuffle=True)
-
-    
-    break_ndx = 0
+    break_idx = 0
     # Iterate over the DataLoader and print batches
-    for batch_idx, batch_data in enumerate(data_loader):
+    for b_idx, (X_batch, y_batch) in enumerate(dataloader):
 
-        print(f"Batch Index: {batch_idx}")
+        #print(f"Batch Index: {b_idx}")
         
-        print(f"Type Batch Data: {type(batch_data)}")
-        print(f"Batch Data: {batch_data}")
+        print(f"X batch: {X_batch}")
+        print(f"X batch shape: {X_batch.shape}")
+        print(f"y Batch: {y_batch}")
+        print(f"y batch shape: {y_batch.shape}")
 
-        if batch_idx == break_ndx:
+        if b_idx == break_idx:
             break
 
 
 
-def tensor_tuple_test(X_data_df: pd.DataFrame, y_data_df: pd.DataFrame):
-    """
-    names = ['metadata', 'X', 'y']
-    """
-    #--- Instantiate Dataset Subclass ---#
-    dataset = DataFrameNamedTupleDataset(X_data_df, y_data_df)
-
-    #--- Instantiate Dataset Subclass ---#
-    data_loader = DataLoader(dataset, batch_size=5, shuffle=True)
-
+def TensorDataset_test(X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame):
     
-    break_ndx = 0
+    #--- Instantiate Dataset Subclass ---#
+    batch_size = 200
+
+    dataset = TensorDataset(X_data, y_data, metadata_df)
+    dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = True)
+    
+    break_idx = 0
     # Iterate over the DataLoader and print batches
-    for batch_idx, batch_data in enumerate(data_loader):
+    for b_idx, (X_batch, y_batch) in enumerate(dataloader):
 
-        print(f"Batch Index: {batch_idx}")
+        #print(f"Batch Index: {b_idx}")
         
-        print(f"Type Batch Data: {type(batch_data)}")
-        
-        print(f"Batch Data Metadata: {batch_data.metadata}")
-        print(f"Batch Data X: {batch_data.X}")
-        print(f"Batch Data y: {batch_data.y}")
+        print(f"X batch: {X_batch}")
+        print(f"X batch shape: {X_batch.shape}")
+        print(f"y Batch: {y_batch}")
+        print(f"y batch shape: {y_batch.shape}")
 
-
-        if batch_idx == break_ndx:
+        if b_idx == break_idx:
             break
+
+
+
+
+def subset_test(X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame):
+    
+    #--- Instantiate Dataset & Subset's ---#
+    dataset = TensorDataset(X_data, y_data, metadata_df)
+
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    
+    X_test = test_dataset.dataset.X_data[test_dataset.indices] 
 
 
 
@@ -82,17 +86,16 @@ Tests
 
 if __name__=="__main__":
 
-    #--- Load Pandas DataFrames ---#
-    X_data_path = Path("data/X_data_plus_metadata.csv")
-    #X_data_path = Path("data/X_data.csv")
-    metadata_path = Path("data/metadata.csv")
-    y_data_path = Path("data/y_data.csv")
+    data_dir = Path("./data")
+    tensor_dir = data_dir / "tensors"
 
-    X_data_df = pd.read_csv(X_data_path)
-    y_data_df = pd.read_csv(y_data_path)
+    ###--- Load Pandas DataFrames & Tensors ---###
+    joint_data_df = pd.read_csv(data_dir / "data_joint.csv")
+    metadata_df = pd.read_csv(data_dir / "metadata.csv")
 
+    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
+    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
 
     #--- Test Functions ---#
-    properties_test(X_data_df, y_data_df)
-    #standard_test(X_data_df, y_data_df)
-    #tensor_tuple_test(X_data_df, y_data_df)
+    #DataFrameDataset_test(joint_data_df)
+    #TensorDataset_test(X_data, y_data, metadata_df)
