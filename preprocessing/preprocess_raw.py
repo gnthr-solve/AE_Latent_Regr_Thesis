@@ -114,6 +114,7 @@ def preprocess_raw():
     #--- 3.1. Eliminate Rows Containing NaN in X Columns ---#
     isna_any_mask = data_df[X_data_cols].isna().any(axis = 1)
     data_df = data_df[~isna_any_mask]
+    data_df.reset_index(inplace = True)
 
 
     ###--- 4. Create Index Map and Export ---###

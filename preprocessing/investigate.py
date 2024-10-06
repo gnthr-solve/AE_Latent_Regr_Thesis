@@ -64,3 +64,34 @@ def investigate_tensor():
     X_data: Tensor = torch.load(tensor_dir / X_data_tensor_name)
 
     identify_min_max_NaN_source(X_data)
+
+
+
+"""
+Investigate - Investigate Mapping
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+
+def investigate_index_mapping():
+
+    tensor_one_mapping = True
+    data_dir = Path("./data")
+    tensor_dir = data_dir / "tensors"
+
+    X_data_tensor_name = 'X_data_tensor.pt'
+    #X_data_tensor_name = 'X_data_tensor_normalised.pt'
+    y_data_tensor_name = 'y_data_tensor.pt'
+
+    X_data: Tensor = torch.load(tensor_dir / X_data_tensor_name)
+    y_data: Tensor = torch.load(tensor_dir / y_data_tensor_name)
+
+    max_ind = len(X_data)
+    missing_inds_X = [i for i in range(max_ind) if i not in X_data[:,0].tolist()]
+    print(
+        f'=================================================\n'
+        f'Size X Tensor:\n{X_data.shape}\n'
+        f'-------------------------------------------------\n'
+        f'Missing indices X:\n{missing_inds_X}\n'
+        f'=================================================\n'
+    )
+

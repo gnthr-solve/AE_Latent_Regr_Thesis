@@ -44,24 +44,43 @@ def DataFrameDataset_test(joint_data_df: pd.DataFrame):
 def TensorDataset_test(X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame):
     
     #--- Instantiate Dataset Subclass ---#
-    batch_size = 200
-
     dataset = TensorDataset(X_data, y_data, metadata_df)
-    dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = True)
+
+
+    #--- Verify Index Alignment ---#
+    test_indices = [i for i in range(20)]
+    y_data = dataset.y_data
+    X_data = dataset.X_data
+    metadata_df = dataset.metadata_df
+    print(
+        f'Data index values at test indices:\n'
+        f'=================================================\n'
+        f'y_data:\n{y_data[test_indices, 0]}\n'
+        f'-------------------------------------------------\n'
+        f'X_data:\n{X_data[test_indices, 0]}\n'
+        f'-------------------------------------------------\n'
+        f'metadata_df:\n{metadata_df.loc[test_indices]}\n'
+        f'=================================================\n'
+    )
+
+
+    #--- Instantiate DataLoader ---#
+    # batch_size = 200
+    # dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = True)
     
-    break_idx = 0
-    # Iterate over the DataLoader and print batches
-    for b_idx, (X_batch, y_batch) in enumerate(dataloader):
+    # break_idx = 0
+    # # Iterate over the DataLoader and print batches
+    # for b_idx, (X_batch, y_batch) in enumerate(dataloader):
 
-        #print(f"Batch Index: {b_idx}")
+    #     #print(f"Batch Index: {b_idx}")
         
-        print(f"X batch: {X_batch}")
-        print(f"X batch shape: {X_batch.shape}")
-        print(f"y Batch: {y_batch}")
-        print(f"y batch shape: {y_batch.shape}")
+    #     print(f"X batch: {X_batch}")
+    #     print(f"X batch shape: {X_batch.shape}")
+    #     print(f"y Batch: {y_batch}")
+    #     print(f"y batch shape: {y_batch.shape}")
 
-        if b_idx == break_idx:
-            break
+    #     if b_idx == break_idx:
+    #         break
 
 
 
@@ -69,26 +88,32 @@ def TensorDataset_test(X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame
 def SubsetFactory_test(X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame):
     
     #--- Instantiate Dataset Subclass ---#
-    batch_size = 200
 
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
     split_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
 
+    #splits = split_factory.create_splits_alpha()
     splits = split_factory.create_splits()
     
     size = 0
     for key, split in splits.items():
 
+        split_indices = split.indices
+        split_y_data = dataset.y_data[split_indices]
+
         print(
-            f'For kind {key}:\n'
+            f'For split-kind {key}:\n'
             f'=================================================\n'
-            f'Type {key} indices: \n{type(split)}\n'
-            f'Size {key} indices: \n{len(split)}\n'
+            f'Type split: \n{type(split)}\n'
+            f'Size split: \n{len(split)}\n'
+            f'y_data has nan: \n{split_y_data.isnan().any(dim = 1).any()}\n'
+            f'y_data all nan: \n{split_y_data.isnan().any(dim = 1).all()}\n'
             f'=================================================\n\n'
         )
 
         size += len(split)
+
 
     print(
         f'Dataset size: {len(dataset)}\n'

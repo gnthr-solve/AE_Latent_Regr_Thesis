@@ -476,10 +476,12 @@ def main_train_composite_seq(): #NOTE: Blueprint
     ae_train_ds = subsets['train_unlabeled']
     regr_train_ds = subsets['train_labeled']
 
+
     ###--- DataLoader ---###
     batch_size = 50
     dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
+
 
     ###--- Models ---###
     latent_dim = 10
@@ -513,7 +515,7 @@ def main_train_composite_seq(): #NOTE: Blueprint
 
 
     ###--- Meta ---###
-    epochs = 5
+    epochs = 1
     pbar = tqdm(range(epochs))
 
     observer = AEParameterObserver()
@@ -570,7 +572,6 @@ def main_train_composite_seq(): #NOTE: Blueprint
                 f"{it}_{b_ind+1}/{epochs} Regr. Loss:\n"
                 f"{loss_regr.tolist()}"
             )
-
 
             optimizer_regr.step()
 

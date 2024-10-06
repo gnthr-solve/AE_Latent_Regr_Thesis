@@ -157,75 +157,28 @@ class SplitSubsetFactory:
         self.train_size = train_size
 
 
-    def create_splits_alpha(self):
-
-        train_size = int(self.train_size * len(self.dataset))
-        test_size = len(self.dataset) - train_size
-
-        train_indices, test_indices = random_split(range(len(self.dataset)), [train_size, test_size])
-        print(
-            f'=================================================\n'
-            f'Type train indices: \n{type(train_indices)}\n'
-            f'Length train indices: \n{len(train_indices)}\n'
-            f'Train indices: \n{train_indices}\n'
-            f'-------------------------------------------------\n'
-            f'Type test indices: \n{type(test_indices)}\n'
-            f'Length test indices: \n{len(test_indices)}\n'
-            f'Test indices: \n{test_indices}\n'
-            f'=================================================\n'
-        )
-
-
-        labeled_indices = [i for i, y in enumerate(self.dataset.y_data) if not torch.isnan(y).any()]
-        unlabeled_indices = [i for i in range(len(self.dataset)) if i not in labeled_indices]
-
-        splits = {
-            'train_labeled': list(set(train_indices).intersection(labeled_indices)),
-            'train_unlabeled': list(set(train_indices).intersection(unlabeled_indices)),
-            'test_labeled': list(set(test_indices).intersection(labeled_indices)),
-            'test_unlabeled': list(set(test_indices).intersection(unlabeled_indices))
-        }
-
-        return splits
-    
-
-
     def create_splits(self) -> dict[str, Subset]:
 
         train_size = int(self.train_size * len(self.dataset))
         test_size = len(self.dataset) - train_size
 
         train_indices, test_indices = random_split(range(len(self.dataset)), [train_size, test_size])
-        print(
-            f'=================================================\n'
-            f'Type train indices: \n{type(train_indices)}\n'
-            f'Length train indices: \n{len(train_indices)}\n'
-            f'Train indices: \n{train_indices}\n'
-            f'-------------------------------------------------\n'
-            f'Type test indices: \n{type(test_indices)}\n'
-            f'Length test indices: \n{len(test_indices)}\n'
-            f'Test indices: \n{test_indices}\n'
-            f'=================================================\n'
-        )
+        # print(
+        #     f'=================================================\n'
+        #     f'Type train indices: \n{type(train_indices)}\n'
+        #     f'Length train indices: \n{len(train_indices)}\n'
+        #     f'set(train_indices): \n{set(train_indices)}\n'
+        #     f'-------------------------------------------------\n'
+        #     f'Type test indices: \n{type(test_indices)}\n'
+        #     f'Length test indices: \n{len(test_indices)}\n'
+        #     f'set(test_indices): \n{set(test_indices)}\n'
+        #     f'=================================================\n'
+        # )
 
         y_data = self.dataset.y_data
         y_isnan = y_data[:, 1:].isnan().all(dim = 1)
-        unlabeled_indices = torch.tensor(y_data[y_isnan, 0], dtype = torch.int32)
-        
-        print(
-            f'=================================================\n'
-            f'Shape y_data: \n{y_data.shape}\n'
-            f'y_data[:10]: \n{y_data[:10]}\n'
-            f'-------------------------------------------------\n'
-            f'Shape y_isnan: \n{y_isnan.shape}\n'
-            f'y_isnan[:10]: \n{y_isnan[:10]}\n'
-            f'-------------------------------------------------\n'
-            f'Shape unlabeled_indices: \n{unlabeled_indices.shape}\n'
-            f'unlabeled_indices[:10]: \n{unlabeled_indices[:10]}\n'
-            f'=================================================\n'
-        )
+        unlabeled_indices = torch.where(y_isnan)[0].tolist()
 
-        unlabeled_indices = unlabeled_indices.tolist()
         labeled_indices = [i for i in range(len(self.dataset)) if i not in unlabeled_indices]
 
         splits = {

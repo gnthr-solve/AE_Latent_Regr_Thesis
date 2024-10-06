@@ -20,7 +20,7 @@ class SimpleLinearReluDecoder(nn.Module):
 
     def __init__(self, latent_dim: int):
         super().__init__()
-        
+
         self.lin_in = nn.Linear(in_features = latent_dim, out_features = 40, bias = True)
         self.lin_one = nn.Linear(in_features = 40, out_features = 120, bias = True)
         self.lin_two = nn.Linear(in_features = 120, out_features = 200, bias = True)
