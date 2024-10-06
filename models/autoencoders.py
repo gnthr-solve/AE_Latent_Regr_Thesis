@@ -26,7 +26,7 @@ class SimpleAutoencoder(nn.Module):
         self.decoder = decoder
 
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> Tensor:
 
         z = self.encoder(x)
         x_hat = self.decoder(z)

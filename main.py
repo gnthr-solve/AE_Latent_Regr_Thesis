@@ -436,6 +436,8 @@ def main_train_AE():
 
 def main_train_composite_seq(): #NOTE: Blueprint
 
+    from datasets import SplitSubsetFactory
+
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("-device:", device)
@@ -452,8 +454,8 @@ def main_train_composite_seq(): #NOTE: Blueprint
 
 
     ###--- Normalise ---###
-    #normaliser = MinMaxNormaliser()
-    normaliser = ZScoreNormaliser()
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
     #normaliser = RobustScalingNormaliser()
 
     with torch.no_grad():
@@ -468,15 +470,16 @@ def main_train_composite_seq(): #NOTE: Blueprint
     ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    subsets = subset_factory.create_splits()
 
+    ae_train_ds = subsets['train_unlabeled']
+    regr_train_ds = subsets['train_labeled']
 
     ###--- DataLoader ---###
     batch_size = 50
-    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
-
+    dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
+    dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
     ###--- Models ---###
     latent_dim = 10
@@ -502,8 +505,11 @@ def main_train_composite_seq(): #NOTE: Blueprint
 
 
     ###--- Optimizer & Scheduler ---###
-    optimizer = Adam(ae_model.parameters(), lr = 1e-2)
-    scheduler = ExponentialLR(optimizer, gamma = 0.1)
+    optimizer_ae = Adam(ae_model.parameters(), lr = 1e-2)
+    scheduler_ae = ExponentialLR(optimizer_ae, gamma = 0.1)
+
+    optimizer_regr = Adam(regr_model.parameters(), lr = 1e-2)
+    scheduler_regr = ExponentialLR(optimizer_regr, gamma = 0.1)
 
 
     ###--- Meta ---###
@@ -513,16 +519,15 @@ def main_train_composite_seq(): #NOTE: Blueprint
     observer = AEParameterObserver()
 
 
-    ###--- Training Loop ---###
+    ###--- Training Loop AE---###
     for it in pbar:
         
-        for b_ind, (X_batch, y_batch) in enumerate(dataloader):
+        for b_ind, (X_batch, _) in enumerate(dataloader_ae):
             
             X_batch = X_batch[:, 1:]
-            y_batch = y_batch[:, 1:]
 
             #--- Forward Pass ---#
-            optimizer.zero_grad()
+            optimizer_ae.zero_grad()
             
             X_hat_batch = ae_model(X_batch)
 
@@ -535,26 +540,57 @@ def main_train_composite_seq(): #NOTE: Blueprint
             observer(loss = loss_reconst, ae_model = ae_model)
 
 
-            optimizer.step()
+            optimizer_ae.step()
 
 
-        scheduler.step()
+        scheduler_ae.step()
 
     observer.plot_results()
 
 
-    ###--- Test Loss ---###
-    X_test = test_dataset.dataset.X_data[test_dataset.indices]
-    y_test = test_dataset.dataset.y_data[test_dataset.indices]
-    X_test = X_test[:, 1:]
-    y_test = y_test[:, 1:]
-    X_test_hat = ae_model(X_test)
+    ###--- Training Loop Regr ---###
+    for it in pbar:
+        
+        for b_ind, (X_batch, y_batch) in enumerate(dataloader_regr):
+            
+            X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
 
-    loss_reconst = reconstr_loss(X_test, X_test_hat)
-    print(
-        f"After {epochs} epochs with {len(dataloader)} iterations each\n"
-        f"Avg. Loss on testing subset: {loss_reconst}\n"
-    )
+            #--- Forward Pass ---#
+            optimizer_regr.zero_grad()
+            
+            y_hat_batch = regr_model(X_batch)
+
+            loss_regr = regr_loss(y_batch, y_hat_batch)
+
+            #--- Backward Pass ---#
+            loss_regr.backward()
+
+            print(
+                f"{it}_{b_ind+1}/{epochs} Regr. Loss:\n"
+                f"{loss_regr.tolist()}"
+            )
+
+
+            optimizer_regr.step()
+
+
+        scheduler_regr.step()
+
+
+
+    ###--- Test Loss ---###
+    # X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    # y_test = test_dataset.dataset.y_data[test_dataset.indices]
+    # X_test = X_test[:, 1:]
+    # y_test = y_test[:, 1:]
+    # X_test_hat = ae_model(X_test)
+
+    # loss_reconst = reconstr_loss(X_test, X_test_hat)
+    # print(
+    #     f"After {epochs} epochs with {len(dataloader)} iterations each\n"
+    #     f"Avg. Loss on testing subset: {loss_reconst}\n"
+    # )
 
 
 

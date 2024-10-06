@@ -24,7 +24,7 @@ class LinearRegr(nn.Module):
         self.regr_map = nn.Linear(in_features = latent_dim, out_features = y_dim, bias = True)
         
 
-    def forward(self, z: Tensor):
+    def forward(self, z: Tensor) -> Tensor:
 
         y_hat = self.regr_map(z)
 

@@ -26,7 +26,7 @@ class EnRegrComposite(nn.Module):
         self.regressor = regressor
 
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> Tensor:
 
         z = self.encoder(x)
 

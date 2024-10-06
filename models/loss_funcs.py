@@ -25,7 +25,7 @@ class SimpleLoss(nn.Module):
         self.loss_fn = nn.MSELoss()
 
 
-    def forward(self, x: Tensor, x_hat: Tensor):
+    def forward(self, x: Tensor, x_hat: Tensor) -> Tensor:
 
         loss = self.loss_fn(x, x_hat)
 
@@ -49,7 +49,7 @@ class WeightedCompositeLoss:
         self.w_reconstr = w_reconstr
 
 
-    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor):
+    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor) -> Tensor:
 
         regr_component = self.w_regr * self.loss_regr(t_in_batch, t_out_batch)
         reconstr_component = self.w_reconstr * self.loss_reconstr(t_in_batch, t_out_batch)
@@ -69,7 +69,7 @@ class MeanLpLoss:
         self.p = p
 
 
-    def __call__(self, x_batch: Tensor, x_hat_batch: Tensor):
+    def __call__(self, x_batch: Tensor, x_hat_batch: Tensor) -> Tensor:
 
         diff = x_batch - x_hat_batch
 
@@ -98,7 +98,7 @@ class RelativeMeanLpLoss:
         return mean_diff_norm / mean_x_batch_norm
     
 
-    def mean_norm(self, t_batch: Tensor):
+    def mean_norm(self, t_batch: Tensor) -> Tensor:
 
         batch_norms: Tensor = tla.norm(t_batch, ord = self.p, dim = 1)
         
@@ -119,7 +119,7 @@ class HuberLoss:
         self.loss_fn = nn.HuberLoss(reduction =  self.reduction, delta = delta)
 
 
-    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor):
+    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor) -> Tensor:
 
         loss = self.loss_fn(t_in_batch, t_out_batch)
 

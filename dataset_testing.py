@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, Subset, DataLoader, random_split
 from itertools import product
 from pathlib import Path
 
-from datasets import DataFrameDataset, TensorDataset
+from datasets import DataFrameDataset, TensorDataset, SplitSubsetFactory
 
 """
 Test Functions
@@ -40,6 +40,7 @@ def DataFrameDataset_test(joint_data_df: pd.DataFrame):
 
 
 
+
 def TensorDataset_test(X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame):
     
     #--- Instantiate Dataset Subclass ---#
@@ -61,6 +62,38 @@ def TensorDataset_test(X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame
 
         if b_idx == break_idx:
             break
+
+
+
+
+def SubsetFactory_test(X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame):
+    
+    #--- Instantiate Dataset Subclass ---#
+    batch_size = 200
+
+    dataset = TensorDataset(X_data, y_data, metadata_df)
+    
+    split_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+
+    splits = split_factory.create_splits()
+    
+    size = 0
+    for key, split in splits.items():
+
+        print(
+            f'For kind {key}:\n'
+            f'=================================================\n'
+            f'Type {key} indices: \n{type(split)}\n'
+            f'Size {key} indices: \n{len(split)}\n'
+            f'=================================================\n\n'
+        )
+
+        size += len(split)
+
+    print(
+        f'Dataset size: {len(dataset)}\n'
+        f'Sum of split sizes: {size}\n'
+    )
 
 
 
@@ -99,3 +132,4 @@ if __name__=="__main__":
     #--- Test Functions ---#
     #DataFrameDataset_test(joint_data_df)
     #TensorDataset_test(X_data, y_data, metadata_df)
+    SubsetFactory_test(X_data, y_data, metadata_df)

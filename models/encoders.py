@@ -27,7 +27,7 @@ class SimpleLinearReluEncoder(nn.Module):
         self.lin_out = nn.Linear(in_features = 40, out_features = latent_dim, bias = False)
 
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> Tensor:
 
         x = torch.relu(self.lin_in(x))
         x = torch.relu(self.lin_one(x))
@@ -61,7 +61,7 @@ class LinearReluEncoder(nn.Module):
         self.lin_out = nn.Linear(in_features = n_f(2), out_features = latent_dim, bias = False)
 
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> Tensor:
 
         x = torch.relu(self.lin_in(x))
         x = torch.relu(self.lin_one(x))
@@ -100,7 +100,7 @@ class GeneralLinearReluEncoder(nn.Module):
         self.activation = nn.PReLU()
 
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> Tensor:
 
         for layer in self.layers[:-1]:
 

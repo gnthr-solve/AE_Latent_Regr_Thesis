@@ -27,7 +27,7 @@ class SimpleLinearReluDecoder(nn.Module):
         self.lin_out = nn.Linear(in_features = 200, out_features = 297, bias = False)
 
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> Tensor:
 
         x = torch.relu(self.lin_in(x))
         x = torch.relu(self.lin_one(x))
@@ -59,7 +59,7 @@ class LinearReluDecoder(nn.Module):
         self.lin_out = nn.Linear(in_features = n_f(3), out_features = output_dim, bias = False)
 
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> Tensor:
 
         x = torch.relu(self.lin_in(x))
         x = torch.relu(self.lin_one(x))
@@ -97,7 +97,7 @@ class GeneralLinearReluDecoder(nn.Module):
         self.activation = nn.PReLU()
 
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor) -> Tensor:
 
         for layer in self.layers[:-1]:
 
