@@ -49,11 +49,11 @@ class WeightedCompositeLoss:
         self.w_reconstr = w_reconstr
 
 
-    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor) -> Tensor:
+    def __call__(self, X_batch: Tensor, X_hat_batch: Tensor, y_batch: Tensor, y_hat_batch: Tensor) -> Tensor:
 
-        regr_component = self.w_regr * self.loss_regr(t_in_batch, t_out_batch)
-        reconstr_component = self.w_reconstr * self.loss_reconstr(t_in_batch, t_out_batch)
-
+        reconstr_component = self.w_reconstr * self.loss_reconstr(X_batch, X_hat_batch)
+        regr_component = self.w_regr * self.loss_regr(y_batch, y_hat_batch)
+        
         return regr_component + reconstr_component
     
 
@@ -122,5 +122,22 @@ class HuberLoss:
     def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor) -> Tensor:
 
         loss = self.loss_fn(t_in_batch, t_out_batch)
+
+        return loss
+    
+
+
+class RelativeHuberLoss:
+
+    reduction = 'mean'
+
+    def __init__(self, delta: float):
+        
+        self.loss_fn = nn.HuberLoss(reduction =  self.reduction, delta = delta)
+
+
+    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor) -> Tensor:
+
+        loss = self.loss_fn(t_in_batch, t_out_batch) / tla.norm(t_in_batch, ord = 2, dim = 1).mean()
 
         return loss

@@ -5,9 +5,7 @@ from torch import Tensor
 from torch.nn import Module
 
 from models import (
-    SimpleEncoder, 
     SimpleLinearReluEncoder,
-    SimpleDecoder,
     SimpleLinearReluDecoder, 
     SimpleAutoencoder, 
     SimpleLoss,

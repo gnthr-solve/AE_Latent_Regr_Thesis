@@ -35,9 +35,11 @@ from models.loss_funcs import (
     MeanLpLoss,
     RelativeMeanLpLoss,
     HuberLoss,
+    RelativeHuberLoss,
 )
 
 from ae_param_observer import AEParameterObserver
+from loss_observer import LossObserver
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
 from helper_tools import get_valid_batch_size, plot_training_characteristics
@@ -434,7 +436,7 @@ def main_train_AE():
 
 
 
-def main_train_composite_seq(): #NOTE: Blueprint
+def train_joint_seq(): #NOTE: Blueprint
 
     from datasets import SplitSubsetFactory
 
@@ -596,6 +598,193 @@ def main_train_composite_seq(): #NOTE: Blueprint
 
 
 
+def train_joint_epoch_wise(): #NOTE: Blueprint
+
+    from datasets import SplitSubsetFactory
+
+    # check computation backend to use
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("-device:", device)
+
+
+    ###--- Load Data ---###
+    data_dir = Path("./data")
+    tensor_dir = data_dir / "tensors"
+
+    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+
+    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
+    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
+
+
+    ###--- Normalise ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = RobustScalingNormaliser()
+
+    with torch.no_grad():
+        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+        print(X_data.shape)
+
+        X_data_isnan = X_data.isnan().all(dim = 0)
+        X_data = X_data[:, ~X_data_isnan]
+        print(X_data.shape)
+
+
+    ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
+    dataset = TensorDataset(X_data, y_data, metadata_df)
+    
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    subsets = subset_factory.create_splits()
+
+    ae_train_ds = subsets['train_unlabeled']
+    regr_train_ds = subsets['train_labeled']
+
+
+    ###--- DataLoader ---###
+    batch_size = 50
+    dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
+    dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
+
+    print(len(dataloader_ae), len(dataloader_regr))
+
+    ###--- Models ---###
+    latent_dim = 10
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+    encoder = LinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim)
+    #encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+
+    decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
+    #decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+
+    regressor = LinearRegr(latent_dim = latent_dim)
+
+
+    ###--- Losses ---###
+    #reconstr_loss = MeanLpLoss(p = 2)
+    reconstr_loss = RelativeMeanLpLoss(p = 2)
+    #regr_loss = HuberLoss(delta = 1)
+    regr_loss = RelativeHuberLoss(delta = 1)
+
+    weighted_loss = WeightedCompositeLoss(
+        loss_regr = regr_loss,
+        loss_reconstr = reconstr_loss,
+        w_regr = 0.8,
+        w_reconstr = 0.2
+    )
+
+    ###--- Optimizer & Scheduler ---###
+    optimiser = Adam([
+        {'params': encoder.parameters(), 'lr': 1e-3},
+        {'params': decoder.parameters(), 'lr': 1e-3},
+        {'params': regressor.parameters(), 'lr': 1e-2},
+    ])
+
+    scheduler = ExponentialLR(optimiser, gamma = 0.9)
+
+
+    ###--- Meta ---###
+    epochs = 4
+    pbar = tqdm(range(epochs))
+
+    loss_observer = LossObserver('Reconstruction', 'End-To-End')
+
+
+    ###--- Training Loop Joint---###
+    for it in pbar:
+        
+        ###--- Training Loop AE---###
+        for b_ind, (X_batch, _) in enumerate(dataloader_ae):
+            
+            X_batch = X_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            X_hat_batch = decoder(encoder(X_batch))
+            # if it > 0:
+            #     print(X_hat_batch[:5])
+
+            loss_reconst = reconstr_loss(X_batch, X_hat_batch)
+
+            #--- Backward Pass ---#
+            loss_reconst.backward()
+
+            loss_observer('Reconstruction', loss_reconst)
+            print(
+                f"Epoch {it + 1}/{epochs}; AE iteration {b_ind + 1}/{len(dataloader_ae)}\n"
+                f"Loss Reconstruction: {loss_reconst.item()}"
+            )
+
+            optimiser.step()
+
+
+        ###--- Training Loop End-To-End ---###
+        for b_ind, (X_batch, y_batch) in enumerate(dataloader_regr):
+            
+            X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            Z_batch = encoder(X_batch)
+            X_hat_batch = decoder(Z_batch)
+            y_hat_batch = regressor(Z_batch)
+
+            loss_ete_weighted = weighted_loss(
+                X_batch = X_batch,
+                X_hat_batch = X_hat_batch,
+                y_batch = y_batch,
+                y_hat_batch = y_hat_batch,
+            )
+
+            #--- Backward Pass ---#
+            loss_ete_weighted.backward()
+
+            loss_observer('End-To-End', loss_ete_weighted)
+            print(
+                f"Epoch {it + 1}/{epochs}; ETE iteration {b_ind + 1}/{len(dataloader_regr)}\n"
+                f"Loss End-To-End: {loss_ete_weighted.item()}"
+            )
+
+            optimiser.step()
+
+
+        scheduler.step()
+
+    loss_observer.plot_results()
+
+
+    ###--- Test Loss ---###
+    ae_test_ds = subsets['test_unlabeled']
+    regr_test_ds = subsets['test_labeled']
+
+    X_test_ul = dataset.X_data[ae_test_ds.indices]
+
+    X_test_l = dataset.X_data[regr_test_ds.indices]
+    y_test_l = dataset.y_data[regr_test_ds.indices]
+
+    X_test_ul = X_test_ul[:, 1:]
+
+    X_test_l = X_test_l[:, 1:]
+    y_test_l = y_test_l[:, 1:]
+
+    X_test_ul_hat = decoder(encoder((X_test_ul)))
+
+    #y_test_hat = y
+
+    loss_reconst = reconstr_loss(X_test_ul, X_test_ul_hat)
+    # print(
+    #     f"After {epochs} epochs with {len(dataloader)} iterations each\n"
+    #     f"Avg. Loss on testing subset: {loss_reconst}\n"
+    # )
+
+
+
+
 """
 Main Executions
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -606,6 +795,7 @@ if __name__=="__main__":
     #main_test_view_DataFrameDS()
     #main_test_view_TensorDS()
     #main_train_AE()
-    main_train_composite_seq()
+    #train_joint_seq()
+    train_joint_epoch_wise()
 
     pass
