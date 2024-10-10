@@ -774,13 +774,22 @@ def train_joint_epoch_wise(): #NOTE: Blueprint
 
     X_test_ul_hat = decoder(encoder((X_test_ul)))
 
-    #y_test_hat = y
-
     loss_reconst = reconstr_loss(X_test_ul, X_test_ul_hat)
-    # print(
-    #     f"After {epochs} epochs with {len(dataloader)} iterations each\n"
-    #     f"Avg. Loss on testing subset: {loss_reconst}\n"
-    # )
+
+    y_test_l_hat = regressor(encoder(X_test_l))
+
+    loss_regr = regr_loss(y_test_l, y_test_l_hat)
+    print(
+        f"Autoencoder:\n"
+        f"---------------------------------------------------------------\n"
+        f"After {epochs} epochs with {len(dataloader_ae)} iterations each\n"
+        f"Avg. Loss on unlabelled testing subset: {loss_reconst}\n\n"
+        
+        f"Regression End-To-End:\n"
+        f"---------------------------------------------------------------\n"
+        f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
+        f"Avg. Loss on labelled testing subset: {loss_regr}\n"
+    )
 
 
 
