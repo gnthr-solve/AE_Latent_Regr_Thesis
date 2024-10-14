@@ -38,11 +38,11 @@ from torch import nn
 
 
 """
-Variational Encoder Classes - Ansatz 2. - FlattenVarEncoder
+Variational Encoder Classes - Ansatz 2. Flatten - GaussianVarEncoder
 -------------------------------------------------------------------------------------------------------------------------------------------
 Assumption: Gaussian with diagonal covariance
 """
-class FlattenVarEncoder(nn.Module):
+class GaussianVarEncoder(nn.Module):
     
     def __init__(self, input_dim: int, latent_dim: int, n_layers: int = 4):
         super().__init__()

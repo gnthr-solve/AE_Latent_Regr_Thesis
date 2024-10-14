@@ -27,15 +27,21 @@ from models.decoders import (
     GeneralLinearReluDecoder,
 )
 
-from models.regressors import LinearRegr
-from models import SimpleAutoencoder, EnRegrComposite
+from models.var_encoders import GaussianVarEncoder
+from models.var_decoders import GaussianVarDecoder
 
-from models.loss_funcs import (
+from models.regressors import LinearRegr
+from models import SimpleAutoencoder, GaussVAE, NaiveVAE, EnRegrComposite
+
+from loss import (
     WeightedCompositeLoss,
+    VAECompositeLoss,
     MeanLpLoss,
     RelativeMeanLpLoss,
     HuberLoss,
     RelativeHuberLoss,
+    GaussianKLDLoss,
+    GaussianReconstrLoss,
 )
 
 from ae_param_observer import AEParameterObserver
@@ -316,7 +322,7 @@ def main_test_view_TensorDS():
 
 
 
-def main_train_AE():
+def train_AE_iso():
 
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -334,8 +340,8 @@ def main_train_AE():
 
 
     ###--- Normalise ---###
-    #normaliser = MinMaxNormaliser()
-    normaliser = ZScoreNormaliser()
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
     #normaliser = RobustScalingNormaliser()
 
     with torch.no_grad():
@@ -365,11 +371,11 @@ def main_train_AE():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = LinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim)
-    #encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    #encoder = LinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim)
+    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
-    decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
-    #decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    #decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
+    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
     model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
 
@@ -436,7 +442,133 @@ def main_train_AE():
 
 
 
-def train_joint_seq(): #NOTE: Blueprint
+def train_VAE_iso():
+
+    # check computation backend to use
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("-device:", device)
+
+
+    ###--- Load Data ---###
+    data_dir = Path("./data")
+    tensor_dir = data_dir / "tensors"
+
+    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+
+    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
+    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
+
+
+    ###--- Normalise ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = RobustScalingNormaliser()
+
+    with torch.no_grad():
+        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+        print(X_data.shape)
+
+        X_data_isnan = X_data.isnan().all(dim = 0)
+        X_data = X_data[:, ~X_data_isnan]
+        print(X_data.shape)
+
+
+    ###--- Dataset---###
+    dataset = TensorDataset(X_data, y_data, metadata_df)
+    
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+
+    ###--- DataLoader ---###
+    batch_size = 50
+    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    latent_dim = 10
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+    encoder = GaussianVarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+
+    decoder = GaussianVarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+
+    #model = GaussVAE(encoder = encoder, decoder = decoder)
+    model = NaiveVAE(encoder = encoder, decoder = decoder)
+
+    ###--- Loss ---###
+    # reconstr_loss = GaussianReconstrLoss()
+    # kld_loss = GaussianKLDLoss()
+
+    # loss = VAECompositeLoss(reconstr_loss = reconstr_loss, kl_div_loss = kld_loss)
+    reconstr_loss = RelativeMeanLpLoss(p = 2)
+
+
+    ###--- Optimizer & Scheduler ---###
+    optimizer = Adam(model.parameters(), lr = 1e-2)
+    scheduler = ExponentialLR(optimizer, gamma = 0.1)
+
+
+    ###--- Meta ---###
+    epochs = 5
+    pbar = tqdm(range(epochs))
+
+    observer = AEParameterObserver()
+
+
+    ###--- Training Loop ---###
+    for it in pbar:
+        
+        for b_ind, (X_batch, _) in enumerate(dataloader):
+            
+            X_batch = X_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimizer.zero_grad()
+            
+            # mu_l, log_sigma_l, mu_r, log_sigma_r = model(X_batch)
+
+            # loss_reconst = loss(
+            #     X_batch = X_batch,
+            #     gen_model_params = mu_r,
+            #     inference_model_params = (mu_l, log_sigma_l)
+            # )
+            X_hat_batch = model(X_batch)
+
+            loss_reconst = reconstr_loss(X_batch, X_hat_batch)
+
+            #--- Backward Pass ---#
+            loss_reconst.backward()
+
+            #print(f"{it}_{b_ind+1}/{epochs}")
+            observer(loss = loss_reconst, ae_model = model)
+
+
+            optimizer.step()
+
+
+        scheduler.step()
+
+    observer.plot_results()
+
+
+    # ###--- Test Loss ---###
+    # X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    # X_test = X_test[:, 1:]
+    # X_test_hat = model(X_test)
+
+    # loss_reconst = loss(X_test, X_test_hat)
+    # print(
+    #     f"After {epochs} epochs with {len(dataloader)} iterations each\n"
+    #     f"Avg. Loss on testing subset: {loss_reconst}\n"
+    # )
+
+
+
+
+def train_joint_seq():
 
     from datasets import SplitSubsetFactory
 
@@ -581,7 +713,6 @@ def train_joint_seq(): #NOTE: Blueprint
         scheduler_regr.step()
 
 
-
     ###--- Test Loss ---###
     # X_test = test_dataset.dataset.X_data[test_dataset.indices]
     # y_test = test_dataset.dataset.y_data[test_dataset.indices]
@@ -598,7 +729,7 @@ def train_joint_seq(): #NOTE: Blueprint
 
 
 
-def train_joint_epoch_wise(): #NOTE: Blueprint
+def train_joint_epoch_wise():
 
     from datasets import SplitSubsetFactory
 
@@ -803,8 +934,9 @@ if __name__=="__main__":
     #--- Test Main Functions (AE only) ---#
     #main_test_view_DataFrameDS()
     #main_test_view_TensorDS()
-    #main_train_AE()
+    train_AE_iso()
+    #train_VAE_iso()
     #train_joint_seq()
-    train_joint_epoch_wise()
+    #train_joint_epoch_wise()
 
     pass

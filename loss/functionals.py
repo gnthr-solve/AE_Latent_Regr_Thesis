@@ -1,61 +1,9 @@
 
-"""
-Loss Functions - Imports
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-
 import torch
 import torch.linalg as tla
 
 from torch import Tensor
 from torch import nn
-
-
-
-
-"""
-Loss Functions - Simple Loss
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-class SimpleLoss(nn.Module):
-
-    def __init__(self):
-        super().__init__()
-
-        self.loss_fn = nn.MSELoss()
-
-
-    def forward(self, x: Tensor, x_hat: Tensor) -> Tensor:
-
-        loss = self.loss_fn(x, x_hat)
-
-        return loss
-    
-
-
-
-"""
-Loss Functions - Composite Loss
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-class WeightedCompositeLoss:
-
-    def __init__(self, loss_regr, loss_reconstr, w_regr, w_reconstr):
-        
-        self.loss_regr = loss_regr
-        self.loss_reconstr = loss_reconstr
-
-        self.w_regr = w_regr
-        self.w_reconstr = w_reconstr
-
-
-    def __call__(self, X_batch: Tensor, X_hat_batch: Tensor, y_batch: Tensor, y_hat_batch: Tensor) -> Tensor:
-
-        reconstr_component = self.w_reconstr * self.loss_reconstr(X_batch, X_hat_batch)
-        regr_component = self.w_regr * self.loss_regr(y_batch, y_hat_batch)
-        
-        return regr_component + reconstr_component
-    
 
 
 
@@ -138,6 +86,14 @@ class RelativeHuberLoss:
 
     def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor) -> Tensor:
 
-        loss = self.loss_fn(t_in_batch, t_out_batch) / tla.norm(t_in_batch, ord = 2, dim = 1).mean()
+        loss = self.loss_fn(t_in_batch, t_out_batch) / self.mean_norm(t_batch = t_in_batch)
 
         return loss
+    
+
+    def mean_norm(self, t_batch: Tensor) -> Tensor:
+
+        batch_norms: Tensor = tla.norm(t_batch, ord = 2, dim = 1)
+        
+        return batch_norms.mean()
+    

@@ -96,8 +96,8 @@ class GeneralLinearReluEncoder(nn.Module):
 
             self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True))
         
-        #self.activation = nn.ReLU()
-        self.activation = nn.PReLU()
+        self.activation = nn.ReLU()
+        #self.activation = nn.PReLU()
 
 
     def forward(self, x: Tensor) -> Tensor:
