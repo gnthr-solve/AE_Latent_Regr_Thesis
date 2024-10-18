@@ -22,10 +22,10 @@ class VAECompositeLoss:
 
     def __call__(self, X_batch: Tensor, gen_model_params: Tensor, inference_model_params: Tensor) -> Tensor:
         
-        reconstr_loss = self.reconstr_loss(X_batch, gen_model_params)
+        reconstr_loss = self.reconstr_loss(X_batch, *gen_model_params)
         kl_div_loss = self.kl_div_loss(*inference_model_params)
 
-        return reconstr_loss + kl_div_loss 
+        return - reconstr_loss + kl_div_loss 
 
 
 

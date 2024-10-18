@@ -7,17 +7,18 @@ from torch import nn
 
 
 """
-Variational Decoder Classes - Gaussian Relu Decoder
+Variational Decoder Classes - Base class
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class GaussianVarDecoder(nn.Module):
+class VarDecoder(nn.Module):
 
-    def __init__(self, output_dim: int, latent_dim: int, n_layers: int = 4):
+    def __init__(self, output_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4):
         super().__init__()
 
         self.output_dim = output_dim
+        self.n_dist_params = n_dist_params
 
-        dist_dim = 2 * output_dim
+        dist_dim = n_dist_params * output_dim
 
         transition_step = (dist_dim - latent_dim) // n_layers
 
@@ -41,14 +42,12 @@ class GaussianVarDecoder(nn.Module):
 
             x = self.activation(layer(x))
 
-        mu_sigma: Tensor = self.layers[-1](x)
+        genm_dist_params: Tensor = self.layers[-1](x)
 
-        #mu_sigma = mu_sigma.reshape(-1, self.latent_dim, 2).squeeze()
-        mu_sigma = mu_sigma.view(-1, self.output_dim, 2).squeeze()
+        #genm_dist_params = genm_dist_params.reshape(-1, self.latent_dim, self.n_dist_params).squeeze()
+        genm_dist_params = genm_dist_params.view(-1, self.output_dim, self.n_dist_params).squeeze()
 
-        mu, sigma = mu_sigma.unbind(dim = -1)
-
-        return mu, sigma
+        return genm_dist_params
     
 
 

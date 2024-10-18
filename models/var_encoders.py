@@ -38,60 +38,10 @@ from torch import nn
 
 
 """
-Variational Encoder Classes - Ansatz 2. Flatten - GaussianVarEncoder
--------------------------------------------------------------------------------------------------------------------------------------------
-Assumption: Gaussian with diagonal covariance
-"""
-class GaussianVarEncoder(nn.Module):
-    
-    def __init__(self, input_dim: int, latent_dim: int, n_layers: int = 4):
-        super().__init__()
-
-        self.latent_dim = latent_dim
-
-        dist_dim = 2 * latent_dim
-
-        transition_step = (input_dim - dist_dim) // n_layers
-        remainder = (input_dim - dist_dim) % n_layers
-
-        start = input_dim - (transition_step + remainder)
-        n_f = lambda i: start - transition_step * i
-
-        self.layers = nn.ModuleList()
-
-        self.layers.append(nn.Linear(in_features = input_dim, out_features = start))
-
-        for i in range(n_layers - 1):
-
-            self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True))
-        
-        self.activation = nn.ReLU()
-        #self.activation = nn.PReLU()
-
-
-    def forward(self, x: Tensor) -> Tensor:
-
-        for layer in self.layers[:-1]:
-
-            x = self.activation(layer(x))
-
-        mu_sigma: Tensor = self.layers[-1](x)
-
-        #mu_sigma = mu_sigma.reshape(-1, self.latent_dim, 2).squeeze()
-        mu_sigma = mu_sigma.view(-1, self.latent_dim, 2).squeeze()
-
-        mu, sigma = mu_sigma.unbind(dim = -1)
-
-        return mu, sigma
-    
-
-
-
-"""
-Variational Encoder Classes - FlattenVarEncoder Generalisation Ideas
+Variational Encoder Classes - Vector Parameters Base Class
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class GenFlattenVarEncoder(nn.Module):
+class VarEncoder(nn.Module):
     
     def __init__(self, input_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4):
         super().__init__()
@@ -125,12 +75,12 @@ class GenFlattenVarEncoder(nn.Module):
 
             x = self.activation(layer(x))
 
-        dist_params: Tensor = self.layers[-1](x)
+        infrm_dist_params: Tensor = self.layers[-1](x)
 
-        #dist_params = dist_params.reshape(-1, self.latent_dim, 2).squeeze()
-        dist_params = dist_params.view(-1, self.latent_dim, self.n_dist_params).squeeze()
+        #infrm_dist_params = infrm_dist_params.reshape(-1, self.latent_dim, self.n_dist_params).squeeze()
+        infrm_dist_params = infrm_dist_params.view(-1, self.latent_dim, self.n_dist_params).squeeze()
 
-        #if the distribution had 3 params, would give a 3 tuple
-        dist_params_tuple = dist_params.unbind(dim = -1)
+        return infrm_dist_params
+    
 
-        return dist_params_tuple
+

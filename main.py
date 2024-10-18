@@ -27,11 +27,11 @@ from models.decoders import (
     GeneralLinearReluDecoder,
 )
 
-from models.var_encoders import GaussianVarEncoder
-from models.var_decoders import GaussianVarDecoder
+from models.var_encoders import VarEncoder
+from models.var_decoders import VarDecoder
 
 from models.regressors import LinearRegr
-from models import SimpleAutoencoder, GaussVAE, NaiveVAE, EnRegrComposite
+from models import SimpleAutoencoder, GaussVAE, NaiveVAE, NaiveVAESigma, EnRegrComposite
 
 from loss import (
     WeightedCompositeLoss,
@@ -40,7 +40,8 @@ from loss import (
     RelativeMeanLpLoss,
     HuberLoss,
     RelativeHuberLoss,
-    GaussianKLDLoss,
+    AnaGaussianKLDLoss,
+    MCGaussianKLDLoss,
     GaussianReconstrLoss,
 )
 
@@ -322,7 +323,7 @@ def main_test_view_TensorDS():
 
 
 
-def train_AE_iso():
+def train_AE_NVAE_iso():
 
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -366,22 +367,27 @@ def train_AE_iso():
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
-    ###--- Models ---###
+    ###--- Models AE ---###
     latent_dim = 10
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
     #encoder = LinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim)
-    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
+    # encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    #decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
-    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # #decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
+    # decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
+    # model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
 
+    #--- Models NaiveVAE ---#
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+
+    #model = NaiveVAE(encoder = encoder, decoder = decoder)
+    model = NaiveVAESigma(encoder = encoder, decoder = decoder)
 
     ###--- Loss ---###
-    #
     #reconstr_loss = MeanLpLoss(p = 2)
     reconstr_loss = RelativeMeanLpLoss(p = 2)
 
@@ -487,27 +493,29 @@ def train_VAE_iso():
 
 
     ###--- Models ---###
-    latent_dim = 10
+    latent_dim = 20
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = GaussianVarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
 
-    decoder = GaussianVarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
 
-    #model = GaussVAE(encoder = encoder, decoder = decoder)
-    model = NaiveVAE(encoder = encoder, decoder = decoder)
+    model = GaussVAE(encoder = encoder, decoder = decoder)
+
 
     ###--- Loss ---###
-    # reconstr_loss = GaussianReconstrLoss()
-    # kld_loss = GaussianKLDLoss()
+    reconstr_loss = GaussianReconstrLoss()
 
-    # loss = VAECompositeLoss(reconstr_loss = reconstr_loss, kl_div_loss = kld_loss)
-    reconstr_loss = RelativeMeanLpLoss(p = 2)
+    #kld_loss = AnaGaussianKLDLoss()
+    kld_loss = MCGaussianKLDLoss()
 
+    loss = VAECompositeLoss(reconstr_loss = reconstr_loss, kl_div_loss = kld_loss)
+
+    test_reconstr_loss = RelativeMeanLpLoss(p = 2)
 
     ###--- Optimizer & Scheduler ---###
-    optimizer = Adam(model.parameters(), lr = 1e-2)
+    optimizer = Adam(model.parameters(), lr = 1e-3)
     scheduler = ExponentialLR(optimizer, gamma = 0.1)
 
 
@@ -528,16 +536,13 @@ def train_VAE_iso():
             #--- Forward Pass ---#
             optimizer.zero_grad()
             
-            # mu_l, log_sigma_l, mu_r, log_sigma_r = model(X_batch)
+            Z_batch, infrm_dist_params, genm_dist_params = model(X_batch)
 
-            # loss_reconst = loss(
-            #     X_batch = X_batch,
-            #     gen_model_params = mu_r,
-            #     inference_model_params = (mu_l, log_sigma_l)
-            # )
-            X_hat_batch = model(X_batch)
-
-            loss_reconst = reconstr_loss(X_batch, X_hat_batch)
+            loss_reconst = loss(
+                X_batch = X_batch,
+                gen_model_params = genm_dist_params.unbind(dim = -1),
+                inference_model_params = (Z_batch, *infrm_dist_params.unbind(dim = -1))
+            )
 
             #--- Backward Pass ---#
             loss_reconst.backward()
@@ -555,15 +560,19 @@ def train_VAE_iso():
 
 
     # ###--- Test Loss ---###
-    # X_test = test_dataset.dataset.X_data[test_dataset.indices]
-    # X_test = X_test[:, 1:]
-    # X_test_hat = model(X_test)
+    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    X_test = X_test[:, 1:]
 
-    # loss_reconst = loss(X_test, X_test_hat)
-    # print(
-    #     f"After {epochs} epochs with {len(dataloader)} iterations each\n"
-    #     f"Avg. Loss on testing subset: {loss_reconst}\n"
-    # )
+    #mu_l, log_var_l, mu_r, log_var_r = model(X_test)
+    Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
+
+    X_test_hat = model.reparameterise(genm_dist_params)
+
+    loss_reconst_test = test_reconstr_loss(x_batch = X_test, x_hat_batch = X_test_hat)
+    print(
+        f"After {epochs} epochs with {len(dataloader)} iterations each\n"
+        f"Avg. Loss on sampled reconstruction in testing subset: \n{loss_reconst_test}\n"
+    )
 
 
 
@@ -934,7 +943,7 @@ if __name__=="__main__":
     #--- Test Main Functions (AE only) ---#
     #main_test_view_DataFrameDS()
     #main_test_view_TensorDS()
-    train_AE_iso()
+    train_AE_NVAE_iso()
     #train_VAE_iso()
     #train_joint_seq()
     #train_joint_epoch_wise()
