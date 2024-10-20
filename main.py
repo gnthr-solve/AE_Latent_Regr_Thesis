@@ -35,15 +35,14 @@ from models import SimpleAutoencoder, GaussVAE, NaiveVAE, NaiveVAESigma, EnRegrC
 
 from loss import (
     WeightedCompositeLoss,
-    VAECompositeLoss,
     MeanLpLoss,
     RelativeMeanLpLoss,
     HuberLoss,
     RelativeHuberLoss,
-    AnaGaussianKLDLoss,
-    MCGaussianKLDLoss,
-    GaussianReconstrLoss,
 )
+from loss.composite_losses import VAELoss
+from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
+from loss.vae_reconstr import GaussianDiagRLT
 
 from ae_param_observer import AEParameterObserver
 from loss_observer import LossObserver
@@ -493,7 +492,7 @@ def train_VAE_iso():
 
 
     ###--- Models ---###
-    latent_dim = 20
+    latent_dim = 10
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
@@ -505,12 +504,12 @@ def train_VAE_iso():
 
 
     ###--- Loss ---###
-    reconstr_loss = GaussianReconstrLoss()
+    reconstr_loss = GaussianDiagRLT()
 
-    #kld_loss = AnaGaussianKLDLoss()
-    kld_loss = MCGaussianKLDLoss()
+    #kld_loss = GaussianAnaKLDiv()
+    kld_loss = GaussianMCKLDiv()
 
-    loss = VAECompositeLoss(reconstr_loss = reconstr_loss, kl_div_loss = kld_loss)
+    loss = VAELoss(reconstr_loss = reconstr_loss, kl_div_loss = kld_loss)
 
     test_reconstr_loss = RelativeMeanLpLoss(p = 2)
 
@@ -540,10 +539,12 @@ def train_VAE_iso():
 
             loss_reconst = loss(
                 X_batch = X_batch,
-                gen_model_params = genm_dist_params.unbind(dim = -1),
-                inference_model_params = (Z_batch, *infrm_dist_params.unbind(dim = -1))
+                Z_batch = Z_batch,
+                genm_dist_params = genm_dist_params,
+                infrm_dist_params = infrm_dist_params,
             )
 
+    
             #--- Backward Pass ---#
             loss_reconst.backward()
 
@@ -563,15 +564,36 @@ def train_VAE_iso():
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
     X_test = X_test[:, 1:]
 
-    #mu_l, log_var_l, mu_r, log_var_r = model(X_test)
     Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
 
-    X_test_hat = model.reparameterise(genm_dist_params)
+    mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
+    mu_r, logvar_r = genm_dist_params.unbind(dim = -1)
+
+    var_l = torch.exp(logvar_l)
+    var_r = torch.exp(logvar_r)
+
+    #X_test_hat = model.reparameterise(genm_dist_params)
+    X_test_hat = mu_r
 
     loss_reconst_test = test_reconstr_loss(x_batch = X_test, x_hat_batch = X_test_hat)
     print(
-        f"After {epochs} epochs with {len(dataloader)} iterations each\n"
-        f"Avg. Loss on sampled reconstruction in testing subset: \n{loss_reconst_test}\n"
+        f'After {epochs} epochs with {len(dataloader)} iterations each\n'
+        f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
+        f'----------------------------------------\n\n'
+        f'Inference M. mean:\n'
+        f'max:\n{mu_l.max()}\n'
+        f'min:\n{mu_l.min()}\n\n'
+        f'Inference M. Var:\n'
+        f'max:\n{var_l.max()}\n'
+        f'min:\n{var_l.min()}\n'
+        f'----------------------------------------\n\n'
+        f'Generative M. mean:\n'
+        f'max:\n{mu_r.max()}\n'
+        f'min:\n{mu_r.min()}\n\n'
+        f'Generative M. Var:\n'
+        f'max:\n{var_r.max()}\n'
+        f'min:\n{var_r.min()}\n'
+        f'----------------------------------------\n\n'
     )
 
 
@@ -943,8 +965,8 @@ if __name__=="__main__":
     #--- Test Main Functions (AE only) ---#
     #main_test_view_DataFrameDS()
     #main_test_view_TensorDS()
-    train_AE_NVAE_iso()
-    #train_VAE_iso()
+    #train_AE_NVAE_iso()
+    train_VAE_iso()
     #train_joint_seq()
     #train_joint_epoch_wise()
 

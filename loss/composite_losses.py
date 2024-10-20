@@ -25,6 +25,53 @@ class VAECompositeLoss:
         reconstr_loss = self.reconstr_loss(X_batch, *gen_model_params)
         kl_div_loss = self.kl_div_loss(*inference_model_params)
 
+        # print(
+        #     f'Loss: {- reconstr_loss + kl_div_loss}\n'
+        #     f'----------------------------------------\n'
+        #     f'Reconstruction Term:\n{-reconstr_loss}\n'
+        #     f'----------------------------------------\n'
+        #     f'KL-Divergence Term:\n{kl_div_loss}\n'
+        #     f'----------------------------------------\n\n'
+        # )
+        return - reconstr_loss + kl_div_loss 
+
+
+
+
+"""
+Loss Functions - VAE-Loss
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+from .vae_kld import AnalyticalKLDiv, MonteCarloKLDiv
+from .vae_reconstr import ReconstrLossTerm
+
+
+class VAELoss:
+
+    def __init__(self, reconstr_loss: ReconstrLossTerm, kl_div_loss: AnalyticalKLDiv | MonteCarloKLDiv):
+
+        self.reconstr_loss = reconstr_loss
+        self.kl_div_loss = kl_div_loss
+        
+
+    def __call__(self, X_batch: Tensor, Z_batch: Tensor, genm_dist_params: Tensor, infrm_dist_params: Tensor) -> Tensor:
+        
+        reconstr_loss = self.reconstr_loss(X_batch = X_batch, genm_dist_params = genm_dist_params)
+
+        if isinstance(self.kl_div_loss, AnalyticalKLDiv):
+            kl_div_loss = self.kl_div_loss(infrm_dist_params = infrm_dist_params)
+        
+        else: 
+            kl_div_loss = self.kl_div_loss(Z_batch = Z_batch, infrm_dist_params = infrm_dist_params)
+
+        # print(
+        #     f'Loss: {- reconstr_loss + kl_div_loss}\n'
+        #     f'----------------------------------------\n'
+        #     f'Reconstruction Term:\n{-reconstr_loss}\n'
+        #     f'----------------------------------------\n'
+        #     f'KL-Divergence Term:\n{kl_div_loss}\n'
+        #     f'----------------------------------------\n\n'
+        # )
         return - reconstr_loss + kl_div_loss 
 
 

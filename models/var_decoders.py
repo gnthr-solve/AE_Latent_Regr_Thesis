@@ -9,6 +9,8 @@ from torch import nn
 """
 Variational Decoder Classes - Base class
 -------------------------------------------------------------------------------------------------------------------------------------------
+This class should work for all generative models where the conditional distributions parameters 
+are vectors of the same dimension as the input/output space (e.g. mean and diagonal variance in a Gaussian)
 """
 class VarDecoder(nn.Module):
 

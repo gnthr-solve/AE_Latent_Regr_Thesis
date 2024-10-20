@@ -40,6 +40,8 @@ from torch import nn
 """
 Variational Encoder Classes - Vector Parameters Base Class
 -------------------------------------------------------------------------------------------------------------------------------------------
+This class should work for all inference models where the conditional distributions parameters 
+are vectors of the same dimension as the latent space (e.g. mean and diagonal variance in a Gaussian)
 """
 class VarEncoder(nn.Module):
     
