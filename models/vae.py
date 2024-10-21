@@ -50,9 +50,9 @@ class GaussVAE(VAE):
 
     def reparameterise(self, dist_params: Tensor):
 
-        mu, log_var = dist_params.unbind(dim = -1)
+        mu, logvar = dist_params.unbind(dim = -1)
 
-        std = torch.exp(0.5 * log_var)
+        std = torch.exp(0.5 * logvar)
 
         eps = torch.randn_like(std)
 

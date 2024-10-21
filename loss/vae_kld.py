@@ -67,15 +67,17 @@ class GaussianMCKLDiv(MonteCarloKLDiv):
 
     def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor) -> Tensor:
 
-        mu , logvar = infrm_dist_params.unbind(dim = -1)
-        
+        mu, logvar = infrm_dist_params.unbind(dim = -1)
+
         sq_diff_means = (Z_batch - mu).pow(2)
         sq_Z_batch = Z_batch.pow(2)
         var = torch.exp(logvar)
 
         sq_mean_deviations = (sq_diff_means / var)
 
-        kld_summands = sq_mean_deviations + var - sq_Z_batch
+        kld_summands = sq_mean_deviations + logvar - sq_Z_batch
+        #kld_summands = sq_mean_deviations + var - sq_Z_batch
+
         kld_sum = kld_summands.sum(dim = 1)
 
         return -0.5 * kld_sum.mean()

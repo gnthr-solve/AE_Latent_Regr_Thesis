@@ -42,7 +42,7 @@ from loss import (
 )
 from loss.composite_losses import VAELoss
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_reconstr import GaussianDiagRLT
+from loss.vae_ll import GaussianDiagLL
 
 from ae_param_observer import AEParameterObserver
 from loss_observer import LossObserver
@@ -487,7 +487,7 @@ def train_VAE_iso():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
+    batch_size = 200
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
@@ -504,12 +504,12 @@ def train_VAE_iso():
 
 
     ###--- Loss ---###
-    reconstr_loss = GaussianDiagRLT()
+    ll_loss = GaussianDiagLL()
 
     #kld_loss = GaussianAnaKLDiv()
     kld_loss = GaussianMCKLDiv()
 
-    loss = VAELoss(reconstr_loss = reconstr_loss, kl_div_loss = kld_loss)
+    loss = VAELoss(ll_loss = ll_loss, kl_div_loss = kld_loss)
 
     test_reconstr_loss = RelativeMeanLpLoss(p = 2)
 
@@ -519,7 +519,7 @@ def train_VAE_iso():
 
 
     ###--- Meta ---###
-    epochs = 5
+    epochs = 2
     pbar = tqdm(range(epochs))
 
     observer = AEParameterObserver()
