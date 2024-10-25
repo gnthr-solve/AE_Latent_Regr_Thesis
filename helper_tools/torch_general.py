@@ -8,6 +8,7 @@ import torch
 import numpy as np
 
 from torch.nn import Module
+from torch import Tensor
 
 from itertools import product
 from functools import wraps
@@ -91,7 +92,7 @@ def tensor_list_to_numpy_array(tensor_list: list[torch.Tensor]) -> np.ndarray:
 
 
 """
-Torch GHTs - Plotting Functions
+Torch GHTs - Plotting Functions - AEParameterObserver
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def plot_training_losses(
@@ -163,4 +164,32 @@ def plot_training_characteristics(
 
     fig.suptitle(title)
 
+    plt.show()
+
+
+
+
+"""
+Torch GHTs - plot_loss_tensor
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def plot_loss_tensor(observed_losses: Tensor):
+
+    epochs, iterations_per_epoch = observed_losses.shape
+    iterations = epochs * iterations_per_epoch
+
+    losses = observed_losses.flatten()
+    
+    # Create the plot
+    plt.figure(figsize=(10, 5))
+    plt.plot(range(iterations), losses)
+
+    # Add vertical lines for each epoch
+    for epoch in range(1, epochs):
+        plt.axvline(x = epoch * iterations_per_epoch, color = 'b', linestyle = '--')
+
+    # Set the plot labels and title
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.title('Training Loss')
     plt.show()

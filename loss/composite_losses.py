@@ -39,41 +39,43 @@ class VAECompositeLoss:
 
 
 """
-Loss Functions - VAE-Loss
+Loss Functions - ELBOLoss
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 from .vae_kld import AnalyticalKLDiv, MonteCarloKLDiv
 from .vae_ll import LogLikelihood
 
 
-class VAELoss:
+class NegativeELBOLoss:
 
-    def __init__(self, ll_loss: LogLikelihood, kl_div_loss: AnalyticalKLDiv | MonteCarloKLDiv):
+    def __init__(self, ll_term: LogLikelihood, kl_div_term: AnalyticalKLDiv | MonteCarloKLDiv):
 
-        self.ll_loss = ll_loss
-        self.kl_div_loss = kl_div_loss
+        self.ll_term = ll_term
+        self.kl_div_term = kl_div_term
         
 
     def __call__(self, X_batch: Tensor, Z_batch: Tensor, genm_dist_params: Tensor, infrm_dist_params: Tensor) -> Tensor:
         
-        ll_loss = self.ll_loss(X_batch = X_batch, genm_dist_params = genm_dist_params)
+        ll_term = self.ll_term(X_batch = X_batch, genm_dist_params = genm_dist_params)
 
-        if isinstance(self.kl_div_loss, AnalyticalKLDiv):
-            kl_div_loss = self.kl_div_loss(infrm_dist_params = infrm_dist_params)
+        if isinstance(self.kl_div_term, AnalyticalKLDiv):
+            kl_div_term = self.kl_div_term(infrm_dist_params = infrm_dist_params)
         
         else: 
-            kl_div_loss = self.kl_div_loss(Z_batch = Z_batch, infrm_dist_params = infrm_dist_params)
+            kl_div_term = self.kl_div_term(Z_batch = Z_batch, infrm_dist_params = infrm_dist_params)
+
+        neg_elbo_loss = kl_div_term - ll_term
 
         print(
-            f'Loss: {- ll_loss + kl_div_loss}\n'
+            f'Loss: {neg_elbo_loss}\n'
             f'----------------------------------------\n'
-            f'Reconstruction Term:\n{-ll_loss}\n'
+            f'Reconstruction Term:\n{-ll_term}\n'
             f'----------------------------------------\n'
-            f'KL-Divergence Term:\n{kl_div_loss}\n'
+            f'KL-Divergence Term:\n{kl_div_term}\n'
             f'----------------------------------------\n\n'
         )
 
-        return - ll_loss + kl_div_loss 
+        return neg_elbo_loss 
 
 
 

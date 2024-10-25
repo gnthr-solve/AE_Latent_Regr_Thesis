@@ -16,7 +16,7 @@ from matplotlib.figure import Figure
 from helper_tools import plot_training_losses, plot_param_norms
 
 """
-Autoencoder Parameter Observer
+Loss Observer
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 class LossObserver:
@@ -63,3 +63,24 @@ class LossObserver:
 
         plt.show()
 
+
+
+
+"""
+Detailed Loss Observer
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class DetailedLossObserver:
+
+    def __init__(self, batch_size: int, dataset_size: int, n_epochs: int):
+
+        self.batch_size = batch_size
+        self.sample_losses = torch.zeros(size = (n_epochs, dataset_size))
+
+    
+    def __call__(self, epoch: int, batch_idx: int, sample_batch_losses: Tensor):
+
+        start_idx = self.batch_size * batch_idx
+        end_idx = start_idx + self.batch_size
+
+        self.sample_losses[epoch, start_idx:end_idx] = sample_batch_losses.detach()

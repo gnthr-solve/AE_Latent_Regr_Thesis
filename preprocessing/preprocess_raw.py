@@ -21,6 +21,7 @@ Preprocessing - I. Preprocessing Raw DataFrames to Organised pytorch Tensors
         2.2. Export Column Maps
     3. Merge X and y DataFrames on Identifier
         3.1. Eliminate Rows Containing NaN in X Columns
+        3.2. Divide y values by time
     4. Create Index Map and Export
         4.1. Export Index Map
         4.2. Export Joint DataFrame
@@ -115,6 +116,9 @@ def preprocess_raw():
     isna_any_mask = data_df[X_data_cols].isna().any(axis = 1)
     data_df = data_df[~isna_any_mask]
     data_df.reset_index(inplace = True)
+
+    #--- 3.2. Divide y-values by Time to get MRR ---#
+    data_df[y_data_cols] = data_df[y_data_cols].div(data_df['Time_ptp'], axis = 0)
 
 
     ###--- 4. Create Index Map and Export ---###

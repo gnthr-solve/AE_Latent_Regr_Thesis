@@ -10,9 +10,9 @@ from preprocessing.investigate import investigate_tensor, investigate_index_mapp
 if __name__=="__main__":
     
     #--- Preprocessing ---#
-    #preprocess_raw()
+    preprocess_raw()
 
     #normalise_stored_tensors()
 
     #investigate_tensor()
-    investigate_index_mapping()
+    #investigate_index_mapping()

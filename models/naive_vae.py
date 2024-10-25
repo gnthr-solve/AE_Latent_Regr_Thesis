@@ -5,7 +5,7 @@ import numpy as np
 from torch import Tensor
 from torch import nn
 
-
+from .vae import VAE
 """
 NaiveVAE
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -26,16 +26,16 @@ class NaiveVAE(nn.Module):
 
         infrm_dist_params = self.encoder(x)
         
-        z = self.sample_gaussian(infrm_dist_params)
+        z = self.reparameterise(infrm_dist_params)
 
         genm_dist_params = self.decoder(z)
 
-        x_hat = self.sample_gaussian(genm_dist_params)
+        x_hat = self.reparameterise(genm_dist_params)
 
         return x_hat
     
 
-    def sample_gaussian(self, dist_params: Tensor) -> Tensor:
+    def reparameterise(self, dist_params: Tensor) -> Tensor:
 
         mu, logvar = dist_params.unbind(dim = -1)
 
@@ -70,16 +70,16 @@ class NaiveVAESigma(nn.Module):
 
         infrm_dist_params = self.encoder(x)
         
-        z = self.sample_gaussian(infrm_dist_params)
+        z = self.reparameterise(infrm_dist_params)
 
         genm_dist_params = self.decoder(z)
 
-        x_hat = self.sample_gaussian(genm_dist_params)
+        x_hat = self.reparameterise(genm_dist_params)
 
         return x_hat
     
 
-    def sample_gaussian(self, dist_params: Tensor) -> Tensor:
+    def reparameterise(self, dist_params: Tensor) -> Tensor:
 
         mu, log_sigma = dist_params.unbind(dim = -1)
 
