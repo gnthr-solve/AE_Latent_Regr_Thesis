@@ -80,9 +80,60 @@ class VarEncoder(nn.Module):
         infrm_dist_params: Tensor = self.layers[-1](x)
 
         #infrm_dist_params = infrm_dist_params.reshape(-1, self.latent_dim, self.n_dist_params).squeeze()
+        #infrm_dist_params = infrm_dist_params.view(-1, self.n_dist_params, self.latent_dim).squeeze()
         infrm_dist_params = infrm_dist_params.view(-1, self.latent_dim, self.n_dist_params).squeeze()
 
         return infrm_dist_params
     
 
 
+
+"""
+Variational Encoder Classes - Experiment
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class VarEncoderExp(nn.Module):
+    
+    def __init__(self, input_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, dtype = torch.float64):
+        super().__init__()
+
+        self.latent_dim = latent_dim
+        self.n_dist_params = n_dist_params
+
+        dist_dim = n_dist_params * latent_dim
+
+        transition_step = (input_dim - dist_dim) // n_layers
+        remainder = (input_dim - dist_dim) % n_layers
+
+        start = input_dim - (transition_step + remainder)
+        n_f = lambda i: start - transition_step * i
+
+        self.layers = nn.ModuleList()
+
+        self.layers.append(nn.Linear(in_features = input_dim, out_features = start, dtype = dtype))
+
+        for i in range(n_layers - 1):
+
+            self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True, dtype = dtype))
+        
+        self.activation = nn.ReLU()
+        #self.activation = nn.PReLU()
+
+
+    def forward(self, x: Tensor) -> Tensor:
+
+        for layer in self.layers[:-1]:
+
+            x = self.activation(layer(x))
+
+        infrm_dist_params: Tensor = self.layers[-1](x)
+
+        #infrm_dist_params = infrm_dist_params.reshape(-1, self.latent_dim, self.n_dist_params).squeeze()
+        #infrm_dist_params = infrm_dist_params.view(-1, self.n_dist_params, self.latent_dim).squeeze()
+        infrm_dist_params = infrm_dist_params.view(-1, self.latent_dim, self.n_dist_params).squeeze()
+
+        return infrm_dist_params
+    
+
+
+#VarEncoder = VarEncoderExp

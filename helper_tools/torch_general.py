@@ -5,6 +5,7 @@ Torch General Helper Tools (GHTs) - DataFrameNamedTupleDataset
 """
 
 import torch
+import torch.nn as nn
 import numpy as np
 
 from torch.nn import Module
@@ -89,6 +90,26 @@ def tensor_list_to_numpy_array(tensor_list: list[torch.Tensor]) -> np.ndarray:
     np_array = torch.stack(tensor_list).numpy()
 
     return np_array
+
+
+
+"""
+Torch GHTs - Initialise weights
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def initialize_weights(model: Module):
+
+    for m in model.modules():
+        
+        if isinstance(m, nn.Linear):
+
+            #nn.init.xavier_uniform_(m.weight)
+            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+            
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
+
 
 
 """

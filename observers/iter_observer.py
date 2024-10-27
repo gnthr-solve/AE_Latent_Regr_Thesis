@@ -15,13 +15,13 @@ Autoencoder Parameter Observer
 """
 class IterationObserver(ABC):
 
-    def __init__(self, n_epochs, n_iterations):
+    def __init__(self, n_epochs: int, n_iterations: int):
         
         self.observed_metrics = torch.zeros(size = (n_epochs, n_iterations))
         
 
     @abstractmethod
-    def __call__(self, epoch, iter_idx, model, loss):
+    def __call__(self, epoch: int, iter_idx: int, *args):
         pass
         
     

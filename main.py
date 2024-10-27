@@ -31,7 +31,8 @@ from models.var_encoders import VarEncoder
 from models.var_decoders import VarDecoder
 
 from models.regressors import LinearRegr
-from models import SimpleAutoencoder, GaussVAE, NaiveVAE, NaiveVAESigma, EnRegrComposite
+from models import SimpleAutoencoder, GaussVAE, EnRegrComposite
+from models.naive_vae import NaiveVAE, NaiveVAESigma, NaiveVAELogSigma
 
 from loss import (
     WeightedCompositeLoss,
@@ -46,6 +47,8 @@ from loss.vae_ll import GaussianDiagLL
 
 from observers.ae_param_observer import AEParameterObserver
 from observers.loss_observer import LossObserver
+from observers.vae_dist_observer import VAELatentObserver
+
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
 from helper_tools import get_valid_batch_size, plot_training_characteristics
@@ -250,6 +253,21 @@ def main_test_view_TensorDS():
         f"Model modules: \n {model.modules}\n"
     )
 
+    #--- Check Initialised Model Parameters ---#
+    for name, param in model.named_parameters():
+        
+        #param.data = param.data * 1e-3
+        data = param.data
+        
+        print(
+            f'For parameter {name}:\n'
+            f'-----------------------------\n'
+            f'Max:\n {data.max()}\n'
+            f'Min:\n {data.min()}\n'
+            f'Norm:\n {torch.norm(data)}\n'
+            f'-----------------------------\n\n'
+        )
+
 
     ###--- Loss ---###
     #
@@ -324,7 +342,8 @@ def main_test_view_TensorDS():
 
 def train_AE_iso_observer_test():
 
-    from helper_tools import plot_loss_tensor
+    from helper_tools import plot_loss_tensor, initialize_weights
+    from observers.model_observer import ModelObserver
 
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -340,19 +359,20 @@ def train_AE_iso_observer_test():
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
 
-
+    #X_data = torch.tensor(data=X_data.data, dtype=torch.float64)
+    
     ###--- Normalise ---###
-    #normaliser = MinMaxNormaliser()
-    # normaliser = ZScoreNormaliser()
-    # #normaliser = RobustScalingNormaliser()
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = RobustScalingNormaliser()
 
-    # with torch.no_grad():
-    #     X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-    #     print(X_data.shape)
+    with torch.no_grad():
+        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+        print(X_data.shape)
 
-    #     X_data_isnan = X_data.isnan().all(dim = 0)
-    #     X_data = X_data[:, ~X_data_isnan]
-    #     print(X_data.shape)
+        X_data_isnan = X_data.isnan().all(dim = 0)
+        X_data = X_data[:, ~X_data_isnan]
+        print(X_data.shape)
 
 
     ###--- Dataset---###
@@ -373,19 +393,23 @@ def train_AE_iso_observer_test():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
+    # model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
 
     #--- Models NaiveVAE ---#
-    # encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
-    # decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
 
-    # #model = NaiveVAE(encoder = encoder, decoder = decoder)
-    # model = NaiveVAESigma(encoder = encoder, decoder = decoder)
+    #model = NaiveVAE(encoder = encoder, decoder = decoder)
+    model = NaiveVAELogSigma(encoder = encoder, decoder = decoder)
+    #model = NaiveVAESigma(encoder = encoder, decoder = decoder)
 
+    #initialize_weights(model)
+
+    
     ###--- Loss ---###
     #reconstr_loss = MeanLpLoss(p = 2)
     reconstr_loss = RelativeMeanLpLoss(p = 2)
@@ -393,7 +417,7 @@ def train_AE_iso_observer_test():
 
     ###--- Optimizer & Scheduler ---###
     optimizer = Adam(model.parameters(), lr = 1e-2)
-    scheduler = ExponentialLR(optimizer, gamma = 0.1)
+    scheduler = ExponentialLR(optimizer, gamma = 0.5)
 
 
     ###--- Meta ---###
@@ -402,7 +426,9 @@ def train_AE_iso_observer_test():
 
 
     ###--- Observation Test Setup ---###
-    loss_obs_tensor = torch.zeros(size = (epochs, len(dataloader)))
+    n_iterations = len(dataloader)
+    loss_obs_tensor = torch.zeros(size = (epochs, n_iterations))
+    model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
 
     ###--- Training Loop ---###
     for epoch in pbar:
@@ -423,15 +449,17 @@ def train_AE_iso_observer_test():
             #--- Backward Pass ---#
             loss_reconst.backward()
 
-            #print(f"{it}_{b_ind+1}/{epochs}")
-
-
             optimizer.step()
+
+            #--- Observer Call ---#
+            model_obs(epoch = epoch, iter_idx = b_idx, model = model)
 
 
         scheduler.step()
 
+
     plot_loss_tensor(observed_losses = loss_obs_tensor)
+    #model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
     ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
@@ -571,7 +599,6 @@ def train_AE_NVAE_iso():
 
 
 
-
 def train_VAE_iso():
 
     # check computation backend to use
@@ -589,7 +616,7 @@ def train_VAE_iso():
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
 
 
-    ###--- Normalise ---###
+    ##--- Normalise ---###
     normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
     #normaliser = RobustScalingNormaliser()
@@ -631,8 +658,8 @@ def train_VAE_iso():
     ###--- Loss ---###
     ll_term = GaussianDiagLL()
 
-    #kld_term = GaussianAnaKLDiv()
-    kld_term = GaussianMCKLDiv()
+    kld_term = GaussianAnaKLDiv()
+    #kld_term = GaussianMCKLDiv()
 
     loss = NegativeELBOLoss(ll_term = ll_term, kl_div_term = kld_term)
 
@@ -647,7 +674,8 @@ def train_VAE_iso():
     epochs = 2
     pbar = tqdm(range(epochs))
 
-    observer = AEParameterObserver()
+    #observer = AEParameterObserver()
+    observer = VAELatentObserver(n_epochs=epochs, dataset_size=len(train_dataset), batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
 
 
     ###--- Training Loop ---###
@@ -674,16 +702,16 @@ def train_VAE_iso():
             loss_reconst.backward()
 
             #print(f"{it}_{b_ind+1}/{epochs}")
-            observer(loss = loss_reconst, ae_model = model)
-
+            #observer(loss = loss_reconst, ae_model = model)
+            observer(epoch = it, iter_idx = b_ind, infrm_dist_params = infrm_dist_params)
 
             optimizer.step()
 
 
         scheduler.step()
 
-    observer.plot_results()
-
+    #observer.plot_results()
+    observer.plot_dist_params()
 
     # ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
@@ -1090,9 +1118,9 @@ if __name__=="__main__":
     #--- Test Main Functions (AE only) ---#
     #main_test_view_DataFrameDS()
     #main_test_view_TensorDS()
-    train_AE_iso_observer_test()
+    #train_AE_iso_observer_test()
     #train_AE_NVAE_iso()
-    #train_VAE_iso()
+    train_VAE_iso()
     #train_joint_seq()
     #train_joint_epoch_wise()
 
