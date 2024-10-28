@@ -13,12 +13,13 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
+from .training_observer import IterObserver
 
 """
 VAE Latent Observer
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class VAELatentObserver:
+class VAELatentObserver(IterObserver):
 
     def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, latent_dim: int, n_dist_params: int):
 
@@ -26,7 +27,7 @@ class VAELatentObserver:
         self.batch_size = batch_size
 
 
-    def __call__(self, epoch: int, iter_idx: int, infrm_dist_params: Tensor):
+    def __call__(self, epoch: int, iter_idx: int, infrm_dist_params: Tensor, **kwargs):
 
         batch_dist_params = infrm_dist_params.detach()
 

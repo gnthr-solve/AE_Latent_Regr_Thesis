@@ -13,13 +13,15 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
+from .training_observer import IterObserver
+
 from helper_tools import plot_training_losses, plot_param_norms
 
 """
-Loss Observer
+Loss Observer First Trial
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class LossObserver:
+class LossObserverAlpha:
 
     def __init__(self, *names):
         
@@ -65,22 +67,48 @@ class LossObserver:
 
 
 
-
 """
-Detailed Loss Observer
+Loss Observer Prime
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class DetailedLossObserver:
+class LossObserver(IterObserver):
 
-    def __init__(self, batch_size: int, dataset_size: int, n_epochs: int):
+    def __init__(self, n_epochs, n_iterations):
+        
+        self.losses = torch.zeros(size = (n_epochs, n_iterations))
+    
 
-        self.batch_size = batch_size
-        self.sample_losses = torch.zeros(size = (n_epochs, dataset_size))
+    def __call__(self, epoch: int, iter_idx: int, batch_loss: Tensor, **kwargs):
+
+        if torch.isnan(batch_loss).any():
+            print(f"Loss at epoch = {epoch}, iteration = {iter_idx} contains NaN values")
+            raise StopIteration
+        
+        if torch.isinf(batch_loss).any():
+            print(f"Loss at epoch = {epoch}, iteration = {iter_idx} contains Inf values")
+            raise StopIteration
+        
+        self.losses[epoch, iter_idx] = batch_loss.detach()
+
+        
+
+
+
+# """
+# Detailed Loss Observer
+# -------------------------------------------------------------------------------------------------------------------------------------------
+# """
+# class DetailedLossObserver:
+
+#     def __init__(self, batch_size: int, dataset_size: int, n_epochs: int):
+
+#         self.batch_size = batch_size
+#         self.sample_losses = torch.zeros(size = (n_epochs, dataset_size))
 
     
-    def __call__(self, epoch: int, batch_idx: int, sample_batch_losses: Tensor):
+#     def __call__(self, epoch: int, batch_idx: int, sample_batch_losses: Tensor):
 
-        start_idx = self.batch_size * batch_idx
-        end_idx = start_idx + self.batch_size
+#         start_idx = self.batch_size * batch_idx
+#         end_idx = start_idx + self.batch_size
 
-        self.sample_losses[epoch, start_idx:end_idx] = sample_batch_losses.detach()
+#         self.sample_losses[epoch, start_idx:end_idx] = sample_batch_losses.detach()

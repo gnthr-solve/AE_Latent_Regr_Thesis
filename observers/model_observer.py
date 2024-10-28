@@ -13,14 +13,15 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
+from .training_observer import IterObserver
 from helper_tools import plot_training_losses, plot_param_norms
 
 
 """
 ModelObserver
--------------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------
 """
-class ModelObserver:
+class ModelObserver(IterObserver):
 
     def __init__(self, n_epochs: int, n_iterations: int, model: Module):
 
@@ -39,7 +40,7 @@ class ModelObserver:
         }
     
 
-    def __call__(self, epoch: int, iter_idx: int, model: Module):
+    def __call__(self, epoch: int, iter_idx: int, model: Module, **kwargs):
 
         for child_name, child in model.named_children():
             

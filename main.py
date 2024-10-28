@@ -46,12 +46,11 @@ from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
 from observers.ae_param_observer import AEParameterObserver
-from observers.loss_observer import LossObserver
-from observers.vae_dist_observer import VAELatentObserver
+from observers import LossObserver, ModelObserver, VAELatentObserver
 
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
-from helper_tools import get_valid_batch_size, plot_training_characteristics
+from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_characteristics
 
 
 """
@@ -342,8 +341,7 @@ def main_test_view_TensorDS():
 
 def train_AE_iso_observer_test():
 
-    from helper_tools import plot_loss_tensor, initialize_weights
-    from observers.model_observer import ModelObserver
+    #from observers.model_observer import ModelObserver
 
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -752,6 +750,150 @@ def train_VAE_iso():
 
 
 
+def VAE_iso_training_procedure_test():
+
+    from training.training_procedure import VAEIsoTrainingProcedure
+    # check computation backend to use
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("-device:", device)
+
+
+    ###--- Load Data ---###
+    data_dir = Path("./data")
+    tensor_dir = data_dir / "tensors"
+
+    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+
+    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
+    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
+
+
+    ##--- Normalise ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = RobustScalingNormaliser()
+
+    with torch.no_grad():
+        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+        print(X_data.shape)
+
+        X_data_isnan = X_data.isnan().all(dim = 0)
+        X_data = X_data[:, ~X_data_isnan]
+        print(X_data.shape)
+
+
+    ###--- Dataset---###
+    dataset = TensorDataset(X_data, y_data, metadata_df)
+    
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+
+    ###--- DataLoader ---###
+    batch_size = 50
+    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    latent_dim = 8
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+
+    model = GaussVAE(encoder = encoder, decoder = decoder)
+
+
+    ###--- Loss ---###
+    ll_term = GaussianDiagLL()
+
+    kld_term = GaussianAnaKLDiv()
+    #kld_term = GaussianMCKLDiv()
+
+    loss = NegativeELBOLoss(ll_term = ll_term, kl_div_term = kld_term)
+
+    test_reconstr_loss = RelativeMeanLpLoss(p = 2)
+
+
+    ###--- Optimizer & Scheduler ---###
+    optimizer = Adam(model.parameters(), lr = 1e-3)
+    scheduler = ExponentialLR(optimizer, gamma = 0.1)
+
+
+    ###--- Meta ---###
+    epochs = 2
+    n_iterations = len(dataloader)
+    dataset_size = len(train_dataset)
+
+    ###--- Set up Observers ---###
+    loss_observer = LossObserver(n_epochs = epochs, n_iterations = n_iterations)
+    latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
+    model_observer = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
+
+    ###--- Training Procedure ---###
+    training_procedure = VAEIsoTrainingProcedure(
+        train_dataloader = dataloader,
+        vae_model = model,
+        loss = loss,
+        optimizer = optimizer,
+        scheduler = scheduler,
+        epochs = epochs,
+        #batch_size = batch_size
+    )
+
+    training_procedure.register_observers(loss_observer, latent_observer, model_observer)
+    
+    training_procedure()
+
+
+    ###--- Test Observers ---###
+    plot_loss_tensor(loss_observer.losses)
+    latent_observer.plot_dist_params(functional = torch.max)
+    model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+
+
+    ###--- Test Loss ---###
+    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    X_test = X_test[:, 1:]
+
+    Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
+
+    mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
+    mu_r, logvar_r = genm_dist_params.unbind(dim = -1)
+
+    var_l = torch.exp(logvar_l)
+    var_r = torch.exp(logvar_r)
+
+    #X_test_hat = model.reparameterise(genm_dist_params)
+    X_test_hat = mu_r
+
+    loss_reconst_test = test_reconstr_loss(x_batch = X_test, x_hat_batch = X_test_hat)
+    print(
+        f'After {epochs} epochs with {len(dataloader)} iterations each\n'
+        f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
+        f'----------------------------------------\n\n'
+        f'Inference M. mean:\n'
+        f'max:\n{mu_l.max()}\n'
+        f'min:\n{mu_l.min()}\n\n'
+        f'Inference M. Var:\n'
+        f'max:\n{var_l.max()}\n'
+        f'min:\n{var_l.min()}\n'
+        f'----------------------------------------\n\n'
+        f'Generative M. mean:\n'
+        f'max:\n{mu_r.max()}\n'
+        f'min:\n{mu_r.min()}\n\n'
+        f'Generative M. Var:\n'
+        f'max:\n{var_r.max()}\n'
+        f'min:\n{var_r.min()}\n'
+        f'----------------------------------------\n\n'
+    )
+
+
+
+
 def train_joint_seq():
 
     from datasets import SplitSubsetFactory
@@ -1120,7 +1262,8 @@ if __name__=="__main__":
     #main_test_view_TensorDS()
     #train_AE_iso_observer_test()
     #train_AE_NVAE_iso()
-    train_VAE_iso()
+    #train_VAE_iso()
+    VAE_iso_training_procedure_test()
     #train_joint_seq()
     #train_joint_epoch_wise()
 
