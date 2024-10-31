@@ -791,18 +791,18 @@ def VAE_iso_training_procedure_test():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
+    batch_size = 100
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
     ###--- Models ---###
-    latent_dim = 8
+    latent_dim = 5
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
 
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
 
     model = GaussVAE(encoder = encoder, decoder = decoder)
 
@@ -810,8 +810,8 @@ def VAE_iso_training_procedure_test():
     ###--- Loss ---###
     ll_term = GaussianDiagLL()
 
-    kld_term = GaussianAnaKLDiv()
-    #kld_term = GaussianMCKLDiv()
+    #kld_term = GaussianAnaKLDiv()
+    kld_term = GaussianMCKLDiv()
 
     loss = NegativeELBOLoss(ll_term = ll_term, kl_div_term = kld_term)
 
@@ -820,11 +820,11 @@ def VAE_iso_training_procedure_test():
 
     ###--- Optimizer & Scheduler ---###
     optimizer = Adam(model.parameters(), lr = 1e-3)
-    scheduler = ExponentialLR(optimizer, gamma = 0.1)
+    scheduler = ExponentialLR(optimizer, gamma = 0.5)
 
 
     ###--- Meta ---###
-    epochs = 2
+    epochs = 4
     n_iterations = len(dataloader)
     dataset_size = len(train_dataset)
 
@@ -851,7 +851,7 @@ def VAE_iso_training_procedure_test():
 
     ###--- Test Observers ---###
     plot_loss_tensor(loss_observer.losses)
-    latent_observer.plot_dist_params(functional = torch.max)
+    latent_observer.plot_dist_params_batch(functional = torch.max)
     model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
 
@@ -1257,13 +1257,17 @@ Main Executions
 """
 if __name__=="__main__":
 
-    #--- Test Main Functions (AE only) ---#
+    ###--- AE in isolation ---###
     #main_test_view_DataFrameDS()
     #main_test_view_TensorDS()
     #train_AE_iso_observer_test()
     #train_AE_NVAE_iso()
+
+    ###--- VAE in isolation ---###
     #train_VAE_iso()
     VAE_iso_training_procedure_test()
+
+    ###--- Compositions ---###
     #train_joint_seq()
     #train_joint_epoch_wise()
 

@@ -52,10 +52,15 @@ class VAELatentObserver(IterObserver):
 
             ax = axes.flatten()[idx] if n_params > 1 else axes  # Handle single parameter case
 
+            n_iter_total = param_tensor.shape[0] * param_tensor.shape[1]
+            flattened_param_tensor = param_tensor.flatten(start_dim = 0, end_dim = 1)
+
             param_values = torch.tensor([
                 functional(param).item() 
-                for param in param_tensor.flatten(start_dim = 0, end_dim = 1)
+                for param in flattened_param_tensor
             ])
+
+
             
             iterations = len(param_values)
             ax.plot(range(iterations), param_values)
@@ -63,6 +68,62 @@ class VAELatentObserver(IterObserver):
             # Add vertical lines for each epoch
             epochs = param_tensor.shape[0]
             iterations_per_epoch = param_tensor.shape[1]
+            for epoch in range(1, epochs):
+                ax.axvline(x = epoch * iterations_per_epoch, color = 'r', linestyle = '--')
+
+            ax.set_title(f'Params {idx}')
+            ax.set_xlabel('Iteration')
+            ax.set_ylabel('Functional Value')
+
+        # Hide any unused subplots
+        if n_params > 1:
+            for idx in range(n_params, n_rows * n_cols):
+                axes.flatten()[idx].axis('off')
+
+        plt.tight_layout()
+        plt.show()
+
+
+    def plot_dist_params_batch(self, functional = torch.max):
+
+        dist_params = self.dist_params.unbind(dim = -1)
+
+        n_params = len(dist_params)
+        n_rows = int(n_params**0.5)  # Calculate the number of rows for the plot matrix
+        n_cols = n_params // n_rows + (n_params % n_rows > 0)  # Calculate the number of columns
+
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 10))
+        fig.suptitle(f"Distribution Parameter Development", fontsize=16)
+
+        for idx, param_tensor in enumerate(dist_params):
+
+            ax = axes.flatten()[idx] if n_params > 1 else axes  # Handle single parameter case
+
+            n_epochs = param_tensor.shape[0]
+            size_dataset = param_tensor.shape[1]
+            max_batch_idx = n_epochs * size_dataset // self.batch_size
+
+            flattened_param_tensor = param_tensor.flatten(start_dim = 0, end_dim = 1)
+            print(flattened_param_tensor.shape)
+            sample_param_values = torch.tensor([
+                functional(param).item() 
+                for param in flattened_param_tensor
+            ])
+
+            print(sample_param_values.shape)
+
+            mean_batch_values = [
+                sample_param_values[i*self.batch_size : (i+1)*self.batch_size].mean() 
+                for i in range(max_batch_idx)
+            ]
+            mean_batch_values.append(sample_param_values[max_batch_idx * self.batch_size: -1].mean())
+
+            iterations = len(mean_batch_values)
+            ax.plot(range(iterations), mean_batch_values)
+
+            # Add vertical lines for each epoch
+            epochs = n_epochs
+            iterations_per_epoch = len(mean_batch_values) / epochs
             for epoch in range(1, epochs):
                 ax.axvline(x = epoch * iterations_per_epoch, color = 'r', linestyle = '--')
 

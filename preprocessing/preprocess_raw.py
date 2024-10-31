@@ -67,11 +67,11 @@ def preprocess_raw():
 
 
     ###--- 0. Load Raw Data ---###
-    raw_X_data_path = data_dir / "apc_dataset.csv"
+    raw_X_data_path = data_dir / "apc_dataset_key.csv"
     raw_y_data_path = data_dir / "mean_MR.csv"
 
-    raw_X_data_df = pd.read_csv(raw_X_data_path)
-    raw_y_data_df = pd.read_csv(raw_y_data_path)
+    raw_X_data_df = pd.read_csv(raw_X_data_path, low_memory = False)
+    raw_y_data_df = pd.read_csv(raw_y_data_path, low_memory = False)
 
 
     ###--- 1. Eliminate File Metadata and Rename ---###
@@ -115,7 +115,7 @@ def preprocess_raw():
     #--- 3.1. Eliminate Rows Containing NaN in X Columns ---#
     isna_any_mask = data_df[X_data_cols].isna().any(axis = 1)
     data_df = data_df[~isna_any_mask]
-    data_df.reset_index(inplace = True)
+    data_df.reset_index(inplace = True, drop = True)
 
     #--- 3.2. Divide y-values by Time to get MRR ---#
     data_df[y_data_cols] = data_df[y_data_cols].div(data_df['Time_ptp'], axis = 0)
