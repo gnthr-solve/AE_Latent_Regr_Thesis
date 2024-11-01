@@ -6,17 +6,17 @@ from torch import Tensor
 from torch import nn
 
 from abc import ABC, abstractmethod
-
+from .loss_classes import LossTerm
 
 """
 Analytical KL-Divergence - ABC
 -------------------------------------------------------------------------------------------------------------------------------------------
 The KL-divergence loss term calculates the divergence from the inference model
 """
-class AnalyticalKLDiv(ABC):
+class AnalyticalKLDiv(LossTerm):
 
     @abstractmethod
-    def __call__(self, infrm_dist_params: Tensor) -> Tensor:
+    def __call__(self, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
         pass
     
 
@@ -28,10 +28,10 @@ Monte Carlo KL Divergence - MCGaussianKLDLoss
 Monte Carlo estimate for KL-divergence loss term for Gaussian inference model and standard Gaussian prior,
 following the same principle as for the reconstruction
 """
-class MonteCarloKLDiv(ABC):
+class MonteCarloKLDiv(LossTerm):
 
     @abstractmethod
-    def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor) -> Tensor:
+    def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
         pass
 
 
@@ -44,15 +44,13 @@ Analytical KL-divergence loss term for Gaussian inference model and standard Gau
 """
 class GaussianAnaKLDiv(AnalyticalKLDiv):
 
-    def __call__(self, infrm_dist_params: Tensor) -> Tensor:
+    def __call__(self, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
 
         mu , logvar = infrm_dist_params.unbind(dim = -1)
 
         kld_batch = 0.5 * (-1 - logvar + mu.pow(2) + torch.exp(logvar)).sum(dim = 1)
 
-        total_kld = kld_batch.mean()
-
-        return total_kld
+        return kld_batch
     
 
 
@@ -65,7 +63,7 @@ following the same principle as for the reconstruction
 """
 class GaussianMCKLDiv(MonteCarloKLDiv):
 
-    def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor) -> Tensor:
+    def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
 
         mu, logvar = infrm_dist_params.unbind(dim = -1)
 
@@ -80,5 +78,5 @@ class GaussianMCKLDiv(MonteCarloKLDiv):
 
         kld_sum = kld_summands.sum(dim = 1)
 
-        return -0.5 * kld_sum.mean()
+        return -0.5 * kld_sum
 

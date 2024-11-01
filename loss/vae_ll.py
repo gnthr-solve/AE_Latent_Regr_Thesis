@@ -6,6 +6,7 @@ from torch import Tensor
 from torch import nn
 
 from abc import ABC, abstractmethod
+from .loss_classes import LossTerm
 
 """
 Reconstruction Loss - ABC
@@ -14,10 +15,10 @@ The reconstruction loss term must minimise the negative log-likelihood of the in
 given the distribution parameters of the generative model, produced by the decoder.
 It is a single-sample Monte Carlo estimate.
 """
-class LogLikelihood(ABC):
+class LogLikelihood(LossTerm):
 
     @abstractmethod
-    def __call__(self, X_batch: Tensor, genm_dist_params: Tensor) -> Tensor:
+    def __call__(self, X_batch: Tensor, genm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
 
         pass
 
@@ -32,7 +33,7 @@ where both mu and a diagonal covariance are learnable by the decoder.
 """
 class GaussianUnitVarLL(LogLikelihood):
 
-    def __call__(self, X_batch: Tensor, genm_dist_params: Tensor) -> Tensor:
+    def __call__(self, X_batch: Tensor, genm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
         
         mu = genm_dist_params
     
@@ -40,9 +41,9 @@ class GaussianUnitVarLL(LogLikelihood):
 
         adj_mean_sums = diff_mean.sum(dim = 1)
 
-        loss = -0.5 * (adj_mean_sums.mean())
+        ll_batch = -0.5 * (adj_mean_sums)
 
-        return loss
+        return ll_batch
     
 
 
@@ -55,7 +56,7 @@ where both mu and a diagonal covariance are learnable by the decoder.
 """
 class GaussianDiagLL(LogLikelihood):
 
-    def __call__(self, X_batch: Tensor, genm_dist_params: Tensor) -> Tensor:
+    def __call__(self, X_batch: Tensor, genm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
         
         mu, logvar = genm_dist_params.unbind(dim = -1)
     
@@ -65,7 +66,7 @@ class GaussianDiagLL(LogLikelihood):
         adj_mean_sums = (diff_mean / var + logvar).sum(dim = 1)
         #adj_mean_sums = (diff_mean / var + var).sum(dim = 1)
 
-        loss = -0.5 * (adj_mean_sums.mean())
+        ll_batch = -0.5 * (adj_mean_sums)
 
-        return loss
+        return ll_batch
     

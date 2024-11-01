@@ -6,35 +6,86 @@ from torch import Tensor
 from torch import nn
 
 from typing import Callable
+from abc import ABC, abstractmethod
 
 
 """
-Loss Functions - VAE-Loss
+Loss Term ABC
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class VAECompositeLoss:
+class LossTerm(ABC):
 
-    def __init__(self, ll_loss: Callable[[Tensor, Tensor], Tensor], kl_div_loss: Callable[[Tensor], Tensor]):
+    @abstractmethod
+    def __call__(self, **tensors: Tensor) -> Tensor:
+        pass
 
-        self.ll_loss = ll_loss
-        self.kl_div_loss = kl_div_loss
+
+"""
+Weighted Loss ABC
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class WeightedLossTerm(LossTerm):
+
+    def __init__(self, loss_term: LossTerm, weight: float):
+
+        self.loss_term = loss_term
+        self.weight = weight
+
+    
+    def __call__(self, **tensors: Tensor) -> Tensor:
+        
+        batch_loss = self.loss_term(**tensors)
+
+        return self.weight * batch_loss
+    
+
+
+"""
+CompositeLoss
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class CompositeLoss:
+
+    def __init__(self, **loss_terms: LossTerm):
+
+        self.loss_terms = loss_terms
         
 
-    def __call__(self, X_batch: Tensor, gen_model_params: Tensor, inference_model_params: Tensor) -> Tensor:
+    def __call__(self, X_batch: Tensor, **tensors: Tensor) -> Tensor:
         
-        ll_loss = self.ll_loss(X_batch, *gen_model_params)
-        kl_div_loss = self.kl_div_loss(*inference_model_params)
+        batch_loss = torch.zeros(size = (X_batch.shape[0],), dtype = torch.float32)
 
-        # print(
-        #     f'Loss: {- ll_loss + kl_div_loss}\n'
-        #     f'----------------------------------------\n'
-        #     f'Reconstruction Term:\n{-ll_loss}\n'
-        #     f'----------------------------------------\n'
-        #     f'KL-Divergence Term:\n{kl_div_loss}\n'
-        #     f'----------------------------------------\n\n'
-        # )
-        return - ll_loss + kl_div_loss 
+        for name, loss_term in self.loss_terms.items():
 
+            loss_term_batch = loss_term(X_batch = X_batch, **tensors)
+
+            batch_loss += loss_term_batch
+
+        return batch_loss.mean()
+
+
+
+# class CompositeLoss:
+
+#     def __init__(self, **loss_terms: LossTerm):
+
+#         self.loss_terms = loss_terms
+        
+
+#     def __call__(self, X_batch: Tensor, **tensors: Tensor) -> Tensor:
+        
+#         #batch_loss = torch.zeros(size = (X_batch.shape[0],), dtype = torch.float32)
+#         batch_losses: list[Tensor] = []
+
+#         for name, loss_term in self.loss_terms.items():
+
+#             loss_term_batch = loss_term(X_batch, **tensors)
+
+#             batch_losses.append(loss_term_batch)
+
+#         batch_loss = torch.sum(*batch_losses)
+
+#         return batch_loss.mean()
 
 
 

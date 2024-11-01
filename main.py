@@ -35,13 +35,15 @@ from models import SimpleAutoencoder, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE, NaiveVAESigma, NaiveVAELogSigma
 
 from loss import (
+    CompositeLoss,
+    WeightedLossTerm,
+    LpNorm,
+    RelativeLpNorm,
+    Huber,
+    RelativeHuber,
     WeightedCompositeLoss,
-    MeanLpLoss,
-    RelativeMeanLpLoss,
-    HuberLoss,
-    RelativeHuberLoss,
 )
-from loss.composite_losses import NegativeELBOLoss
+from loss.loss_classes import NegativeELBOLoss
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
@@ -110,9 +112,8 @@ def main_test_view_DataFrameDS():
 
 
     ###--- Loss ---###
-    #
-    #reconstr_loss = MeanLpLoss(p = 2)
-    reconstr_loss = RelativeMeanLpLoss(p = 2)
+    #reconstr_loss = LpNorm(p = 2)
+    reconstr_loss = RelativeLpNorm(p = 2)
 
 
     ###--- Optimizer & Scheduler ---###
@@ -270,8 +271,8 @@ def main_test_view_TensorDS():
 
     ###--- Loss ---###
     #
-    #reconstr_loss = MeanLpLoss(p = 2)
-    reconstr_loss = RelativeMeanLpLoss(p = 2)
+    #reconstr_loss = LpNorm(p = 2)
+    reconstr_loss = RelativeLpNorm(p = 2)
 
 
     ###--- Optimizer & Scheduler ---###
@@ -409,17 +410,20 @@ def train_AE_iso_observer_test():
 
     
     ###--- Loss ---###
-    #reconstr_loss = MeanLpLoss(p = 2)
-    reconstr_loss = RelativeMeanLpLoss(p = 2)
+    #reconstr_term = LpNorm(p = 2)
+    reconstr_term = RelativeLpNorm(p = 2)
+
+    loss_terms = {'Reconstruction': reconstr_term}
+    reconstr_loss = CompositeLoss(**loss_terms)
 
 
     ###--- Optimizer & Scheduler ---###
-    optimizer = Adam(model.parameters(), lr = 1e-2)
+    optimizer = Adam(model.parameters(), lr = 1e-3)
     scheduler = ExponentialLR(optimizer, gamma = 0.5)
 
 
     ###--- Meta ---###
-    epochs = 5
+    epochs = 3
     pbar = tqdm(range(epochs))
 
 
@@ -440,7 +444,7 @@ def train_AE_iso_observer_test():
             
             X_hat_batch = model(X_batch)
 
-            loss_reconst = reconstr_loss(X_batch, X_hat_batch)
+            loss_reconst = reconstr_loss(X_batch = X_batch, X_hat_batch = X_hat_batch)
 
             loss_obs_tensor[epoch, b_idx] = loss_reconst.detach()
 
@@ -464,7 +468,7 @@ def train_AE_iso_observer_test():
     X_test = X_test[:, 1:]
     X_test_hat = model(X_test)
 
-    loss_reconst = reconstr_loss(X_test, X_test_hat)
+    loss_reconst = reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
     print(
         f"After {epochs} epochs with {len(dataloader)} iterations each\n"
         f"Avg. Loss on testing subset: {loss_reconst}\n"
@@ -538,8 +542,11 @@ def train_AE_NVAE_iso():
     model = NaiveVAESigma(encoder = encoder, decoder = decoder)
 
     ###--- Loss ---###
-    #reconstr_loss = MeanLpLoss(p = 2)
-    reconstr_loss = RelativeMeanLpLoss(p = 2)
+    #reconstr_term = LpNorm(p = 2)
+    reconstr_term = RelativeLpNorm(p = 2)
+
+    loss_terms = {'Reconstruction': reconstr_term}
+    reconstr_loss = CompositeLoss(**loss_terms)
 
 
     ###--- Optimizer & Scheduler ---###
@@ -566,7 +573,7 @@ def train_AE_NVAE_iso():
             
             X_hat_batch = model(X_batch)
 
-            loss_reconst = reconstr_loss(X_batch, X_hat_batch)
+            loss_reconst = reconstr_loss(X_batch = X_batch, X_hat_batch = X_hat_batch)
 
             #--- Backward Pass ---#
             loss_reconst.backward()
@@ -588,7 +595,7 @@ def train_AE_NVAE_iso():
     X_test = X_test[:, 1:]
     X_test_hat = model(X_test)
 
-    loss_reconst = reconstr_loss(X_test, X_test_hat)
+    loss_reconst = reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
     print(
         f"After {epochs} epochs with {len(dataloader)} iterations each\n"
         f"Avg. Loss on testing subset: {loss_reconst}\n"
@@ -637,7 +644,7 @@ def train_VAE_iso():
 
 
     ###--- DataLoader ---###
-    batch_size = 200
+    batch_size = 100
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
@@ -654,14 +661,16 @@ def train_VAE_iso():
 
 
     ###--- Loss ---###
-    ll_term = GaussianDiagLL()
+    ll_term = WeightedLossTerm(GaussianDiagLL(), weight = -1)
 
     kld_term = GaussianAnaKLDiv()
     #kld_term = GaussianMCKLDiv()
 
-    loss = NegativeELBOLoss(ll_term = ll_term, kl_div_term = kld_term)
+    loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
+    loss = CompositeLoss(**loss_terms)
+    #loss = NegativeELBOLoss(ll_term = ll_term, kl_div_term = kld_term)
 
-    test_reconstr_loss = RelativeMeanLpLoss(p = 2)
+    test_reconstr_loss = RelativeLpNorm(p = 2)
 
     ###--- Optimizer & Scheduler ---###
     optimizer = Adam(model.parameters(), lr = 1e-3)
@@ -669,7 +678,7 @@ def train_VAE_iso():
 
 
     ###--- Meta ---###
-    epochs = 2
+    epochs = 3
     pbar = tqdm(range(epochs))
 
     #observer = AEParameterObserver()
@@ -726,7 +735,7 @@ def train_VAE_iso():
     #X_test_hat = model.reparameterise(genm_dist_params)
     X_test_hat = mu_r
 
-    loss_reconst_test = test_reconstr_loss(x_batch = X_test, x_hat_batch = X_test_hat)
+    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat).mean()
     print(
         f'After {epochs} epochs with {len(dataloader)} iterations each\n'
         f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
@@ -815,7 +824,7 @@ def VAE_iso_training_procedure_test():
 
     loss = NegativeELBOLoss(ll_term = ll_term, kl_div_term = kld_term)
 
-    test_reconstr_loss = RelativeMeanLpLoss(p = 2)
+    test_reconstr_loss = RelativeLpNorm(p = 2)
 
 
     ###--- Optimizer & Scheduler ---###
@@ -961,9 +970,9 @@ def train_joint_seq():
 
 
     ###--- Losses ---###
-    #reconstr_loss = MeanLpLoss(p = 2)
-    reconstr_loss = RelativeMeanLpLoss(p = 2)
-    regr_loss = HuberLoss(delta = 1)
+    #reconstr_loss = LpNorm(p = 2)
+    reconstr_loss = RelativeLpNorm(p = 2)
+    regr_loss = Huber(delta = 1)
 
 
     ###--- Optimizer & Scheduler ---###
@@ -1120,10 +1129,10 @@ def train_joint_epoch_wise():
 
 
     ###--- Losses ---###
-    #reconstr_loss = MeanLpLoss(p = 2)
-    reconstr_loss = RelativeMeanLpLoss(p = 2)
-    #regr_loss = HuberLoss(delta = 1)
-    regr_loss = RelativeHuberLoss(delta = 1)
+    #reconstr_loss = LpNorm(p = 2)
+    reconstr_loss = RelativeLpNorm(p = 2)
+    #regr_loss = Huber(delta = 1)
+    regr_loss = RelativeHuber(delta = 1)
 
     weighted_loss = WeightedCompositeLoss(
         loss_regr = regr_loss,
@@ -1264,8 +1273,8 @@ if __name__=="__main__":
     #train_AE_NVAE_iso()
 
     ###--- VAE in isolation ---###
-    #train_VAE_iso()
-    VAE_iso_training_procedure_test()
+    train_VAE_iso()
+    #VAE_iso_training_procedure_test()
 
     ###--- Compositions ---###
     #train_joint_seq()
