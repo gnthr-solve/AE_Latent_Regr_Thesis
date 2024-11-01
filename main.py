@@ -35,14 +35,16 @@ from models import SimpleAutoencoder, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE, NaiveVAESigma, NaiveVAELogSigma
 
 from loss import (
-    CompositeLoss,
+    Loss,
+    CompositeLossTerm,
     WeightedLossTerm,
     LpNorm,
     RelativeLpNorm,
     Huber,
     RelativeHuber,
-    WeightedCompositeLoss,
 )
+
+from loss.adapters_decorators import AEAdapter, RegrAdapter
 from loss.loss_classes import NegativeELBOLoss
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
@@ -191,7 +193,7 @@ def main_test_view_TensorDS():
     data_dir = Path("./data")
     tensor_dir = data_dir / "tensors"
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
@@ -353,7 +355,7 @@ def train_AE_iso_observer_test():
     data_dir = Path("./data")
     tensor_dir = data_dir / "tensors"
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
@@ -410,11 +412,11 @@ def train_AE_iso_observer_test():
 
     
     ###--- Loss ---###
-    #reconstr_term = LpNorm(p = 2)
-    reconstr_term = RelativeLpNorm(p = 2)
+    #reconstr_term = AEAdapter(LpNorm(p = 2))
+    reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
 
     loss_terms = {'Reconstruction': reconstr_term}
-    reconstr_loss = CompositeLoss(**loss_terms)
+    reconstr_loss = Loss(CompositeLossTerm(**loss_terms))
 
 
     ###--- Optimizer & Scheduler ---###
@@ -423,7 +425,7 @@ def train_AE_iso_observer_test():
 
 
     ###--- Meta ---###
-    epochs = 3
+    epochs = 2
     pbar = tqdm(range(epochs))
 
 
@@ -488,7 +490,7 @@ def train_AE_NVAE_iso():
     data_dir = Path("./data")
     tensor_dir = data_dir / "tensors"
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
@@ -542,11 +544,11 @@ def train_AE_NVAE_iso():
     model = NaiveVAESigma(encoder = encoder, decoder = decoder)
 
     ###--- Loss ---###
-    #reconstr_term = LpNorm(p = 2)
-    reconstr_term = RelativeLpNorm(p = 2)
+    #reconstr_term = AEAdapter(LpNorm(p = 2))
+    reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
 
     loss_terms = {'Reconstruction': reconstr_term}
-    reconstr_loss = CompositeLoss(**loss_terms)
+    reconstr_loss = Loss(CompositeLossTerm(**loss_terms))
 
 
     ###--- Optimizer & Scheduler ---###
@@ -555,7 +557,7 @@ def train_AE_NVAE_iso():
 
 
     ###--- Meta ---###
-    epochs = 5
+    epochs = 2
     pbar = tqdm(range(epochs))
 
     observer = AEParameterObserver()
@@ -615,7 +617,7 @@ def train_VAE_iso():
     data_dir = Path("./data")
     tensor_dir = data_dir / "tensors"
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
@@ -667,10 +669,10 @@ def train_VAE_iso():
     #kld_term = GaussianMCKLDiv()
 
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    loss = CompositeLoss(**loss_terms)
-    #loss = NegativeELBOLoss(ll_term = ll_term, kl_div_term = kld_term)
+    loss = Loss(CompositeLossTerm(**loss_terms))
+    
 
-    test_reconstr_loss = RelativeLpNorm(p = 2)
+    test_reconstr_loss = Loss(AEAdapter(RelativeLpNorm(p = 2)))
 
     ###--- Optimizer & Scheduler ---###
     optimizer = Adam(model.parameters(), lr = 1e-3)
@@ -678,7 +680,7 @@ def train_VAE_iso():
 
 
     ###--- Meta ---###
-    epochs = 3
+    epochs = 2
     pbar = tqdm(range(epochs))
 
     #observer = AEParameterObserver()
@@ -718,7 +720,7 @@ def train_VAE_iso():
         scheduler.step()
 
     #observer.plot_results()
-    observer.plot_dist_params()
+    observer.plot_dist_params_batch()
 
     # ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
@@ -735,7 +737,7 @@ def train_VAE_iso():
     #X_test_hat = model.reparameterise(genm_dist_params)
     X_test_hat = mu_r
 
-    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat).mean()
+    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
     print(
         f'After {epochs} epochs with {len(dataloader)} iterations each\n'
         f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
@@ -771,7 +773,7 @@ def VAE_iso_training_procedure_test():
     data_dir = Path("./data")
     tensor_dir = data_dir / "tensors"
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
@@ -817,14 +819,15 @@ def VAE_iso_training_procedure_test():
 
 
     ###--- Loss ---###
-    ll_term = GaussianDiagLL()
+    ll_term = WeightedLossTerm(GaussianDiagLL(), weight = -1)
 
-    #kld_term = GaussianAnaKLDiv()
-    kld_term = GaussianMCKLDiv()
+    kld_term = GaussianAnaKLDiv()
+    #kld_term = GaussianMCKLDiv()
 
-    loss = NegativeELBOLoss(ll_term = ll_term, kl_div_term = kld_term)
+    loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
+    loss = Loss(CompositeLossTerm(**loss_terms))
 
-    test_reconstr_loss = RelativeLpNorm(p = 2)
+    test_reconstr_loss = Loss(AEAdapter(RelativeLpNorm(p = 2)))
 
 
     ###--- Optimizer & Scheduler ---###
@@ -879,7 +882,7 @@ def VAE_iso_training_procedure_test():
     #X_test_hat = model.reparameterise(genm_dist_params)
     X_test_hat = mu_r
 
-    loss_reconst_test = test_reconstr_loss(x_batch = X_test, x_hat_batch = X_test_hat)
+    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
     print(
         f'After {epochs} epochs with {len(dataloader)} iterations each\n'
         f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
@@ -916,7 +919,7 @@ def train_joint_seq():
     data_dir = Path("./data")
     tensor_dir = data_dir / "tensors"
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
@@ -957,11 +960,9 @@ def train_joint_seq():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = LinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim)
-    #encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
-    #decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
     regressor = LinearRegr(latent_dim = latent_dim)
 
@@ -970,9 +971,9 @@ def train_joint_seq():
 
 
     ###--- Losses ---###
-    #reconstr_loss = LpNorm(p = 2)
-    reconstr_loss = RelativeLpNorm(p = 2)
-    regr_loss = Huber(delta = 1)
+    #reconstr_loss = Loss(LpNorm(p = 2))
+    reconstr_loss = Loss(AEAdapter(RelativeLpNorm(p = 2)))
+    regr_loss = Loss(RegrAdapter(Huber(delta = 1)))
 
 
     ###--- Optimizer & Scheduler ---###
@@ -1002,7 +1003,7 @@ def train_joint_seq():
             
             X_hat_batch = ae_model(X_batch)
 
-            loss_reconst = reconstr_loss(X_batch, X_hat_batch)
+            loss_reconst = reconstr_loss(X_batch = X_batch, X_hat_batch = X_hat_batch)
 
             #--- Backward Pass ---#
             loss_reconst.backward()
@@ -1032,7 +1033,7 @@ def train_joint_seq():
             
             y_hat_batch = regr_model(X_batch)
 
-            loss_regr = regr_loss(y_batch, y_hat_batch)
+            loss_regr = regr_loss(y_batch = y_batch, y_hat_batch = y_hat_batch)
 
             #--- Backward Pass ---#
             loss_regr.backward()
@@ -1049,17 +1050,32 @@ def train_joint_seq():
 
 
     ###--- Test Loss ---###
-    # X_test = test_dataset.dataset.X_data[test_dataset.indices]
-    # y_test = test_dataset.dataset.y_data[test_dataset.indices]
-    # X_test = X_test[:, 1:]
-    # y_test = y_test[:, 1:]
-    # X_test_hat = ae_model(X_test)
+    ae_test_ds = subsets['test_unlabeled']
+    regr_test_ds = subsets['test_labeled']
 
-    # loss_reconst = reconstr_loss(X_test, X_test_hat)
-    # print(
-    #     f"After {epochs} epochs with {len(dataloader)} iterations each\n"
-    #     f"Avg. Loss on testing subset: {loss_reconst}\n"
-    # )
+    X_test_ae = dataset.X_data[ae_test_ds.indices]
+    X_test_regr = dataset.X_data[regr_test_ds.indices]
+    y_test_regr =dataset.y_data[regr_test_ds.indices]
+    X_test_ae = X_test_ae[:, 1:]
+    X_test_regr = X_test_regr[:, 1:]
+    y_test_regr = y_test_regr[:, 1:]
+
+    X_test_hat = ae_model(X_test_ae)
+    y_test_hat = regr_model(X_test_regr)
+
+    loss_reconst = reconstr_loss(X_batch = X_test_ae, X_hat_batch = X_test_hat)
+    loss_regr = regr_loss(y_batch = y_test_regr, y_hat_batch = y_test_hat)
+
+    print(
+        f"After {epochs} epochs\n"
+        f"------------------------------------------------\n"
+        f"AE iterations per Epoch: \n{len(dataloader_ae)}\n"
+        f"Regr iterations per Epoch: \n{len(dataloader_regr)}\n"
+        f"------------------------------------------------\n"
+        f"Avg. reconstruction loss on testing subset: {loss_reconst}\n"
+        f"Avg. regression loss on testing subset: {loss_regr}\n"
+        f"------------------------------------------------\n"
+    )
 
 
 
@@ -1077,7 +1093,7 @@ def train_joint_epoch_wise():
     data_dir = Path("./data")
     tensor_dir = data_dir / "tensors"
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv")
+    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
@@ -1119,27 +1135,30 @@ def train_joint_epoch_wise():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = LinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim)
-    #encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
-    #decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
     regressor = LinearRegr(latent_dim = latent_dim)
 
 
     ###--- Losses ---###
-    #reconstr_loss = LpNorm(p = 2)
-    reconstr_loss = RelativeLpNorm(p = 2)
-    #regr_loss = Huber(delta = 1)
-    regr_loss = RelativeHuber(delta = 1)
+    #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
+    reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
 
-    weighted_loss = WeightedCompositeLoss(
-        loss_regr = regr_loss,
-        loss_reconstr = reconstr_loss,
-        w_regr = 0.8,
-        w_reconstr = 0.2
-    )
+    #regr_loss_term = RegrAdapter(Huber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
+    regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+
+    ete_loss_terms = {
+        'Reconstruction Term': WeightedLossTerm(reconstr_loss_term, weight=0.2), 
+        'Regression Term': WeightedLossTerm(regr_loss_term, weight = 0.8),
+    }
+
+    ete_loss = Loss(CompositeLossTerm(**ete_loss_terms))
+    reconstr_loss = Loss(reconstr_loss_term)
+    regr_loss = Loss(regr_loss_term)
+
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
@@ -1152,10 +1171,11 @@ def train_joint_epoch_wise():
 
 
     ###--- Meta ---###
-    epochs = 4
+    epochs = 1
     pbar = tqdm(range(epochs))
 
-    loss_observer = LossObserver('Reconstruction', 'End-To-End')
+    from observers.loss_observer import LossObserverAlpha
+    loss_observer = LossObserverAlpha('Reconstruction', 'End-To-End')
 
 
     ###--- Training Loop Joint---###
@@ -1173,16 +1193,16 @@ def train_joint_epoch_wise():
             # if it > 0:
             #     print(X_hat_batch[:5])
 
-            loss_reconst = reconstr_loss(X_batch, X_hat_batch)
+            loss_reconst = reconstr_loss(X_batch = X_batch, X_hat_batch = X_hat_batch)
 
             #--- Backward Pass ---#
             loss_reconst.backward()
 
             loss_observer('Reconstruction', loss_reconst)
-            print(
-                f"Epoch {it + 1}/{epochs}; AE iteration {b_ind + 1}/{len(dataloader_ae)}\n"
-                f"Loss Reconstruction: {loss_reconst.item()}"
-            )
+            # print(
+            #     f"Epoch {it + 1}/{epochs}; AE iteration {b_ind + 1}/{len(dataloader_ae)}\n"
+            #     f"Loss Reconstruction: {loss_reconst.item()}"
+            # )
 
             optimiser.step()
 
@@ -1200,7 +1220,9 @@ def train_joint_epoch_wise():
             X_hat_batch = decoder(Z_batch)
             y_hat_batch = regressor(Z_batch)
 
-            loss_ete_weighted = weighted_loss(
+            print(Z_batch.shape, X_hat_batch.shape, y_hat_batch.shape)
+
+            loss_ete_weighted = ete_loss(
                 X_batch = X_batch,
                 X_hat_batch = X_hat_batch,
                 y_batch = y_batch,
@@ -1240,11 +1262,11 @@ def train_joint_epoch_wise():
 
     X_test_ul_hat = decoder(encoder((X_test_ul)))
 
-    loss_reconst = reconstr_loss(X_test_ul, X_test_ul_hat)
+    loss_reconst = reconstr_loss(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
 
     y_test_l_hat = regressor(encoder(X_test_l))
 
-    loss_regr = regr_loss(y_test_l, y_test_l_hat)
+    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
     print(
         f"Autoencoder:\n"
         f"---------------------------------------------------------------\n"
@@ -1273,11 +1295,11 @@ if __name__=="__main__":
     #train_AE_NVAE_iso()
 
     ###--- VAE in isolation ---###
-    train_VAE_iso()
+    #train_VAE_iso()
     #VAE_iso_training_procedure_test()
 
     ###--- Compositions ---###
     #train_joint_seq()
-    #train_joint_epoch_wise()
+    train_joint_epoch_wise()
 
     pass

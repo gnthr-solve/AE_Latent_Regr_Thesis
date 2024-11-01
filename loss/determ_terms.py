@@ -17,9 +17,9 @@ class LpNorm(LossTerm):
         self.p = p
 
 
-    def __call__(self, X_batch: Tensor, X_hat_batch: Tensor, **tensors: Tensor) -> Tensor:
+    def __call__(self, t_batch: Tensor, t_hat_batch: Tensor, **tensors: Tensor) -> Tensor:
 
-        diff = X_batch - X_hat_batch
+        diff = t_batch - t_hat_batch
 
         diff_norms: Tensor = tla.norm(diff, ord = self.p, dim = 1)
 
@@ -34,15 +34,15 @@ class RelativeLpNorm(LossTerm):
         self.p = p
 
 
-    def __call__(self, X_batch: Tensor, X_hat_batch: Tensor, **tensors: Tensor) -> Tensor:
+    def __call__(self, t_batch: Tensor, t_hat_batch: Tensor, **tensors: Tensor) -> Tensor:
 
-        diff = X_batch - X_hat_batch
+        diff = t_batch - t_hat_batch
 
-        X_batch_norm_mean = self.norm(X_batch).mean()
+        t_batch_norm_mean = self.norm(t_batch).mean()
         
         diff_norm = self.norm(diff) 
 
-        return diff_norm / X_batch_norm_mean
+        return diff_norm / t_batch_norm_mean
     
 
     def norm(self, t_batch: Tensor) -> Tensor:
@@ -61,12 +61,12 @@ class Huber(LossTerm):
 
     def __init__(self, delta: float):
         
-        self.loss_fn = nn.HuberLoss(reduction = None, delta = delta)
+        self.loss_fn = nn.HuberLoss(reduction = 'none', delta = delta)
 
 
-    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor, **tensors: Tensor) -> Tensor:
+    def __call__(self, t_batch: Tensor, t_hat_batch: Tensor, **tensors: Tensor) -> Tensor:
 
-        loss_batch = self.loss_fn(t_in_batch, t_out_batch)
+        loss_batch = self.loss_fn(t_batch, t_hat_batch)
 
         return loss_batch
     
@@ -76,14 +76,14 @@ class RelativeHuber(LossTerm):
 
     def __init__(self, delta: float):
         
-        self.loss_fn = nn.HuberLoss(reduction = None, delta = delta)
+        self.loss_fn = nn.HuberLoss(reduction = 'none', delta = delta)
 
 
-    def __call__(self, t_in_batch: Tensor, t_out_batch: Tensor, **tensors: Tensor) -> Tensor:
+    def __call__(self, t_batch: Tensor, t_hat_batch: Tensor, **tensors: Tensor) -> Tensor:
 
-        t_in_batch_norms = self.norm(t_batch = t_in_batch)
+        t_batch_norms = self.norm(t_batch = t_batch)
 
-        loss_batch = self.loss_fn(t_in_batch, t_out_batch) / t_in_batch_norms.mean()
+        loss_batch = self.loss_fn(t_batch, t_hat_batch) / t_batch_norms.mean()
 
         return loss_batch
     

@@ -20,72 +20,85 @@ class LossTerm(ABC):
         pass
 
 
+
+
 """
-Weighted Loss ABC
+Single-Term Loss
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class WeightedLossTerm(LossTerm):
+class Loss:
 
-    def __init__(self, loss_term: LossTerm, weight: float):
+    def __init__(self, loss_term: LossTerm):
 
         self.loss_term = loss_term
-        self.weight = weight
 
     
     def __call__(self, **tensors: Tensor) -> Tensor:
         
-        batch_loss = self.loss_term(**tensors)
+        return self.loss_term(**tensors).mean()
 
-        return self.weight * batch_loss
-    
 
 
 """
 CompositeLoss
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class CompositeLoss:
+
+class CompositeLossTerm(LossTerm):
 
     def __init__(self, **loss_terms: LossTerm):
 
         self.loss_terms = loss_terms
         
 
-    def __call__(self, X_batch: Tensor, **tensors: Tensor) -> Tensor:
-        
-        batch_loss = torch.zeros(size = (X_batch.shape[0],), dtype = torch.float32)
+    def __call__(self, **tensors: Tensor) -> Tensor:
+
+        batch_losses = None
 
         for name, loss_term in self.loss_terms.items():
 
-            loss_term_batch = loss_term(X_batch = X_batch, **tensors)
+            loss_term_batch = loss_term(**tensors)
 
-            batch_loss += loss_term_batch
+            # print(
+            #     f'{name}:\n'
+            #     f'-----------------------------------\n'
+            #     f'shape: \n{loss_term_batch.shape}\n'
+            #     f'values[:5]: \n{loss_term_batch[:5]}\n'
+            #     f'-----------------------------------\n\n'
+            # )
 
-        return batch_loss.mean()
+            if batch_losses is None:
+                batch_losses = torch.zeros_like(loss_term_batch)
+
+            batch_losses = batch_losses + loss_term_batch
+
+        return batch_losses
 
 
 
-# class CompositeLoss:
 
-#     def __init__(self, **loss_terms: LossTerm):
+class CompositeLossTermAlt(LossTerm):
 
-#         self.loss_terms = loss_terms
+    def __init__(self, **loss_terms: LossTerm):
+
+        self.loss_terms = loss_terms
         
 
-#     def __call__(self, X_batch: Tensor, **tensors: Tensor) -> Tensor:
-        
-#         #batch_loss = torch.zeros(size = (X_batch.shape[0],), dtype = torch.float32)
-#         batch_losses: list[Tensor] = []
+    def __call__(self, **tensors: Tensor) -> Tensor:
 
-#         for name, loss_term in self.loss_terms.items():
+        loss_batches = []
 
-#             loss_term_batch = loss_term(X_batch, **tensors)
+        for name, loss_term in self.loss_terms.items():
 
-#             batch_losses.append(loss_term_batch)
+            loss_term_batch = loss_term(**tensors)
 
-#         batch_loss = torch.sum(*batch_losses)
+            loss_batches.append(loss_term_batch)
 
-#         return batch_loss.mean()
+        stacked_losses = torch.stack(loss_batches)
+        batch_losses = torch.sum(stacked_losses, dim=0)
+
+        return batch_losses
+
 
 
 
@@ -129,28 +142,3 @@ class NegativeELBOLoss:
         return neg_elbo_loss 
 
 
-
-
-"""
-Loss Functions - Weighted Composite Loss
--------------------------------------------------------------------------------------------------------------------------------------------
-Composite of regression and (deterministic) reconstruction loss
-"""
-class WeightedCompositeLoss:
-
-    def __init__(self, loss_regr, loss_reconstr, w_regr, w_reconstr):
-        
-        self.loss_regr = loss_regr
-        self.loss_reconstr = loss_reconstr
-
-        self.w_regr = w_regr
-        self.w_reconstr = w_reconstr
-
-
-    def __call__(self, X_batch: Tensor, X_hat_batch: Tensor, y_batch: Tensor, y_hat_batch: Tensor) -> Tensor:
-
-        reconstr_component = self.w_reconstr * self.loss_reconstr(X_batch, X_hat_batch)
-        regr_component = self.w_regr * self.loss_regr(y_batch, y_hat_batch)
-        
-        return regr_component + reconstr_component
-    
