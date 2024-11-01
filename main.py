@@ -37,11 +37,13 @@ from models.naive_vae import NaiveVAE, NaiveVAESigma, NaiveVAELogSigma
 from loss import (
     Loss,
     CompositeLossTerm,
+    CompositeLossTermAlt,
     WeightedLossTerm,
     LpNorm,
     RelativeLpNorm,
     Huber,
     RelativeHuber,
+    HuberOwn,
 )
 
 from loss.adapters_decorators import AEAdapter, RegrAdapter
@@ -1146,16 +1148,16 @@ def train_joint_epoch_wise():
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
 
-    #regr_loss_term = RegrAdapter(Huber(delta = 1))
+    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
-    regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
     ete_loss_terms = {
         'Reconstruction Term': WeightedLossTerm(reconstr_loss_term, weight=0.2), 
         'Regression Term': WeightedLossTerm(regr_loss_term, weight = 0.8),
     }
 
-    ete_loss = Loss(CompositeLossTerm(**ete_loss_terms))
+    ete_loss = Loss(CompositeLossTermAlt(**ete_loss_terms))
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1220,7 +1222,7 @@ def train_joint_epoch_wise():
             X_hat_batch = decoder(Z_batch)
             y_hat_batch = regressor(Z_batch)
 
-            print(Z_batch.shape, X_hat_batch.shape, y_hat_batch.shape)
+            #print(Z_batch.shape, X_hat_batch.shape, y_hat_batch.shape)
 
             loss_ete_weighted = ete_loss(
                 X_batch = X_batch,

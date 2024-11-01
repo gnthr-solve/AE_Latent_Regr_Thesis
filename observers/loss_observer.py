@@ -73,7 +73,7 @@ Loss Observer Prime
 """
 class LossObserver(IterObserver):
 
-    def __init__(self, n_epochs, n_iterations):
+    def __init__(self, n_epochs: int, n_iterations: int):
         
         self.losses = torch.zeros(size = (n_epochs, n_iterations))
     
