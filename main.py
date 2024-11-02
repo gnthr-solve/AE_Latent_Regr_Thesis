@@ -38,6 +38,7 @@ from loss import (
     Loss,
     CompositeLossTerm,
     CompositeLossTermAlt,
+    CompositeLossTermObs,
     WeightedLossTerm,
     LpNorm,
     RelativeLpNorm,
@@ -47,12 +48,11 @@ from loss import (
 )
 
 from loss.adapters_decorators import AEAdapter, RegrAdapter
-from loss.loss_classes import NegativeELBOLoss
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
 from observers.ae_param_observer import AEParameterObserver
-from observers import LossObserver, ModelObserver, VAELatentObserver
+from observers import CompositeLossObserver, TrainingLossObserver, ModelObserver, VAELatentObserver
 
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
@@ -367,8 +367,13 @@ def train_VAE_iso():
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 
-    ###--- DataLoader ---###
+    ###--- Meta ---###
+    epochs = 2
     batch_size = 100
+    pbar = tqdm(range(epochs))
+
+
+    ###--- DataLoader ---###
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
@@ -384,6 +389,14 @@ def train_VAE_iso():
     model = GaussVAE(encoder = encoder, decoder = decoder)
 
 
+    ###--- Observers ---###
+    latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=len(train_dataset), batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
+    loss_observer = CompositeLossObserver(
+        n_epochs = epochs, 
+        n_iterations = len(dataloader),
+        loss_names = ['Log-Likelihood', 'KL-Divergence'],
+    )
+
     ###--- Loss ---###
     ll_term = WeightedLossTerm(GaussianDiagLL(), weight = -1)
 
@@ -391,22 +404,14 @@ def train_VAE_iso():
     #kld_term = GaussianMCKLDiv()
 
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    loss = Loss(CompositeLossTerm(**loss_terms))
-    
+    #loss = Loss(CompositeLossTerm(**loss_terms))
+    loss = Loss(CompositeLossTermObs(observer = loss_observer, **loss_terms))
 
     test_reconstr_loss = Loss(AEAdapter(RelativeLpNorm(p = 2)))
 
     ###--- Optimizer & Scheduler ---###
     optimizer = Adam(model.parameters(), lr = 1e-3)
     scheduler = ExponentialLR(optimizer, gamma = 0.1)
-
-
-    ###--- Meta ---###
-    epochs = 2
-    pbar = tqdm(range(epochs))
-
-    #observer = AEParameterObserver()
-    observer = VAELatentObserver(n_epochs=epochs, dataset_size=len(train_dataset), batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
 
 
     ###--- Training Loop ---###
@@ -432,17 +437,15 @@ def train_VAE_iso():
             #--- Backward Pass ---#
             loss_reconst.backward()
 
-            #print(f"{it}_{b_ind+1}/{epochs}")
-            #observer(loss = loss_reconst, ae_model = model)
-            observer(epoch = it, iter_idx = b_ind, infrm_dist_params = infrm_dist_params)
+            latent_observer(epoch = it, iter_idx = b_ind, infrm_dist_params = infrm_dist_params)
 
             optimizer.step()
 
 
         scheduler.step()
 
-    #observer.plot_results()
-    observer.plot_dist_params_batch()
+    loss_observer.plot_results()
+    latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
 
     # ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
@@ -563,7 +566,7 @@ def VAE_iso_training_procedure_test():
     dataset_size = len(train_dataset)
 
     ###--- Set up Observers ---###
-    loss_observer = LossObserver(n_epochs = epochs, n_iterations = n_iterations)
+    loss_observer = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations)
     latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
     model_observer = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
 
@@ -1124,9 +1127,6 @@ def train_joint_epoch_wise_AE():
     epochs = 3
     pbar = tqdm(range(epochs))
 
-    from observers.loss_observer import LossObserverAlpha
-    loss_observer = LossObserverAlpha('Reconstruction', 'End-To-End')
-
 
     ###--- Training Loop Joint---###
     for it in pbar:
@@ -1147,7 +1147,6 @@ def train_joint_epoch_wise_AE():
             #--- Backward Pass ---#
             loss_reconst.backward()
 
-            loss_observer('Reconstruction', loss_reconst)
             # print(
             #     f"Epoch {it + 1}/{epochs}; AE iteration {b_ind + 1}/{len(dataloader_ae)}\n"
             #     f"Loss Reconstruction: {loss_reconst.item()}"
@@ -1181,7 +1180,6 @@ def train_joint_epoch_wise_AE():
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
 
-            loss_observer('End-To-End', loss_ete_weighted)
             # print(
             #     f"Epoch {it + 1}/{epochs}; ETE iteration {b_ind + 1}/{len(dataloader_regr)}\n"
             #     f"Loss End-To-End: {loss_ete_weighted.item()}"
@@ -1192,7 +1190,6 @@ def train_joint_epoch_wise_AE():
 
         scheduler.step()
 
-    loss_observer.plot_results()
 
 
     ###--- Test Loss ---###
@@ -1842,13 +1839,13 @@ if __name__=="__main__":
     #train_AE_NVAE_iso()
 
     ###--- VAE in isolation ---###
-    #train_VAE_iso()
+    train_VAE_iso()
     #VAE_iso_training_procedure_test()
 
     ###--- Compositions ---###
     #train_joint_seq_AE()
     #train_joint_seq_VAE()
-    train_joint_epoch_wise_AE()
+    #train_joint_epoch_wise_AE()
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
 

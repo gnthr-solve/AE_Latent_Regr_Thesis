@@ -7,9 +7,9 @@ from torch.nn import Module
 
 from itertools import product
 from functools import wraps
+from typing import Callable
 
 import matplotlib.pyplot as plt
-
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
@@ -84,7 +84,7 @@ class VAELatentObserver(IterObserver):
         plt.show()
 
 
-    def plot_dist_params_batch(self, functional = torch.max):
+    def plot_dist_params_batch(self, functional: Callable[[Tensor], Tensor] = torch.max):
 
         dist_params = self.dist_params.unbind(dim = -1)
 
@@ -97,35 +97,44 @@ class VAELatentObserver(IterObserver):
 
         for idx, param_tensor in enumerate(dist_params):
 
-            ax = axes.flatten()[idx] if n_params > 1 else axes  # Handle single parameter case
+            ax: Axes = axes.flatten()[idx] if n_params > 1 else axes  # Handle single parameter case
 
             n_epochs = param_tensor.shape[0]
             size_dataset = param_tensor.shape[1]
             max_batch_idx = n_epochs * size_dataset // self.batch_size
 
             flattened_param_tensor = param_tensor.flatten(start_dim = 0, end_dim = 1)
-            print(flattened_param_tensor.shape)
+            
             sample_param_values = torch.tensor([
                 functional(param).item() 
                 for param in flattened_param_tensor
             ])
 
-            print(sample_param_values.shape)
-
-            mean_batch_values = [
-                sample_param_values[i*self.batch_size : (i+1)*self.batch_size].mean() 
+            batched_values = [
+                sample_param_values[i*self.batch_size : (i+1)*self.batch_size] 
                 for i in range(max_batch_idx)
             ]
-            mean_batch_values.append(sample_param_values[max_batch_idx * self.batch_size: -1].mean())
+            batched_values.append(sample_param_values[max_batch_idx * self.batch_size: -1])
 
-            iterations = len(mean_batch_values)
-            ax.plot(range(iterations), mean_batch_values)
+            batch_values_mean = torch.tensor([batch_values.mean() for batch_values in batched_values])
+            batch_values_std = torch.tensor([batch_values.std() for batch_values in batched_values])
+
+            total_iterations = len(batched_values)
+            ax.plot(range(total_iterations), batch_values_mean)
 
             # Add vertical lines for each epoch
             epochs = n_epochs
-            iterations_per_epoch = len(mean_batch_values) / epochs
+            iterations_per_epoch = len(batched_values) / epochs
             for epoch in range(1, epochs):
                 ax.axvline(x = epoch * iterations_per_epoch, color = 'r', linestyle = '--')
+
+            ax.fill_between(
+                range(total_iterations), 
+                batch_values_mean - batch_values_std, 
+                batch_values_mean + batch_values_std, 
+                alpha=0.2, 
+                color='gray',
+            )
 
             ax.set_title(f'Params {idx}')
             ax.set_xlabel('Iteration')
