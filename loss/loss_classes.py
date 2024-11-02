@@ -79,27 +79,40 @@ class CompositeLossTerm(LossTerm):
 
 class CompositeLossTermAlt(LossTerm):
 
-    def __init__(self, **loss_terms: LossTerm):
+    def __init__(self, print_losses: bool = False, **loss_terms: LossTerm):
 
+        self.print_losses = print_losses
         self.loss_terms = loss_terms
         
 
     def __call__(self, **tensors: Tensor) -> Tensor:
 
-        loss_batches = []
+        loss_batches = {
+            name: loss_term(**tensors)
+            for name, loss_term in self.loss_terms.items()
+        }
 
-        for name, loss_term in self.loss_terms.items():
+        if self.print_losses:
+            self.print_loss_terms(loss_batches = loss_batches)
 
-            loss_term_batch = loss_term(**tensors)
-
-            loss_batches.append(loss_term_batch)
-
-        stacked_losses = torch.stack(loss_batches)
+        stacked_losses = torch.stack(tuple(loss_batches.values()))
         batch_losses = torch.sum(stacked_losses, dim=0)
 
         return batch_losses
 
 
+    def print_loss_terms(self, loss_batches: dict[str, Tensor]):
+
+        losses = {name: loss_batch.detach().mean() for name, loss_batch in loss_batches.items()}
+
+        loss_strings = [f'{name}:\n{loss}\n' for name, loss in losses.items()]
+        loss_str = f'--------------------------\n'.join(loss_strings)
+
+        print(
+            f'Total Loss: {sum(losses.values())}\n'
+            f'--------------------------\n'
+            f'{loss_str}\n'
+        )
 
 
 """
