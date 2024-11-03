@@ -17,7 +17,7 @@ Autoencoder Classes - Simple Autoencoder
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 
-class SimpleAutoencoder(nn.Module):
+class Autoencoder(nn.Module):
 
     def __init__(self, encoder, decoder):
         super().__init__()
