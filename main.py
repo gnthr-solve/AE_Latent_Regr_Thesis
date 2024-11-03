@@ -2,14 +2,16 @@
 import torch
 import pandas as pd
 import numpy as np
+import hydra
 
 from torch.utils.data import DataLoader, random_split
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
-from torch import Tensor
 
 from hydra import initialize, compose
 from hydra.utils import instantiate
+from omegaconf import DictConfig
+
 from pathlib import Path
 from tqdm import tqdm
 
@@ -63,10 +65,8 @@ from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_c
 Main Functions - Training
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-
-def train_AE_iso_observer_test():
-
-    #from observers.model_observer import ModelObserver
+@hydra.main(config_path="./configs", config_name="ae_iso_cfg")
+def train_AE_iso_hydra(cfg: DictConfig):
 
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -82,7 +82,6 @@ def train_AE_iso_observer_test():
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
 
-    #X_data = torch.tensor(data=X_data.data, dtype=torch.float64)
     
     ###--- Normalise ---###
     normaliser = MinMaxNormaliser()
@@ -98,6 +97,11 @@ def train_AE_iso_observer_test():
         print(X_data.shape)
 
 
+    ###--- Meta ---###
+    epochs = 2
+    batch_size = 50
+    
+
     ###--- Dataset---###
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
@@ -107,7 +111,6 @@ def train_AE_iso_observer_test():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
@@ -146,20 +149,18 @@ def train_AE_iso_observer_test():
     scheduler = ExponentialLR(optimizer, gamma = 0.5)
 
 
-    ###--- Meta ---###
-    epochs = 2
-    pbar = tqdm(range(epochs))
-
-
     ###--- Observation Test Setup ---###
     n_iterations = len(dataloader)
-    loss_obs_tensor = torch.zeros(size = (epochs, n_iterations))
     model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
+    loss_observer = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations)
+
 
     ###--- Training Loop ---###
+    pbar = tqdm(range(epochs))
+
     for epoch in pbar:
         
-        for b_idx, (X_batch, _) in enumerate(dataloader):
+        for iter_idx, (X_batch, _) in enumerate(dataloader):
             
             X_batch = X_batch[:, 1:]
 
@@ -170,22 +171,22 @@ def train_AE_iso_observer_test():
 
             loss_reconst = reconstr_loss(X_batch = X_batch, X_hat_batch = X_hat_batch)
 
-            loss_obs_tensor[epoch, b_idx] = loss_reconst.detach()
-
             #--- Backward Pass ---#
             loss_reconst.backward()
 
             optimizer.step()
 
             #--- Observer Call ---#
-            model_obs(epoch = epoch, iter_idx = b_idx, model = model)
+            model_obs(epoch = epoch, iter_idx = iter_idx, model = model)
+            loss_observer(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
 
 
         scheduler.step()
 
 
-    plot_loss_tensor(observed_losses = loss_obs_tensor)
+    #plot_loss_tensor(observed_losses = loss_observer.losses)
     #model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+
 
     ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
@@ -194,7 +195,7 @@ def train_AE_iso_observer_test():
 
     loss_reconst = reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
     print(
-        f"After {epochs} epochs with {len(dataloader)} iterations each\n"
+        f"After {epochs} epochs with {n_iterations} iterations each\n"
         f"Avg. Loss on testing subset: {loss_reconst}\n"
     )
 
@@ -217,7 +218,8 @@ def train_AE_NVAE_iso():
     X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
 
-
+    #X_data = torch.tensor(data=X_data.data, dtype=torch.float64)
+    
     ###--- Normalise ---###
     normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
@@ -232,6 +234,11 @@ def train_AE_NVAE_iso():
         print(X_data.shape)
 
 
+    ###--- Meta ---###
+    epochs = 2
+    batch_size = 50
+    latent_dim = 10
+
     ###--- Dataset---###
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
@@ -241,30 +248,30 @@ def train_AE_NVAE_iso():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
     ###--- Models AE ---###
-    latent_dim = 10
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    #encoder = LinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim)
     # encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    # #decoder = LinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim)
     # decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
     # model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
 
     #--- Models NaiveVAE ---#
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
 
     #model = NaiveVAE(encoder = encoder, decoder = decoder)
-    model = NaiveVAESigma(encoder = encoder, decoder = decoder)
+    model = NaiveVAELogSigma(encoder = encoder, decoder = decoder)
+    #model = NaiveVAESigma(encoder = encoder, decoder = decoder)
 
+    #initialize_weights(model)
+
+    
     ###--- Loss ---###
     #reconstr_term = AEAdapter(LpNorm(p = 2))
     reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
@@ -274,21 +281,22 @@ def train_AE_NVAE_iso():
 
 
     ###--- Optimizer & Scheduler ---###
-    optimizer = Adam(model.parameters(), lr = 1e-2)
-    scheduler = ExponentialLR(optimizer, gamma = 0.1)
+    optimizer = Adam(model.parameters(), lr = 1e-3)
+    scheduler = ExponentialLR(optimizer, gamma = 0.5)
 
 
-    ###--- Meta ---###
-    epochs = 2
-    pbar = tqdm(range(epochs))
-
-    observer = AEParameterObserver()
+    ###--- Observation Test Setup ---###
+    n_iterations = len(dataloader)
+    model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
+    loss_observer = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations)
 
 
     ###--- Training Loop ---###
-    for it in pbar:
+    pbar = tqdm(range(epochs))
+
+    for epoch in pbar:
         
-        for b_ind, (X_batch, _) in enumerate(dataloader):
+        for iter_idx, (X_batch, _) in enumerate(dataloader):
             
             X_batch = X_batch[:, 1:]
 
@@ -302,17 +310,18 @@ def train_AE_NVAE_iso():
             #--- Backward Pass ---#
             loss_reconst.backward()
 
-            #print(f"{it}_{b_ind+1}/{epochs}")
-            observer(loss = loss_reconst, ae_model = model)
-
-
             optimizer.step()
+
+            #--- Observer Call ---#
+            model_obs(epoch = epoch, iter_idx = iter_idx, model = model)
+            loss_observer(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
 
 
         scheduler.step()
 
-    observer.plot_results()
 
+    plot_loss_tensor(observed_losses = loss_observer.losses)
+    model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
     ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
@@ -321,7 +330,7 @@ def train_AE_NVAE_iso():
 
     loss_reconst = reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
     print(
-        f"After {epochs} epochs with {len(dataloader)} iterations each\n"
+        f"After {epochs} epochs with {n_iterations} iterations each\n"
         f"Avg. Loss on testing subset: {loss_reconst}\n"
     )
 
@@ -370,7 +379,7 @@ def train_VAE_iso():
     ###--- Meta ---###
     epochs = 2
     batch_size = 100
-    pbar = tqdm(range(epochs))
+    latent_dim = 10
 
 
     ###--- DataLoader ---###
@@ -378,7 +387,6 @@ def train_VAE_iso():
 
 
     ###--- Models ---###
-    latent_dim = 10
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
@@ -415,6 +423,8 @@ def train_VAE_iso():
 
 
     ###--- Training Loop ---###
+    pbar = tqdm(range(epochs))
+
     for it in pbar:
         
         for b_ind, (X_batch, _) in enumerate(dataloader):
@@ -445,7 +455,8 @@ def train_VAE_iso():
         scheduler.step()
 
     loss_observer.plot_results()
-    latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
+    #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
+    latent_observer.plot_dist_params_batch(torch.norm)
 
     # ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
@@ -518,6 +529,12 @@ def VAE_iso_training_procedure_test():
         print(X_data.shape)
 
 
+    ###--- Meta ---###
+    epochs = 4
+    batch_size = 100
+    latent_dim = 5
+
+
     ###--- Dataset---###
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
@@ -527,12 +544,10 @@ def VAE_iso_training_procedure_test():
 
 
     ###--- DataLoader ---###
-    batch_size = 100
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
     ###--- Models ---###
-    latent_dim = 5
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
@@ -560,15 +575,14 @@ def VAE_iso_training_procedure_test():
     scheduler = ExponentialLR(optimizer, gamma = 0.5)
 
 
-    ###--- Meta ---###
-    epochs = 4
+    ###--- Set up Observers ---###
     n_iterations = len(dataloader)
     dataset_size = len(train_dataset)
 
-    ###--- Set up Observers ---###
     loss_observer = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations)
     latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
     model_observer = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
+
 
     ###--- Training Procedure ---###
     training_procedure = VAEIsoTrainingProcedure(
@@ -664,6 +678,12 @@ def train_joint_seq_AE():
         print(X_data.shape)
 
 
+    ###--- Meta ---###
+    epochs = 1
+    batch_size = 50
+    latent_dim = 10
+
+
     ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
@@ -675,13 +695,11 @@ def train_joint_seq_AE():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
     dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
 
     ###--- Models ---###
-    latent_dim = 10
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
@@ -693,6 +711,17 @@ def train_joint_seq_AE():
 
     regr_model = EnRegrComposite(encoder = encoder, regressor = regressor)
     ae_model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
+
+
+    ###--- Observation Test Setup ---###
+    n_iterations_ae = len(dataloader_ae)
+    n_iterations_regr = len(dataloader_regr)
+
+    ae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = ae_model)
+    ae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
+
+    regr_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_regr, model = regr_model)
+    regr_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
 
 
     ###--- Losses ---###
@@ -709,17 +738,12 @@ def train_joint_seq_AE():
     scheduler_regr = ExponentialLR(optimizer_regr, gamma = 0.1)
 
 
-    ###--- Meta ---###
-    epochs = 1
+    ###--- Training Loop AE---###
     pbar = tqdm(range(epochs))
 
-    observer = AEParameterObserver()
-
-
-    ###--- Training Loop AE---###
-    for it in pbar:
+    for epoch in pbar:
         
-        for b_ind, (X_batch, _) in enumerate(dataloader_ae):
+        for iter_idx, (X_batch, _) in enumerate(dataloader_ae):
             
             X_batch = X_batch[:, 1:]
 
@@ -733,22 +757,21 @@ def train_joint_seq_AE():
             #--- Backward Pass ---#
             loss_reconst.backward()
 
-            #print(f"{it}_{b_ind+1}/{epochs}")
-            observer(loss = loss_reconst, ae_model = ae_model)
-
-
             optimizer_ae.step()
+
+            #--- Observer Call ---#
+            ae_model_obs(epoch = epoch, iter_idx = iter_idx, model = ae_model)
+            ae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
 
 
         scheduler_ae.step()
 
-    observer.plot_results()
 
 
     ###--- Training Loop Regr ---###
-    for it in pbar:
+    for epoch in pbar:
         
-        for b_ind, (X_batch, y_batch) in enumerate(dataloader_regr):
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
             X_batch = X_batch[:, 1:]
             y_batch = y_batch[:, 1:]
@@ -763,15 +786,21 @@ def train_joint_seq_AE():
             #--- Backward Pass ---#
             loss_regr.backward()
 
-            print(
-                f"{it}_{b_ind+1}/{epochs} Regr. Loss:\n"
-                f"{loss_regr.tolist()}"
-            )
-
             optimizer_regr.step()
 
+            #--- Observer Call ---#
+            regr_model_obs(epoch = epoch, iter_idx = iter_idx, model = regr_model)
+            regr_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_regr)
 
         scheduler_regr.step()
+
+
+    ###--- Plot Observations ---###
+    plot_loss_tensor(observed_losses = ae_loss_obs.losses)
+    plot_loss_tensor(observed_losses = regr_loss_obs.losses)
+
+    ae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+    regr_model_obs.plot_child_param_development(child_name = 'regressor', functional = lambda t: torch.max(t) - torch.min(t))
 
 
     ###--- Test Loss ---###
@@ -838,6 +867,12 @@ def train_joint_seq_VAE():
         print(X_data.shape)
 
 
+    ###--- Meta ---###
+    epochs = 1
+    batch_size = 50
+    latent_dim = 10
+
+
     ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
@@ -849,13 +884,11 @@ def train_joint_seq_VAE():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
     dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
 
     ###--- Models ---###
-    latent_dim = 5
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
@@ -866,6 +899,16 @@ def train_joint_seq_VAE():
     vae_model = GaussVAE(encoder = encoder, decoder = decoder)
 
     regressor = LinearRegr(latent_dim = latent_dim)
+
+
+    ###--- Observation Test Setup ---###
+    n_iterations_ae = len(dataloader_ae)
+    n_iterations_regr = len(dataloader_regr)
+
+    vae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = vae_model)
+    vae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
+
+    regr_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
 
 
     ###--- Loss Terms ---###
@@ -908,17 +951,11 @@ def train_joint_seq_VAE():
     scheduler_regr = ExponentialLR(optimiser_regr, gamma = 0.5)
 
 
-    ###--- Meta ---###
-    epochs = 3
-    pbar = tqdm(range(epochs))
-
-    observer = AEParameterObserver()
-
-
     ###--- Training Loop AE---###
-    for it in pbar:
+    pbar = tqdm(range(epochs))
+    for epoch in pbar:
         
-        for b_ind, (X_batch, _) in enumerate(dataloader_ae):
+        for iter_idx, (X_batch, _) in enumerate(dataloader_ae):
             
             X_batch = X_batch[:, 1:]
 
@@ -938,22 +975,19 @@ def train_joint_seq_VAE():
             #--- Backward Pass ---#
             loss_vae.backward()
 
-            #print(f"{it}_{b_ind+1}/{epochs}")
-            observer(loss = loss_vae, ae_model = vae_model)
-
-
             optimiser_vae.step()
 
+            #--- Observer Call ---#
+            vae_model_obs(epoch = epoch, iter_idx = iter_idx, model = vae_model)
+            vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_vae)
 
         scheduler_vae.step()
 
-    observer.plot_results()
-
 
     ###--- Training Loop Regr ---###
-    for it in pbar:
+    for epoch in pbar:
         
-        for b_ind, (X_batch, y_batch) in enumerate(dataloader_regr):
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
             X_batch = X_batch[:, 1:]
             y_batch = y_batch[:, 1:]
@@ -971,16 +1005,21 @@ def train_joint_seq_VAE():
             #--- Backward Pass ---#
             loss_regr.backward()
 
-            print(
-                f"{it}_{b_ind+1}/{epochs} Regr. Loss:\n"
-                f"{loss_regr.tolist()}"
-            )
-
             optimiser_regr.step()
+
+            #--- Observer Call ---#
+            regr_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_regr)
 
 
         scheduler_regr.step()
 
+
+    ###--- Plot Observations ---###
+    plot_loss_tensor(observed_losses = vae_loss_obs.losses)
+    plot_loss_tensor(observed_losses = regr_loss_obs.losses)
+
+    vae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+    
 
     ###--- Test Loss ---###
     ae_test_ds = subsets['test_unlabeled']
@@ -1035,6 +1074,11 @@ def train_joint_epoch_wise_AE():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("-device:", device)
 
+    ###--- Meta ---###
+    epochs = 3
+    batch_size = 50
+    latent_dim = 10
+
 
     ###--- Load Data ---###
     data_dir = Path("./data")
@@ -1046,21 +1090,21 @@ def train_joint_epoch_wise_AE():
     y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
 
 
-    ###--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
+    # ###--- Normalise ---###
+    # normaliser = MinMaxNormaliser()
+    # #normaliser = ZScoreNormaliser()
+    # #normaliser = RobustScalingNormaliser()
 
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
+    # with torch.no_grad():
+    #     X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+    #     print(X_data.shape)
 
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
+    #     X_data_isnan = X_data.isnan().all(dim = 0)
+    #     X_data = X_data[:, ~X_data_isnan]
+    #     print(X_data.shape)
 
 
-    ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
+    ###--- Dataset---###
     dataset = TensorDataset(X_data, y_data, metadata_df)
     
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
@@ -1071,14 +1115,13 @@ def train_joint_epoch_wise_AE():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
     dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
-    print(len(dataloader_ae), len(dataloader_regr))
+    #print(len(dataloader_ae), len(dataloader_regr))
+
 
     ###--- Models ---###
-    latent_dim = 10
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
@@ -1091,8 +1134,20 @@ def train_joint_epoch_wise_AE():
     # #model = NaiveVAE(encoder = encoder, decoder = decoder)
     # model = NaiveVAESigma(encoder = encoder, decoder = decoder)
 
-
     regressor = LinearRegr(latent_dim = latent_dim)
+
+
+    ###--- Observation Test Setup ---###
+    n_iterations_ae = len(dataloader_ae)
+    n_iterations_regr = len(dataloader_regr)
+
+    ae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
+
+    loss_observer = CompositeLossObserver(
+        n_epochs = epochs, 
+        n_iterations = len(dataloader_regr),
+        loss_names = ['Reconstruction Term', 'Regression Term'],
+    )
 
 
     ###--- Losses ---###
@@ -1108,7 +1163,7 @@ def train_joint_epoch_wise_AE():
         'Regression Term': WeightedLossTerm(regr_loss_term, weight = 0.9),
     }
 
-    ete_loss = Loss(CompositeLossTermAlt(print_losses = True, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1123,16 +1178,13 @@ def train_joint_epoch_wise_AE():
     scheduler = ExponentialLR(optimiser, gamma = 0.5)
 
 
-    ###--- Meta ---###
-    epochs = 3
+    ###--- Training Loop Joint---###
     pbar = tqdm(range(epochs))
 
-
-    ###--- Training Loop Joint---###
-    for it in pbar:
+    for epoch in pbar:
         
         ###--- Training Loop AE---###
-        for b_ind, (X_batch, _) in enumerate(dataloader_ae):
+        for iter_idx, (X_batch, _) in enumerate(dataloader_ae):
             
             X_batch = X_batch[:, 1:]
 
@@ -1147,16 +1199,14 @@ def train_joint_epoch_wise_AE():
             #--- Backward Pass ---#
             loss_reconst.backward()
 
-            # print(
-            #     f"Epoch {it + 1}/{epochs}; AE iteration {b_ind + 1}/{len(dataloader_ae)}\n"
-            #     f"Loss Reconstruction: {loss_reconst.item()}"
-            # )
-
             optimiser.step()
+
+            #--- Observer Call ---#
+            ae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
 
 
         ###--- Training Loop End-To-End ---###
-        for b_ind, (X_batch, y_batch) in enumerate(dataloader_regr):
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
             X_batch = X_batch[:, 1:]
             y_batch = y_batch[:, 1:]
@@ -1180,16 +1230,15 @@ def train_joint_epoch_wise_AE():
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
 
-            # print(
-            #     f"Epoch {it + 1}/{epochs}; ETE iteration {b_ind + 1}/{len(dataloader_regr)}\n"
-            #     f"Loss End-To-End: {loss_ete_weighted.item()}"
-            # )
-
             optimiser.step()
 
 
         scheduler.step()
 
+
+    ###--- Plot Observations ---###
+    plot_loss_tensor(observed_losses = ae_loss_obs.losses)
+    loss_observer.plot_results()
 
 
     ###--- Test Loss ---###
@@ -1236,6 +1285,11 @@ def train_joint_epoch_wise_VAE():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("-device:", device)
 
+    ###--- Meta ---###
+    epochs = 3
+    batch_size = 50
+    latent_dim = 10
+
 
     ###--- Load Data ---###
     data_dir = Path("./data")
@@ -1272,14 +1326,12 @@ def train_joint_epoch_wise_VAE():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
     dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
     print(len(dataloader_ae), len(dataloader_regr))
 
     ###--- Models ---###
-    latent_dim = 10
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
@@ -1290,6 +1342,19 @@ def train_joint_epoch_wise_VAE():
     vae_model = GaussVAE(encoder = encoder, decoder = decoder)
 
     regressor = LinearRegr(latent_dim = latent_dim)
+
+
+    ###--- Observation Test Setup ---###
+    n_iterations_vae = len(dataloader_ae)
+    n_iterations_regr = len(dataloader_regr)
+
+    vae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_vae)
+
+    loss_observer = CompositeLossObserver(
+        n_epochs = epochs, 
+        n_iterations = n_iterations_regr,
+        loss_names = ['Reconstruction Term', 'Regression Term'],
+    )
 
 
     ###--- Loss Terms ---###
@@ -1315,7 +1380,7 @@ def train_joint_epoch_wise_VAE():
 
     ###--- Losses ---###
     vae_loss = Loss(vae_loss_term)
-    ete_loss = Loss(CompositeLossTermAlt(print_losses = True, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1330,19 +1395,13 @@ def train_joint_epoch_wise_VAE():
     scheduler = ExponentialLR(optimiser, gamma = 0.5)
 
 
-    ###--- Meta ---###
-    epochs = 3
+    ###--- Training Loop Joint---###
     pbar = tqdm(range(epochs))
 
-    from observers.loss_observer import LossObserverAlpha
-    loss_observer = LossObserverAlpha('Reconstruction', 'End-To-End')
-
-
-    ###--- Training Loop Joint---###
-    for it in pbar:
+    for epoch in pbar:
         
         ###--- Training Loop AE---###
-        for b_ind, (X_batch, _) in enumerate(dataloader_ae):
+        for iter_idx, (X_batch, _) in enumerate(dataloader_ae):
             
             X_batch = X_batch[:, 1:]
 
@@ -1358,21 +1417,17 @@ def train_joint_epoch_wise_VAE():
                 infrm_dist_params = infrm_dist_params,
             )
 
-
             #--- Backward Pass ---#
             loss_reconst.backward()
 
-            loss_observer('Reconstruction', loss_reconst)
-            # print(
-            #     f"Epoch {it + 1}/{epochs}; AE iteration {b_ind + 1}/{len(dataloader_ae)}\n"
-            #     f"Loss Reconstruction: {loss_reconst.item()}"
-            # )
-
             optimiser.step()
+
+            #--- Observer Call ---#
+            vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
 
 
         ###--- Training Loop End-To-End ---###
-        for b_ind, (X_batch, y_batch) in enumerate(dataloader_regr):
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
             X_batch = X_batch[:, 1:]
             y_batch = y_batch[:, 1:]
@@ -1396,17 +1451,14 @@ def train_joint_epoch_wise_VAE():
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
 
-            loss_observer('End-To-End', loss_ete_weighted)
-            # print(
-            #     f"Epoch {it + 1}/{epochs}; ETE iteration {b_ind + 1}/{len(dataloader_regr)}\n"
-            #     f"Loss End-To-End: {loss_ete_weighted.item()}"
-            # )
-
             optimiser.step()
 
 
         scheduler.step()
 
+    
+    ###--- Plot Observations ---###
+    plot_loss_tensor(observed_losses = vae_loss_obs.losses)
     loss_observer.plot_results()
 
 
@@ -1464,6 +1516,12 @@ def train_joint_epoch_wise_VAE_recon():
     print("-device:", device)
 
 
+    ###--- Meta ---###
+    epochs = 2
+    batch_size = 50
+    latent_dim = 10
+
+
     ###--- Load Data ---###
     data_dir = Path("./data")
     tensor_dir = data_dir / "tensors"
@@ -1499,14 +1557,13 @@ def train_joint_epoch_wise_VAE_recon():
 
 
     ###--- DataLoader ---###
-    batch_size = 100
     dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
     #print(len(dataloader_ae), len(dataloader_regr))
 
+
     ###--- Models ---###
-    latent_dim = 10
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
@@ -1517,6 +1574,19 @@ def train_joint_epoch_wise_VAE_recon():
     vae_model = GaussVAE(encoder = encoder, decoder = decoder)
 
     regressor = LinearRegr(latent_dim = latent_dim)
+
+
+    ###--- Observation Test Setup ---###
+    n_iterations_vae = len(dataloader_ae)
+    n_iterations_regr = len(dataloader_regr)
+
+    vae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_vae)
+
+    loss_observer = CompositeLossObserver(
+        n_epochs = epochs, 
+        n_iterations = n_iterations_regr,
+        loss_names = ['Reconstruction Term', 'Regression Term'],
+    )
 
 
     ###--- Loss Terms ---###
@@ -1542,7 +1612,7 @@ def train_joint_epoch_wise_VAE_recon():
 
     ###--- Losses ---###
     vae_loss = Loss(vae_elbo_term)
-    ete_loss = Loss(CompositeLossTermAlt(print_losses = True, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTermObs(observer= loss_observer, **ete_loss_terms))
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1563,19 +1633,13 @@ def train_joint_epoch_wise_VAE_recon():
     scheduler_ete = ExponentialLR(optimiser_ete, gamma = 0.5)
 
 
-    ###--- Meta ---###
-    epochs = 6
+    ###--- Training Loop Joint---###
     pbar = tqdm(range(epochs))
 
-    from observers.loss_observer import LossObserverAlpha
-    loss_observer = LossObserverAlpha('VAE-Loss', 'End-To-End')
-
-
-    ###--- Training Loop Joint---###
-    for it in pbar:
+    for epoch in pbar:
         
         ###--- Training Loop AE---###
-        for b_ind, (X_batch, _) in enumerate(dataloader_ae):
+        for iter_idx, (X_batch, _) in enumerate(dataloader_ae):
             
             X_batch = X_batch[:, 1:]
 
@@ -1595,17 +1659,14 @@ def train_joint_epoch_wise_VAE_recon():
             #--- Backward Pass ---#
             loss_vae.backward()
 
-            loss_observer('VAE-Loss', loss_vae)
-            # print(
-            #     f"Epoch {it + 1}/{epochs}; AE iteration {b_ind + 1}/{len(dataloader_ae)}\n"
-            #     f"Loss Reconstruction: {loss_reconst.item()}"
-            # )
-
             optimiser_vae.step()
+
+            #--- Observer Call ---#
+            vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_vae)
 
 
         ###--- Training Loop End-To-End ---###
-        for b_ind, (X_batch, y_batch) in enumerate(dataloader_regr):
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
             X_batch = X_batch[:, 1:]
             y_batch = y_batch[:, 1:]
@@ -1629,12 +1690,6 @@ def train_joint_epoch_wise_VAE_recon():
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
 
-            loss_observer('End-To-End', loss_ete_weighted)
-            # print(
-            #     f"Epoch {it + 1}/{epochs}; ETE iteration {b_ind + 1}/{len(dataloader_regr)}\n"
-            #     f"Loss End-To-End: {loss_ete_weighted.item()}"
-            # )
-
             optimiser_ete.step()
 
 
@@ -1642,6 +1697,8 @@ def train_joint_epoch_wise_VAE_recon():
         scheduler_ete.step()
 
 
+    ###--- Plot Observations ---###
+    plot_loss_tensor(observed_losses = vae_loss_obs.losses)
     loss_observer.plot_results()
 
 
@@ -1698,6 +1755,10 @@ def train_baseline():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("-device:", device)
 
+    ###--- Meta ---###
+    epochs = 3
+    batch_size = 50
+
 
     ###--- Load Data ---###
     data_dir = Path("./data")
@@ -1710,17 +1771,17 @@ def train_baseline():
 
 
     ###--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
+    # normaliser = MinMaxNormaliser()
+    # #normaliser = ZScoreNormaliser()
+    # #normaliser = RobustScalingNormaliser()
 
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
+    # with torch.no_grad():
+    #     X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+    #     print(X_data.shape)
 
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
+    #     X_data_isnan = X_data.isnan().all(dim = 0)
+    #     X_data = X_data[:, ~X_data_isnan]
+    #     print(X_data.shape)
 
 
     ###--- Dataset---### 
@@ -1733,7 +1794,6 @@ def train_baseline():
 
 
     ###--- DataLoader ---###
-    batch_size = 50
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
     ###--- Models ---###
@@ -1741,6 +1801,12 @@ def train_baseline():
     print(f"Input_dim: {input_dim}")
 
     regressor = LinearRegr(latent_dim = input_dim)
+
+
+    ###--- Observation Test Setup ---###
+    n_iterations_regr = len(dataloader_regr)
+
+    loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
 
 
     ###--- Losses ---###
@@ -1759,19 +1825,13 @@ def train_baseline():
     scheduler = ExponentialLR(optimiser, gamma = 0.5)
 
 
-    ###--- Meta ---###
-    epochs = 3
+    ###--- Training Loop Joint---###
     pbar = tqdm(range(epochs))
 
-    from observers.loss_observer import LossObserverAlpha
-    loss_observer = LossObserverAlpha('Regression')
-
-
-    ###--- Training Loop Joint---###
-    for it in pbar:
+    for epoch in pbar:
         
         ###--- Training Loop End-To-End ---###
-        for b_ind, (X_batch, y_batch) in enumerate(dataloader_regr):
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
             X_batch = X_batch[:, 1:]
             y_batch = y_batch[:, 1:]
@@ -1789,19 +1849,17 @@ def train_baseline():
             #--- Backward Pass ---#
             loss_regr.backward()
 
-            loss_observer('Regression', loss_regr)
-            print(
-                f"Epoch {it + 1}/{epochs}; iteration {b_ind + 1}/{len(dataloader_regr)}\n"
-                f"Loss Regression: {loss_regr.item()}"
-            )
-
             optimiser.step()
+
+            #--- Observer Call ---#
+            loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_regr)
 
 
         scheduler.step()
 
-
-    loss_observer.plot_results()
+    
+    ###--- Plot Observations ---###
+    plot_loss_tensor(observed_losses = loss_obs.losses)
 
 
     ###--- Test Loss ---###
@@ -1833,13 +1891,10 @@ Main Executions
 if __name__=="__main__":
 
     ###--- AE in isolation ---###
-    #main_test_view_DataFrameDS()
-    #main_test_view_TensorDS()
-    #train_AE_iso_observer_test()
-    #train_AE_NVAE_iso()
+    train_AE_NVAE_iso()
 
     ###--- VAE in isolation ---###
-    train_VAE_iso()
+    #train_VAE_iso()
     #VAE_iso_training_procedure_test()
 
     ###--- Compositions ---###
