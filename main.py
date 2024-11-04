@@ -44,7 +44,7 @@ from loss import (
     HuberOwn,
 )
 
-from loss.adapters_decorators import AEAdapter, RegrAdapter
+from loss.adapters_decorators import AEAdapter, RegrAdapter, Observe
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
@@ -1683,8 +1683,8 @@ def train_joint_epoch_procedure():
     n_iterations_ae = len(dataloader_ae)
     n_iterations_regr = len(dataloader_regr)
 
-    ae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
-
+    ae_loss_obs = LossTermObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
+    
     loss_observer = CompositeLossTermObserver(
         n_epochs = epochs, 
         n_iterations = len(dataloader_regr),
@@ -1706,7 +1706,8 @@ def train_joint_epoch_procedure():
     }
 
     ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
-    reconstr_loss = Loss(reconstr_loss_term)
+    #reconstr_loss = Loss(Observe(observer = ae_loss_obs, loss_term = reconstr_loss_term))
+    reconstr_loss = Loss(loss_term = reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
 

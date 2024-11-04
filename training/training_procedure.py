@@ -133,7 +133,7 @@ class IsoTrainingProcedure(Subject):
         self.epochs = epochs
         #self.batch_size = batch_size
 
-        self.training_kind = 'vae' if isinstance(self.model, VAE) else 'ae'
+        self.ae_training_kind = 'vae' if isinstance(self.model, VAE) else 'ae'
 
 
     def __call__(self):
@@ -152,7 +152,7 @@ class IsoTrainingProcedure(Subject):
 
         for iter_idx, (X_batch, _) in enumerate(self.dataloader):
             
-            if self.training_kind == 'vae':
+            if self.ae_training_kind == 'vae':
                 self.vae_training_iter(X_batch = X_batch, epoch = epoch, iter_idx = iter_idx)
 
             else:
@@ -259,7 +259,7 @@ class JointEpochTrainingProcedure(Subject):
         self.epochs = epochs
         #self.batch_size = batch_size
 
-        self.training_kind = 'vae' if isinstance(self.ae_model, VAE) else 'ae'
+        self.ae_training_kind = 'vae' if isinstance(self.ae_model, VAE) else 'ae'
 
 
     def __call__(self):
@@ -278,7 +278,7 @@ class JointEpochTrainingProcedure(Subject):
 
         for iter_idx, (X_batch, _) in enumerate(self.ae_dataloader):
             
-            if self.training_kind == 'vae':
+            if self.ae_training_kind == 'vae':
                 self.vae_training_iter(X_batch = X_batch, epoch = epoch, iter_idx = iter_idx)
                 
             else:
@@ -355,7 +355,7 @@ class JointEpochTrainingProcedure(Subject):
         self.optimizer.zero_grad()
 
         loss_tensors = {}
-        if self.training_kind == 'vae':
+        if self.ae_training_kind == 'vae':
             Z_batch, infrm_dist_params, genm_dist_params = self.ae_model(X_batch)
             loss_tensors['Z_batch'] = Z_batch
             loss_tensors['infrm_dist_params'] = infrm_dist_params

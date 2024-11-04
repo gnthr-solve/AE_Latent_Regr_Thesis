@@ -26,9 +26,9 @@ class Weigh(LossTerm):
     
     def __call__(self, **tensors: Tensor) -> Tensor:
         
-        batch_loss = self.loss_term(**tensors)
+        loss_batch = self.loss_term(**tensors)
 
-        return self.weight * batch_loss
+        return self.weight * loss_batch
     
 
 
@@ -42,9 +42,11 @@ class Observe(LossTerm):
     
     def __call__(self, **tensors: Tensor) -> Tensor:
         
-        batch_loss = self.loss_term(**tensors)
+        loss_batch = self.loss_term(**tensors)
 
-        return self.weight * batch_loss
+        self.notify_observer(loss_batch = loss_batch)
+        
+        return loss_batch
     
 
     def notify_observer(self, loss_batch: Tensor):
