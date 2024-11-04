@@ -33,7 +33,7 @@ from models.var_encoders import VarEncoder
 from models.var_decoders import VarDecoder
 
 from models.regressors import LinearRegr
-from models import Autoencoder, GaussVAE, EnRegrComposite
+from models import AE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE, NaiveVAESigma, NaiveVAELogSigma
 
 from loss import (
@@ -41,7 +41,7 @@ from loss import (
     CompositeLossTerm,
     CompositeLossTermAlt,
     CompositeLossTermObs,
-    WeightedLossTerm,
+    Weigh,
     LpNorm,
     RelativeLpNorm,
     Huber,
@@ -54,7 +54,7 @@ from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
 from observers.ae_param_observer import AEParameterObserver
-from observers import CompositeLossObserver, TrainingLossObserver, ModelObserver, VAELatentObserver
+from observers import CompositeLossTermObserver, TrainingLossObserver, ModelObserver, VAELatentObserver
 
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
@@ -119,7 +119,7 @@ def train_AE_iso_hydra(cfg: DictConfig):
     # encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e)
     # decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d)
 
-    # model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
+    # model = AE(encoder = encoder, decoder = decoder)
 
     #--- Models NaiveVAE ---#
     encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e)

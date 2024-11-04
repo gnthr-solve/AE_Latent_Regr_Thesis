@@ -16,7 +16,7 @@ from .loss_classes import LossTerm
 Decorators - Weighted Loss
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class WeightedLossTerm(LossTerm):
+class Weigh(LossTerm):
 
     def __init__(self, loss_term: LossTerm, weight: float):
 
@@ -30,6 +30,30 @@ class WeightedLossTerm(LossTerm):
 
         return self.weight * batch_loss
     
+
+
+class Observe(LossTerm):
+
+    def __init__(self, observer, loss_term: LossTerm):
+
+        self.loss_term = loss_term
+        self.observer = observer
+
+    
+    def __call__(self, **tensors: Tensor) -> Tensor:
+        
+        batch_loss = self.loss_term(**tensors)
+
+        return self.weight * batch_loss
+    
+
+    def notify_observer(self, loss_batch: Tensor):
+
+        batch_loss = loss_batch.detach().mean()
+
+        self.observer(batch_loss)
+
+
 
 
 """

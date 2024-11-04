@@ -48,7 +48,46 @@ class TrainingLossObserver(IterObserver):
 DictLoss Observer Prime
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class CompositeLossObserver(IterObserver):
+
+class LossTermObserver(IterObserver):
+
+    def __init__(self, n_epochs: int, n_iterations: int):
+        
+        self.n_epochs = n_epochs
+        self.n_iterations = n_iterations
+
+        self.losses = torch.zeros(size = (n_epochs, n_iterations))
+
+        self.epoch = 0
+        self.iter_idx = 0
+        
+
+    def __call__(self, batch_loss: Tensor, **kwargs):
+
+        if torch.isnan(batch_loss).any():
+            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains NaN values")
+            raise StopIteration
+        
+        if torch.isinf(batch_loss).any():
+            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
+            raise StopIteration
+            
+        self.losses[self.epoch, self.iter_idx] = batch_loss.detach()
+
+        #update indices
+        if self.iter_idx + 1 == self.n_iterations:
+
+            self.epoch += 1
+            self.iter_idx = 0
+
+        else:
+            self.iter_idx += 1
+
+
+
+
+
+class CompositeLossTermObserver(IterObserver):
 
     def __init__(self, n_epochs: int, n_iterations: int, loss_names: list[str]):
         

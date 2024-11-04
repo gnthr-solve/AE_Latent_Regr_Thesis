@@ -17,7 +17,7 @@ Autoencoder Classes - Simple Autoencoder
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 
-class Autoencoder(nn.Module):
+class AE(nn.Module):
 
     def __init__(self, encoder, decoder):
         super().__init__()
@@ -31,6 +31,6 @@ class Autoencoder(nn.Module):
         z = self.encoder(x)
         x_hat = self.decoder(z)
 
-        return x_hat
+        return z, x_hat
     
 
