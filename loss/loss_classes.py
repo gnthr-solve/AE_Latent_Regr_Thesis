@@ -136,6 +136,7 @@ class CompositeLossTermObs(LossTerm):
         if self.observer is not None:
             self.notify_observer(loss_batches = loss_batches)
 
+        #print(tuple(loss_batches.values()))
         stacked_losses = torch.stack(tuple(loss_batches.values()))
         batch_losses = torch.sum(stacked_losses, dim=0)
 

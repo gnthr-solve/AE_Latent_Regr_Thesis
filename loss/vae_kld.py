@@ -48,8 +48,8 @@ class GaussianAnaKLDiv(AnalyticalKLDiv):
 
         mu , logvar = infrm_dist_params.unbind(dim = -1)
 
-        kld_batch = 0.5 * (-1 - logvar + mu.pow(2) + torch.exp(logvar)).sum(dim = 1)
-
+        kld_batch = 0.5 * (-1 - logvar + mu.pow(2) + torch.exp(logvar)).sum(dim = -1)
+        
         return kld_batch
     
 
@@ -64,7 +64,7 @@ following the same principle as for the reconstruction
 class GaussianMCKLDiv(MonteCarloKLDiv):
 
     def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
-
+        
         mu, logvar = infrm_dist_params.unbind(dim = -1)
 
         sq_diff_means = (Z_batch - mu).pow(2)
@@ -75,8 +75,11 @@ class GaussianMCKLDiv(MonteCarloKLDiv):
 
         kld_summands = sq_mean_deviations + logvar - sq_Z_batch
         #kld_summands = sq_mean_deviations + var - sq_Z_batch
+        
+        kld_batch = -0.5 * kld_summands.sum(dim = -1)
 
-        kld_sum = kld_summands.sum(dim = 1)
+        # if kld_batch.ndim == 0:
+        #     kld_batch = kld_batch.unsqueeze(0)
 
-        return -0.5 * kld_sum
+        return kld_batch
 

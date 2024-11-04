@@ -237,7 +237,7 @@ def train_VAE_iso():
 
     ###--- Meta ---###
     epochs = 2
-    batch_size = 100
+    batch_size = 32
     latent_dim = 10
 
 
@@ -267,8 +267,8 @@ def train_VAE_iso():
     ###--- Loss ---###
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
 
-    kld_term = GaussianAnaKLDiv()
-    #kld_term = GaussianMCKLDiv()
+    #kld_term = GaussianAnaKLDiv()
+    kld_term = GaussianMCKLDiv()
 
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
     #loss = Loss(CompositeLossTerm(**loss_terms))
@@ -284,12 +284,12 @@ def train_VAE_iso():
     ###--- Training Loop ---###
     pbar = tqdm(range(epochs))
 
-    for it in pbar:
+    for epoch in pbar:
         
-        for b_ind, (X_batch, _) in enumerate(dataloader):
+        for iter_idx, (X_batch, _) in enumerate(dataloader):
             
             X_batch = X_batch[:, 1:]
-
+            #print(X_batch.shape)
             #--- Forward Pass ---#
             optimizer.zero_grad()
             
@@ -306,7 +306,7 @@ def train_VAE_iso():
             #--- Backward Pass ---#
             loss_reconst.backward()
 
-            latent_observer(epoch = it, iter_idx = b_ind, infrm_dist_params = infrm_dist_params)
+            latent_observer(epoch = epoch, iter_idx = iter_idx, infrm_dist_params = infrm_dist_params)
 
             optimizer.step()
 
@@ -317,7 +317,7 @@ def train_VAE_iso():
     #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     latent_observer.plot_dist_params_batch(torch.norm)
 
-    # ###--- Test Loss ---###
+    ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
     X_test = X_test[:, 1:]
 
@@ -1924,7 +1924,7 @@ if __name__=="__main__":
     #train_AE_NVAE_iso()
 
     ###--- VAE in isolation ---###
-    #train_VAE_iso()
+    train_VAE_iso()
     #VAE_iso_training_procedure_test()
 
     ###--- Compositions ---###
@@ -1933,7 +1933,7 @@ if __name__=="__main__":
     #train_joint_epoch_wise_AE()
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
-    train_joint_epoch_procedure()
+    #train_joint_epoch_procedure()
 
     ###--- Baseline ---###
     #train_baseline()

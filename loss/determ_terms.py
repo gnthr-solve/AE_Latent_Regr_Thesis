@@ -123,7 +123,7 @@ class HuberOwn(LossTerm):
         loss_batch[mask] = self.delta * (diffs[mask] - 0.5 * self.delta)
 
 
-        return loss_batch.sum(dim = 1)
+        return loss_batch.sum(dim = -1)
     
 
 

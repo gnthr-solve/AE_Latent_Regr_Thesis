@@ -39,7 +39,7 @@ class GaussianUnitVarLL(LogLikelihood):
     
         diff_mean = (X_batch - mu).pow(2)
 
-        adj_mean_sums = diff_mean.sum(dim = 1)
+        adj_mean_sums = diff_mean.sum(dim = -1)
 
         ll_batch = -0.5 * (adj_mean_sums)
 
@@ -63,10 +63,10 @@ class GaussianDiagLL(LogLikelihood):
         diff_mean = (X_batch - mu).pow(2)
         var = torch.exp(logvar)
 
-        adj_mean_sums = (diff_mean / var + logvar).sum(dim = 1)
-        #adj_mean_sums = (diff_mean / var + var).sum(dim = 1)
+        adj_mean_sums = (diff_mean / var + logvar).sum(dim = -1)
+        #adj_mean_sums = (diff_mean / var + var).sum(dim = -1)
 
         ll_batch = -0.5 * (adj_mean_sums)
-
-        return ll_batch
+        
+        return ll_batch.squeeze()
     

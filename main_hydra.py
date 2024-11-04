@@ -204,6 +204,150 @@ def train_AE_iso_hydra(cfg: DictConfig):
 
 
 
+@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="ae_iso_cfg_sweep")
+def train_VAE_iso_hydra(cfg: DictConfig):
+
+    # check computation backend to use
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("-device:", device)
+
+    ###--- Meta ---###
+    epochs = cfg.epochs
+    batch_size = cfg.batch_size
+    latent_dim = cfg.latent_dim
+    n_layers_e = cfg.n_layers_e
+    n_layers_d = cfg.n_layers_d
+
+    ###--- Load Data ---###
+    orig_cwd = hydra.utils.get_original_cwd()
+    data_dir = Path(f"{orig_cwd}/data")
+    tensor_dir = data_dir / "tensors"
+
+    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
+
+    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
+    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
+
+    
+    ###--- Normalise ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = RobustScalingNormaliser()
+
+    with torch.no_grad():
+        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
+        #print(X_data.shape)
+
+        X_data_isnan = X_data.isnan().all(dim = 0)
+        X_data = X_data[:, ~X_data_isnan]
+        #print(X_data.shape)
+
+
+    ###--- Dataset---###
+    dataset = TensorDataset(X_data, y_data, metadata_df)
+    
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+
+    ###--- DataLoader ---###
+    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    input_dim = dataset.X_dim - 1
+
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d)
+
+    model = GaussVAE(encoder = encoder, decoder = decoder)
+
+
+    ###--- Observers ---###
+    loss_observer = CompositeLossTermObserver(
+        n_epochs = epochs, 
+        n_iterations = len(dataloader),
+        loss_names = ['Log-Likelihood', 'KL-Divergence'],
+    )
+
+
+    ###--- Loss ---###
+    ll_term = Weigh(GaussianDiagLL(), weight = -1)
+
+    kld_term = GaussianAnaKLDiv()
+    #kld_term = GaussianMCKLDiv()
+
+    loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
+    #loss = Loss(CompositeLossTerm(**loss_terms))
+    loss = Loss(CompositeLossTermObs(observer = loss_observer, **loss_terms))
+
+    test_reconstr_loss = Loss(AEAdapter(RelativeLpNorm(p = 2)))
+
+
+    ###--- Optimizer & Scheduler ---###
+    optimizer = Adam(model.parameters(), lr = cfg.learning_rate)
+    scheduler = ExponentialLR(optimizer, gamma = 0.5)
+
+
+    ###--- Training Loop ---###
+    pbar = tqdm(range(epochs))
+
+    for epoch in pbar:
+        
+        for iter_idx, (X_batch, _) in enumerate(dataloader):
+            
+            X_batch = X_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimizer.zero_grad()
+            
+            Z_batch, infrm_dist_params, genm_dist_params = model(X_batch)
+
+            loss_reconst = loss(
+                X_batch = X_batch,
+                Z_batch = Z_batch,
+                genm_dist_params = genm_dist_params,
+                infrm_dist_params = infrm_dist_params,
+            )
+
+            #--- Backward Pass ---#
+            loss_reconst.backward()
+
+            optimizer.step()
+
+
+        scheduler.step()
+
+
+    loss_observer.plot_results()
+
+
+    ###--- Test Loss ---###
+    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    X_test = X_test[:, 1:]
+
+    Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
+
+    mu_r, _ = genm_dist_params.unbind(dim = -1)
+
+    X_test_hat = mu_r
+
+    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+
+    results.append({
+        'epochs': cfg.epochs,
+        'batch_size': cfg.batch_size,
+        'latent_dim': cfg.latent_dim,
+        'n_layers_e': cfg.n_layers_e,
+        'n_layers_d': cfg.n_layers_d,
+        'learning_rate': cfg.learning_rate,
+        'test_loss': loss_reconst_test.item(),
+    })
+
+
+
+
 """
 Main Executions
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -212,7 +356,8 @@ if __name__=="__main__":
     
     results = []
 
-    train_AE_iso_hydra()
+    #train_AE_iso_hydra()
+    train_VAE_iso_hydra()
 
     df = pd.DataFrame(results)
     
