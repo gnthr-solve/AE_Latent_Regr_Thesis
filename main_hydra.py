@@ -57,7 +57,7 @@ from observers.ae_param_observer import AEParameterObserver
 from observers import CompositeLossTermObserver, TrainingLossObserver, ModelObserver, VAELatentObserver
 
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
-
+from helper_tools import DatasetBuilder
 
 
 
@@ -67,7 +67,7 @@ def train_AE_iso_hydra(cfg: DictConfig):
 
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("-device:", device)
+    #print("-device:", device)
 
     ###--- Meta ---###
     epochs = cfg.epochs
@@ -76,40 +76,12 @@ def train_AE_iso_hydra(cfg: DictConfig):
     n_layers_e = cfg.n_layers_e
     n_layers_d = cfg.n_layers_d
 
-    ###--- Load Data ---###
-    orig_cwd = hydra.utils.get_original_cwd()
-    data_dir = Path(f"{orig_cwd}/data")
-    tensor_dir = data_dir / "tensors"
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-    
-    ###--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        #print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        #print(X_data.shape)
-
-
-    ###--- Dataset---###
-    dataset = TensorDataset(X_data, y_data, metadata_df)
-    
+    ###--- DataLoader ---###
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
-
-    ###--- DataLoader ---###
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
@@ -209,7 +181,7 @@ def train_VAE_iso_hydra(cfg: DictConfig):
 
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("-device:", device)
+    #print("-device:", device)
 
     ###--- Meta ---###
     epochs = cfg.epochs
@@ -218,40 +190,12 @@ def train_VAE_iso_hydra(cfg: DictConfig):
     n_layers_e = cfg.n_layers_e
     n_layers_d = cfg.n_layers_d
 
-    ###--- Load Data ---###
-    orig_cwd = hydra.utils.get_original_cwd()
-    data_dir = Path(f"{orig_cwd}/data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
     
-    ###--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        #print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        #print(X_data.shape)
-
-
-    ###--- Dataset---###
-    dataset = TensorDataset(X_data, y_data, metadata_df)
-    
+    ###--- DataLoader ---###
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
-
-    ###--- DataLoader ---###
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
@@ -354,6 +298,22 @@ Main Executions
 """
 if __name__=="__main__":
     
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
+    
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+
+
+
+    ###--- Setup and calculate results ---###
     results = []
 
     #train_AE_iso_hydra()

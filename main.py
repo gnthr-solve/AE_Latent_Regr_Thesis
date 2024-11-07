@@ -54,7 +54,7 @@ from observers import LossTermObserver, CompositeLossTermObserver, TrainingLossO
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
 from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_characteristics
-
+from helper_tools import DatasetBuilder
 
 """
 Main Functions - Training
@@ -62,51 +62,33 @@ Main Functions - Training
 """
 
 def train_AE_NVAE_iso():
-
+    
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("-device:", device)
-
-
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-    #X_data = torch.tensor(data=X_data.data, dtype=torch.float64)
-    
-    ###--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
-
 
     ###--- Meta ---###
     epochs = 2
     batch_size = 50
     latent_dim = 10
 
-    ###--- Dataset---###
-    dataset = TensorDataset(X_data, y_data, metadata_df)
+    ###--- Dataset ---###
     
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+    ###--- DataLoader ---###
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
-
-    ###--- DataLoader ---###
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
@@ -146,7 +128,7 @@ def train_AE_NVAE_iso():
 
     ###--- Observation Test Setup ---###
     n_iterations = len(dataloader)
-    model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
+    #model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
     loss_observer = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations)
 
 
@@ -172,7 +154,7 @@ def train_AE_NVAE_iso():
             optimizer.step()
 
             #--- Observer Call ---#
-            model_obs(epoch = epoch, iter_idx = iter_idx, model = model)
+            #model_obs(epoch = epoch, iter_idx = iter_idx, model = model)
             loss_observer(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
 
 
@@ -180,7 +162,7 @@ def train_AE_NVAE_iso():
 
 
     plot_loss_tensor(observed_losses = loss_observer.losses)
-    model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+    #model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
     ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
@@ -202,48 +184,31 @@ def train_VAE_iso():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("-device:", device)
 
-
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    ##--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
-
-
-    ###--- Dataset---###
-    dataset = TensorDataset(X_data, y_data, metadata_df)
-    
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-
-
     ###--- Meta ---###
     epochs = 2
     batch_size = 32
     latent_dim = 10
 
 
-    ###--- DataLoader ---###
-    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
 
+    ###--- DataLoader ---###
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+    
 
     ###--- Models ---###
     input_dim = dataset.X_dim - 1
@@ -512,40 +477,27 @@ def train_joint_seq_AE():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("-device:", device)
 
-
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    ###--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
-
-
     ###--- Meta ---###
-    epochs = 1
+    epochs = 4
     batch_size = 50
     latent_dim = 10
 
 
-    ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
-    dataset = TensorDataset(X_data, y_data, metadata_df)
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
     
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+    
+    ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
     subsets = subset_factory.create_splits()
 
@@ -562,9 +514,9 @@ def train_joint_seq_AE():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
-    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
     regressor = LinearRegr(latent_dim = latent_dim)
 
@@ -576,7 +528,7 @@ def train_joint_seq_AE():
     n_iterations_ae = len(dataloader_ae)
     n_iterations_regr = len(dataloader_regr)
 
-    ae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = ae_model)
+    #ae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = ae_model)
     ae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
 
     regr_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_regr, model = regr_model)
@@ -591,10 +543,10 @@ def train_joint_seq_AE():
 
     ###--- Optimizer & Scheduler ---###
     optimizer_ae = Adam(ae_model.parameters(), lr = 1e-2)
-    scheduler_ae = ExponentialLR(optimizer_ae, gamma = 0.1)
+    scheduler_ae = ExponentialLR(optimizer_ae, gamma = 0.9)
 
     optimizer_regr = Adam(regr_model.parameters(), lr = 1e-2)
-    scheduler_regr = ExponentialLR(optimizer_regr, gamma = 0.1)
+    scheduler_regr = ExponentialLR(optimizer_regr, gamma = 0.9)
 
 
     ###--- Training Loop AE---###
@@ -609,7 +561,7 @@ def train_joint_seq_AE():
             #--- Forward Pass ---#
             optimizer_ae.zero_grad()
             
-            X_hat_batch = ae_model(X_batch)
+            Z_batch, X_hat_batch = ae_model(X_batch)
 
             loss_reconst = reconstr_loss(X_batch = X_batch, X_hat_batch = X_hat_batch)
 
@@ -619,7 +571,7 @@ def train_joint_seq_AE():
             optimizer_ae.step()
 
             #--- Observer Call ---#
-            ae_model_obs(epoch = epoch, iter_idx = iter_idx, model = ae_model)
+            #ae_model_obs(epoch = epoch, iter_idx = iter_idx, model = ae_model)
             ae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
 
 
@@ -658,7 +610,7 @@ def train_joint_seq_AE():
     plot_loss_tensor(observed_losses = ae_loss_obs.losses)
     plot_loss_tensor(observed_losses = regr_loss_obs.losses)
 
-    ae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+    #ae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
     regr_model_obs.plot_child_param_development(child_name = 'regressor', functional = lambda t: torch.max(t) - torch.min(t))
 
 
@@ -673,7 +625,7 @@ def train_joint_seq_AE():
     X_test_regr = X_test_regr[:, 1:]
     y_test_regr = y_test_regr[:, 1:]
 
-    X_test_hat = ae_model(X_test_ae)
+    Z_batch_test, X_test_hat = ae_model(X_test_ae)
     y_test_hat = regr_model(X_test_regr)
 
     loss_reconst = reconstr_loss(X_batch = X_test_ae, X_hat_batch = X_test_hat)
@@ -701,40 +653,27 @@ def train_joint_seq_VAE():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("-device:", device)
 
-
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    ###--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
-
-
     ###--- Meta ---###
     epochs = 1
     batch_size = 50
     latent_dim = 10
 
 
-    ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
-    dataset = TensorDataset(X_data, y_data, metadata_df)
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
     
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+    
+    ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
     subsets = subset_factory.create_splits()
 
@@ -934,39 +873,27 @@ def train_joint_epoch_wise_AE():
     print("-device:", device)
 
     ###--- Meta ---###
-    epochs = 3
+    epochs = 8
     batch_size = 50
     latent_dim = 10
 
 
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    # ###--- Normalise ---###
-    # normaliser = MinMaxNormaliser()
-    # #normaliser = ZScoreNormaliser()
-    # #normaliser = RobustScalingNormaliser()
-
-    # with torch.no_grad():
-    #     X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-    #     print(X_data.shape)
-
-    #     X_data_isnan = X_data.isnan().all(dim = 0)
-    #     X_data = X_data[:, ~X_data_isnan]
-    #     print(X_data.shape)
-
-
-    ###--- Dataset---###
-    dataset = TensorDataset(X_data, y_data, metadata_df)
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
     
-    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    dataset = dataset_builder.build_dataset()
+    
+
+    ###--- Dataset Split ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.8)
     subsets = subset_factory.create_splits()
 
     ae_train_ds = subsets['train_unlabeled']
@@ -1034,7 +961,7 @@ def train_joint_epoch_wise_AE():
         {'params': regressor.parameters(), 'lr': 1e-2},
     ])
 
-    scheduler = ExponentialLR(optimiser, gamma = 0.5)
+    scheduler = ExponentialLR(optimiser, gamma = 0.9)
 
 
     ###--- Training Loop Joint---###
@@ -1150,33 +1077,21 @@ def train_joint_epoch_wise_VAE():
     latent_dim = 10
 
 
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    ###--- Normalise ---###
+    ###--- Dataset ---###
     normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
-
-
-    ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
-    dataset = TensorDataset(X_data, y_data, metadata_df)
+    #normaliser = None
     
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+
+    ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
     subsets = subset_factory.create_splits()
 
@@ -1381,33 +1296,21 @@ def train_joint_epoch_wise_VAE_recon():
     latent_dim = 10
 
 
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    ###--- Normalise ---###
+    ###--- Dataset ---###
     normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
-
-
-    ###--- Dataset---### #NOTE: Need to split dataset in parts with label and parts w.o. label before split?
-    dataset = TensorDataset(X_data, y_data, metadata_df)
+    #normaliser = None
     
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+    
+    ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
     subsets = subset_factory.create_splits()
 
@@ -1621,33 +1524,21 @@ def train_joint_epoch_procedure():
     latent_dim = 10
 
 
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    # ###--- Normalise ---###
-    # normaliser = MinMaxNormaliser()
-    # #normaliser = ZScoreNormaliser()
-    # #normaliser = RobustScalingNormaliser()
-
-    # with torch.no_grad():
-    #     X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-    #     print(X_data.shape)
-
-    #     X_data_isnan = X_data.isnan().all(dim = 0)
-    #     X_data = X_data[:, ~X_data_isnan]
-    #     print(X_data.shape)
-
-
-    ###--- Dataset---###
-    dataset = TensorDataset(X_data, y_data, metadata_df)
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
     
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+    
+    ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
     subsets = subset_factory.create_splits()
 
@@ -1658,8 +1549,6 @@ def train_joint_epoch_procedure():
     ###--- DataLoader ---###
     dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
-
-    #print(len(dataloader_ae), len(dataloader_regr))
 
 
     ###--- Models ---###
@@ -1786,44 +1675,30 @@ def train_baseline():
     print("-device:", device)
 
     ###--- Meta ---###
-    epochs = 3
+    epochs = 4
     batch_size = 50
 
 
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
 
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    ###--- Normalise ---###
-    # normaliser = MinMaxNormaliser()
-    # #normaliser = ZScoreNormaliser()
-    # #normaliser = RobustScalingNormaliser()
-
-    # with torch.no_grad():
-    #     X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-    #     print(X_data.shape)
-
-    #     X_data_isnan = X_data.isnan().all(dim = 0)
-    #     X_data = X_data[:, ~X_data_isnan]
-    #     print(X_data.shape)
-
-
-    ###--- Dataset---### 
-    dataset = TensorDataset(X_data, y_data, metadata_df)
+    dataset_builder = DatasetBuilder(
+        kind = 'max',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
     
-    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    dataset = dataset_builder.build_dataset()
+    
+
+    ###--- DataLoader ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.8)
     subsets = subset_factory.create_splits()
 
     regr_train_ds = subsets['train_labeled']
 
-
-    ###--- DataLoader ---###
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
     ###--- Models ---###
@@ -1852,7 +1727,7 @@ def train_baseline():
         {'params': regressor.parameters(), 'lr': 1e-2},
     ])
 
-    scheduler = ExponentialLR(optimiser, gamma = 0.5)
+    scheduler = ExponentialLR(optimiser, gamma = 0.9)
 
 
     ###--- Training Loop Joint---###
@@ -1924,11 +1799,11 @@ if __name__=="__main__":
     #train_AE_NVAE_iso()
 
     ###--- VAE in isolation ---###
-    train_VAE_iso()
+    #train_VAE_iso()
     #VAE_iso_training_procedure_test()
 
     ###--- Compositions ---###
-    #train_joint_seq_AE()
+    train_joint_seq_AE()
     #train_joint_seq_VAE()
     #train_joint_epoch_wise_AE()
     #train_joint_epoch_wise_VAE()
@@ -1936,6 +1811,6 @@ if __name__=="__main__":
     #train_joint_epoch_procedure()
 
     ###--- Baseline ---###
-    #train_baseline()
+    train_baseline()
 
     pass

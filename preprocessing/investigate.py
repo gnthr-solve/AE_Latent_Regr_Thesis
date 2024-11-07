@@ -95,3 +95,45 @@ def investigate_index_mapping():
         f'=================================================\n'
     )
 
+
+
+
+"""
+Investigate - Investigate ID match
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+
+def investigate_id_match():
+
+    data_dir = Path("./data")
+    tensor_dir = data_dir / "raw"
+
+    X_data_max = 'apc_dataset_max.csv'
+    X_data_key = 'apc_dataset_key.csv'
+    y_data = 'mean_MR.csv'
+
+    X_data_max_df = pd.read_csv(tensor_dir / X_data_max, low_memory = False)
+    X_data_key_df = pd.read_csv(tensor_dir / X_data_key, low_memory = False)
+    y_data_df = pd.read_csv(tensor_dir / y_data, low_memory = False)
+
+    max_ids = set(X_data_max_df['WAFER_ID'].tolist())
+    key_ids = set(X_data_key_df['WAFER_ID'].tolist())
+    y_ids = set(y_data_df['WAFER_ID'].tolist())
+
+    print('Max and Key ids match', max_ids == key_ids)
+
+    y_not_in_apc = [id for id in y_ids if id not in max_ids | key_ids]
+    y_not_in_max = [id for id in y_ids if id not in max_ids]
+    y_not_in_key = [id for id in y_ids if id not in key_ids]
+
+    print(
+        f'Are y-data ids not in apc?\n'
+        f'=================================================\n'
+        f'joint apc:\n{y_not_in_apc}\n'
+        f'-------------------------------------------------\n'
+        f'apc max:\n{y_not_in_max}\n'
+        f'-------------------------------------------------\n'
+        f'apc key:\n{y_not_in_key}\n'
+        f'=================================================\n'
+    )
+

@@ -3,7 +3,7 @@
 import torch
 import pandas as pd
 import numpy as np
-import yaml
+
 import json
 
 from itertools import product
@@ -53,22 +53,23 @@ def preprocess_raw():
 
     ###--- Paths and Settings ---###
     tensor_one_mapping = True
+    kind = 'key'
     data_dir = Path("./data")
     alignment_info_dir = data_dir / "alignment_info"
     tensor_dir = data_dir / "tensors"
 
-    joint_data_df_name = "data_joint.csv"
-    metadata_df_name = "metadata.csv"
-    X_data_df_name = "X_data.csv"
-    y_data_df_name = "y_data.csv"
+    joint_data_df_name = f"data_joint_{kind}.csv"
+    metadata_df_name = f"metadata.csv"
+    X_data_df_name = f"X_data_{kind}.csv"
+    y_data_df_name = f"y_data.csv"
 
-    X_data_tensor_name = 'X_data_tensor.pt'
-    y_data_tensor_name = 'y_data_tensor.pt'
+    X_data_tensor_name = f'X_data_{kind}_tensor.pt'
+    y_data_tensor_name = f'y_data_tensor.pt'
 
 
     ###--- 0. Load Raw Data ---###
-    raw_X_data_path = data_dir / "apc_dataset_key.csv"
-    raw_y_data_path = data_dir / "mean_MR.csv"
+    raw_X_data_path = data_dir / 'raw' / f"apc_dataset_{kind}.csv"
+    raw_y_data_path = data_dir / 'raw' / "mean_MR.csv"
 
     raw_X_data_df = pd.read_csv(raw_X_data_path, low_memory = False)
     raw_y_data_df = pd.read_csv(raw_y_data_path, low_memory = False)
@@ -102,7 +103,7 @@ def preprocess_raw():
     #--- 2.2. Export Column Maps ---#
     tensor_infix = '_tensor' if tensor_one_mapping else ''
 
-    with open(alignment_info_dir / f'X{tensor_infix}_col_map.json', 'w') as f:
+    with open(alignment_info_dir / f'X_{kind}{tensor_infix}_col_map.json', 'w') as f:
         json.dump(X_col_map, f)
 
     with open(alignment_info_dir / f'y{tensor_infix}_col_map.json', 'w') as f:
@@ -115,6 +116,9 @@ def preprocess_raw():
     #--- 3.1. Eliminate Rows Containing NaN in X Columns ---#
     isna_any_mask = data_df[X_data_cols].isna().any(axis = 1)
     data_df = data_df[~isna_any_mask]
+
+    data_df.sort_values(by = identifier_col, inplace = True)
+
     data_df.reset_index(inplace = True, drop = True)
 
     #--- 3.2. Divide y-values by Time to get MRR ---#
@@ -126,7 +130,7 @@ def preprocess_raw():
     data_df.insert(0, 'mapping_idx', data_df.index) 
 
     #--- 4.1. Export Index Map ---#
-    with open(alignment_info_dir / 'index_id_map.json', 'w') as f:
+    with open(alignment_info_dir / f'index_id_map.json', 'w') as f:
         json.dump(index_id_map, f)
     
     #--- 4.2. Export Joint DataFrame ---#

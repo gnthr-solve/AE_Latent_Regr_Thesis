@@ -11,7 +11,6 @@ from pathlib import Path
 from collections import namedtuple
 from dataclasses import dataclass, field
 
-from helper_tools import default_index_map, default_X_col_map, default_y_col_map
 from preprocessing.info import process_metadata_cols, identifier_col
 
 """
@@ -21,10 +20,10 @@ DataSets - Alignment
 @dataclass(slots=True)
 class Alignment:
 
-    index_map: dict[int, str] = field(default_factory = default_index_map)
+    index_map: dict[int, str] = field(default_factory = {})
 
-    X_col_map: dict[int, str] = field(default_factory = default_X_col_map)
-    y_col_map: dict[int, str] = field(default_factory = default_y_col_map)
+    X_col_map: dict[int, str] = field(default_factory = {})
+    y_col_map: dict[int, str] = field(default_factory = {})
 
     X_cols: list[str] = field(init=False)
     y_cols: list[str] = field(init=False)
@@ -44,7 +43,7 @@ DataSets - DataFrameDataset
 
 class DataFrameDataset(Dataset):
 
-    def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment = Alignment()):
+    def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment):
 
         self.alignm = alignment
         self.data_df = joint_data_df
@@ -93,7 +92,7 @@ DataSets - TensorDataset
 
 class TensorDataset(Dataset):
 
-    def __init__(self, X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame, alignment: Alignment = Alignment()):
+    def __init__(self, X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame, alignment: Alignment):
 
         self.alignm = alignment
 
@@ -177,9 +176,10 @@ class SplitSubsetFactory:
 
         y_data = self.dataset.y_data
         y_isnan = y_data[:, 1:].isnan().all(dim = 1)
+        
         unlabeled_indices = torch.where(y_isnan)[0].tolist()
-
-        labeled_indices = [i for i in range(len(self.dataset)) if i not in unlabeled_indices]
+        labeled_indices = torch.where(~y_isnan)[0].tolist()
+        
 
         splits = {
             'train_labeled': self._subset(list(set(train_indices).intersection(labeled_indices))),
