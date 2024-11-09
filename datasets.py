@@ -162,18 +162,7 @@ class SplitSubsetFactory:
         test_size = len(self.dataset) - train_size
 
         train_indices, test_indices = random_split(range(len(self.dataset)), [train_size, test_size])
-        # print(
-        #     f'=================================================\n'
-        #     f'Type train indices: \n{type(train_indices)}\n'
-        #     f'Length train indices: \n{len(train_indices)}\n'
-        #     f'set(train_indices): \n{set(train_indices)}\n'
-        #     f'-------------------------------------------------\n'
-        #     f'Type test indices: \n{type(test_indices)}\n'
-        #     f'Length test indices: \n{len(test_indices)}\n'
-        #     f'set(test_indices): \n{set(test_indices)}\n'
-        #     f'=================================================\n'
-        # )
-
+        
         y_data = self.dataset.y_data
         y_isnan = y_data[:, 1:].isnan().all(dim = 1)
         
@@ -198,18 +187,3 @@ class SplitSubsetFactory:
 
 
 
-"""
-Tests
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-
-if __name__=="__main__":
-
-    ###--- Test Alignment ---###
-    
-    alignment = Alignment()
-    print(alignment.index_map)
-    print(alignment.X_col_map)
-    print(alignment.y_col_map)
-
-    pass

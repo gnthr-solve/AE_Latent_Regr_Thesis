@@ -43,8 +43,45 @@ class Loss:
 CompositeLoss
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-
 class CompositeLossTerm(LossTerm):
+
+    def __init__(self, observer = None, **loss_terms: LossTerm):
+
+        self.observer = observer
+        self.loss_terms = loss_terms
+        
+
+    def __call__(self, **tensors: Tensor) -> Tensor:
+
+        loss_batches = {
+            name: loss_term(**tensors)
+            for name, loss_term in self.loss_terms.items()
+        }
+
+        if self.observer is not None:
+            self.notify_observer(loss_batches = loss_batches)
+
+        #print(tuple(loss_batches.values()))
+        stacked_losses = torch.stack(tuple(loss_batches.values()))
+        batch_losses = torch.sum(stacked_losses, dim=0)
+
+        return batch_losses
+
+
+    def notify_observer(self, loss_batches: dict[str, Tensor]):
+
+        losses = {name: loss_batch.detach().mean() for name, loss_batch in loss_batches.items()}
+
+        self.observer(losses)
+        
+
+
+"""
+CompositeLossTerm - Alternative Implementations
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+
+class CompositeLossTermZeros(LossTerm):
 
     def __init__(self, **loss_terms: LossTerm):
 
@@ -77,7 +114,7 @@ class CompositeLossTerm(LossTerm):
 
 
 
-class CompositeLossTermAlt(LossTerm):
+class CompositeLossTermPrint(LossTerm):
 
     def __init__(self, print_losses: bool = False, **loss_terms: LossTerm):
 
@@ -113,41 +150,4 @@ class CompositeLossTermAlt(LossTerm):
             f'--------------------------\n'
             f'{loss_str}\n'
         )
-
-
-
-
-
-class CompositeLossTermObs(LossTerm):
-
-    def __init__(self, observer = None, **loss_terms: LossTerm):
-
-        self.observer = observer
-        self.loss_terms = loss_terms
-        
-
-    def __call__(self, **tensors: Tensor) -> Tensor:
-
-        loss_batches = {
-            name: loss_term(**tensors)
-            for name, loss_term in self.loss_terms.items()
-        }
-
-        if self.observer is not None:
-            self.notify_observer(loss_batches = loss_batches)
-
-        #print(tuple(loss_batches.values()))
-        stacked_losses = torch.stack(tuple(loss_batches.values()))
-        batch_losses = torch.sum(stacked_losses, dim=0)
-
-        return batch_losses
-
-
-    def notify_observer(self, loss_batches: dict[str, Tensor]):
-
-        losses = {name: loss_batch.detach().mean() for name, loss_batch in loss_batches.items()}
-
-        self.observer(losses)
-        
-
 

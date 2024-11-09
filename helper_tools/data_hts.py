@@ -20,12 +20,9 @@ Data Helper Tools - Default Factories
 """
 class MapLoader:
 
-    def __init__(self, map_path: Path):
-        self.map_path = map_path
+    def __call__(self, map_path: Path) -> dict[int, str]:
 
-    def __call__(self):
-
-        with open(self.map_path, 'r') as f:
+        with open(map_path, 'r') as f:
             map_dict: dict[str, str] = json.load(f)
 
         map_dict = {
@@ -41,19 +38,17 @@ class MapLoader:
 tensor_one_maps = True
 tensor_one_infix = '_tensor' if tensor_one_maps else ''
 
-default_index_map = MapLoader(Path('data/alignment_info/index_id_map.json'))
-default_X_col_map = MapLoader(Path(f'data/alignment_info/X{tensor_one_infix}_col_map.json'))
-default_y_col_map = MapLoader(Path(f'data/alignment_info/y{tensor_one_infix}_col_map.json'))
+map_loader = MapLoader()
+index_map = map_loader(Path('data/alignment_info/index_id_map.json'))
+y_col_map = map_loader(Path(f'data/alignment_info/y{tensor_one_infix}_col_map.json'))
 
-
-X_col_map_key = MapLoader(Path(f'data/alignment_info/X_key{tensor_one_infix}_col_map.json'))
-X_col_map_max = MapLoader(Path(f'data/alignment_info/X_max{tensor_one_infix}_col_map.json'))
+X_col_map_key = map_loader(Path(f'data/alignment_info/X_key{tensor_one_infix}_col_map.json'))
+X_col_map_max = map_loader(Path(f'data/alignment_info/X_max{tensor_one_infix}_col_map.json'))
 
 
 
 
 def remove_columns_and_update_mapping(tensor: Tensor, mapping: dict[int, str], keys_to_remove: list[str]):
-    """Removes columns from a tensor and updates the mapping dictionary."""
 
     keys_to_keep = [key for key in mapping.values() if key not in keys_to_remove]
     indices_to_keep = [int(k) for k, v in mapping.items() if v in keys_to_keep]
@@ -80,9 +75,9 @@ class DatasetBuilder:
         self.exclude_columns = exclude_columns
         self.normaliser = normaliser
 
-        self.index_map = default_index_map()
-        self.X_col_map = X_col_map_key() if kind == 'key' else X_col_map_max()
-        self.y_col_map = default_y_col_map()
+        self.index_map = index_map
+        self.X_col_map = X_col_map_key if kind == 'key' else X_col_map_max
+        self.y_col_map = y_col_map
 
         self.metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
@@ -113,7 +108,7 @@ class DatasetBuilder:
         self.X_col_map = {i: v for i, v in enumerate(filtered_col_map.values())}
 
 
-    def build_dataset(self):
+    def build_dataset(self) -> TensorDataset:
 
         if self.exclude_columns:
             self.exclude_columns_and_update_mapping()

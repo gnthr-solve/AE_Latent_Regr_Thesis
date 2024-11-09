@@ -49,7 +49,7 @@ from loss import (
     HuberOwn,
 )
 
-from loss.adapters_decorators import AEAdapter, RegrAdapter
+from loss.decorators import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 

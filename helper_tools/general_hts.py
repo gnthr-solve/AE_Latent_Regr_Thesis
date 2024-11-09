@@ -1,5 +1,6 @@
 
 import torch
+import time
 import numpy as np
 import pandas as pd
 import re
@@ -9,6 +10,23 @@ from itertools import product
 from functools import wraps
 
 
+def simple_timer(func):
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+
+        start_time = time.time()
+        
+        result = func(*args, **kwargs)
+        
+        end_time = time.time()
+        exec_time = end_time - start_time
+        
+        print(exec_time)
+        
+        return result
+    
+    return wrapper
 
 """
 Miscellaneous

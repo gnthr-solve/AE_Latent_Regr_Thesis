@@ -10,17 +10,11 @@ from torch.optim.lr_scheduler import ExponentialLR
 from pathlib import Path
 from tqdm import tqdm
 
-from datasets import TensorDataset, DataFrameDataset
-
 from models.encoders import (
-    SimpleLinearReluEncoder,
-    LinearReluEncoder,
     GeneralLinearReluEncoder,
 )
 
 from models.decoders import (
-    SimpleLinearReluDecoder,
-    LinearReluDecoder,
     GeneralLinearReluDecoder,
 )
 
@@ -29,14 +23,11 @@ from models.var_decoders import VarDecoder
 
 from models.regressors import LinearRegr
 from models import AE, GaussVAE, EnRegrComposite
-from models.naive_vae import NaiveVAE, NaiveVAESigma, NaiveVAELogSigma
+from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
     Loss,
     CompositeLossTerm,
-    CompositeLossTermAlt,
-    CompositeLossTermObs,
-    Weigh,
     LpNorm,
     RelativeLpNorm,
     Huber,
@@ -44,7 +35,8 @@ from loss import (
     HuberOwn,
 )
 
-from loss.adapters_decorators import AEAdapter, RegrAdapter, Observe
+from loss.decorators import Weigh, Observe
+from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
@@ -53,31 +45,30 @@ from observers import LossTermObserver, CompositeLossTermObserver, TrainingLossO
 
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
-from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_characteristics
+from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_characteristics, simple_timer
 from helper_tools import DatasetBuilder
 
 """
 Main Functions - Training
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-
-def train_AE_NVAE_iso():
+def AE_iso_training_procedure():
     
-    # check computation backend to use
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("-device:", device)
+    from training.procedure_iso import AEIsoTrainingProcedure
 
     ###--- Meta ---###
     epochs = 2
     batch_size = 50
     latent_dim = 10
 
+
     ###--- Dataset ---###
-    
-    normaliser = MinMaxNormaliser()
+    #normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
+    normaliser = None
+
     dataset_builder = DatasetBuilder(
-        kind = 'max',
+        kind = 'key',
         normaliser = normaliser,
         exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     )
@@ -96,29 +87,41 @@ def train_AE_NVAE_iso():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    # encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
-    # decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
     # model = AE(encoder = encoder, decoder = decoder)
 
     #--- Models NaiveVAE ---#
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
 
-    #model = NaiveVAE(encoder = encoder, decoder = decoder)
-    model = NaiveVAELogSigma(encoder = encoder, decoder = decoder)
-    #model = NaiveVAESigma(encoder = encoder, decoder = decoder)
+    model = NaiveVAE_LogVar(encoder = encoder, decoder = decoder, input_dim = input_dim)
+    #model = NaiveVAE_LogSigma(encoder = encoder, decoder = decoder)
+    #model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
 
-    #initialize_weights(model)
+
+    ###--- Observers ---###
+    n_iterations = len(dataloader)
+    dataset_size = len(train_dataset)
+
+    #latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
+    loss_observer = CompositeLossTermObserver(
+        n_epochs = epochs, 
+        n_iterations = n_iterations,
+        loss_names = ['Reconstruction'],
+    )
 
     
     ###--- Loss ---###
-    #reconstr_term = AEAdapter(LpNorm(p = 2))
-    reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
+    reconstr_term = AEAdapter(LpNorm(p = 2))
+    test_reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
 
     loss_terms = {'Reconstruction': reconstr_term}
-    reconstr_loss = Loss(CompositeLossTerm(**loss_terms))
+    reconstr_loss = Loss(CompositeLossTerm(observer=loss_observer, **loss_terms))
+
+    test_reconstr_loss = Loss(test_reconstr_term)
 
 
     ###--- Optimizer & Scheduler ---###
@@ -126,50 +129,36 @@ def train_AE_NVAE_iso():
     scheduler = ExponentialLR(optimizer, gamma = 0.5)
 
 
-    ###--- Observation Test Setup ---###
-    n_iterations = len(dataloader)
-    #model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
-    loss_observer = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations)
+    ###--- Training Procedure ---###
+    training_procedure = AEIsoTrainingProcedure(
+        train_dataloader = dataloader,
+        ae_model = model,
+        loss = reconstr_loss,
+        optimizer = optimizer,
+        scheduler = scheduler,
+        epochs = epochs,
+    )
+
+    # training_procedure.register_observers(
+    #     #latent_observer, 
+    #     #model_observer,
+    # )
+    
+    training_procedure()
 
 
-    ###--- Training Loop ---###
-    pbar = tqdm(range(epochs))
+    ###--- Test Observers ---###
+    loss_observer.plot_results()
+    #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
+    #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
-    for epoch in pbar:
-        
-        for iter_idx, (X_batch, _) in enumerate(dataloader):
-            
-            X_batch = X_batch[:, 1:]
-
-            #--- Forward Pass ---#
-            optimizer.zero_grad()
-            
-            X_hat_batch = model(X_batch)
-
-            loss_reconst = reconstr_loss(X_batch = X_batch, X_hat_batch = X_hat_batch)
-
-            #--- Backward Pass ---#
-            loss_reconst.backward()
-
-            optimizer.step()
-
-            #--- Observer Call ---#
-            #model_obs(epoch = epoch, iter_idx = iter_idx, model = model)
-            loss_observer(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
-
-
-        scheduler.step()
-
-
-    plot_loss_tensor(observed_losses = loss_observer.losses)
-    #model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
     ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
     X_test = X_test[:, 1:]
-    X_test_hat = model(X_test)
+    Z_batch_hat, X_test_hat = model(X_test)
 
-    loss_reconst = reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+    loss_reconst = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
     print(
         f"After {epochs} epochs with {n_iterations} iterations each\n"
         f"Avg. Loss on testing subset: {loss_reconst}\n"
@@ -178,23 +167,23 @@ def train_AE_NVAE_iso():
 
 
 
-def train_VAE_iso():
+def VAE_iso_training_procedure():
 
-    # check computation backend to use
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("-device:", device)
-
+    from training.procedure_iso import AEIsoTrainingProcedure
+    
     ###--- Meta ---###
     epochs = 2
-    batch_size = 32
+    batch_size = 50
     latent_dim = 10
 
 
     ###--- Dataset ---###
     normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
+    #normaliser = None
+
     dataset_builder = DatasetBuilder(
-        kind = 'max',
+        kind = 'key',
         normaliser = normaliser,
         exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     )
@@ -208,7 +197,7 @@ def train_VAE_iso():
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
-    
+
 
     ###--- Models ---###
     input_dim = dataset.X_dim - 1
@@ -222,12 +211,16 @@ def train_VAE_iso():
 
 
     ###--- Observers ---###
-    latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=len(train_dataset), batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
+    n_iterations = len(dataloader)
+    dataset_size = len(train_dataset)
+
+    latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
     loss_observer = CompositeLossTermObserver(
         n_epochs = epochs, 
-        n_iterations = len(dataloader),
+        n_iterations = n_iterations,
         loss_names = ['Log-Likelihood', 'KL-Divergence'],
     )
+
 
     ###--- Loss ---###
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
@@ -236,160 +229,7 @@ def train_VAE_iso():
     kld_term = GaussianMCKLDiv()
 
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    #loss = Loss(CompositeLossTerm(**loss_terms))
-    loss = Loss(CompositeLossTermObs(observer = loss_observer, **loss_terms))
-
-    test_reconstr_loss = Loss(AEAdapter(RelativeLpNorm(p = 2)))
-
-    ###--- Optimizer & Scheduler ---###
-    optimizer = Adam(model.parameters(), lr = 1e-3)
-    scheduler = ExponentialLR(optimizer, gamma = 0.1)
-
-
-    ###--- Training Loop ---###
-    pbar = tqdm(range(epochs))
-
-    for epoch in pbar:
-        
-        for iter_idx, (X_batch, _) in enumerate(dataloader):
-            
-            X_batch = X_batch[:, 1:]
-            #print(X_batch.shape)
-            #--- Forward Pass ---#
-            optimizer.zero_grad()
-            
-            Z_batch, infrm_dist_params, genm_dist_params = model(X_batch)
-
-            loss_reconst = loss(
-                X_batch = X_batch,
-                Z_batch = Z_batch,
-                genm_dist_params = genm_dist_params,
-                infrm_dist_params = infrm_dist_params,
-            )
-
-    
-            #--- Backward Pass ---#
-            loss_reconst.backward()
-
-            latent_observer(epoch = epoch, iter_idx = iter_idx, infrm_dist_params = infrm_dist_params)
-
-            optimizer.step()
-
-
-        scheduler.step()
-
-    loss_observer.plot_results()
-    #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
-    latent_observer.plot_dist_params_batch(torch.norm)
-
-    ###--- Test Loss ---###
-    X_test = test_dataset.dataset.X_data[test_dataset.indices]
-    X_test = X_test[:, 1:]
-
-    Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
-
-    mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
-    mu_r, logvar_r = genm_dist_params.unbind(dim = -1)
-
-    var_l = torch.exp(logvar_l)
-    var_r = torch.exp(logvar_r)
-
-    #X_test_hat = model.reparameterise(genm_dist_params)
-    X_test_hat = mu_r
-
-    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
-    print(
-        f'After {epochs} epochs with {len(dataloader)} iterations each\n'
-        f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
-        f'----------------------------------------\n\n'
-        f'Inference M. mean:\n'
-        f'max:\n{mu_l.max()}\n'
-        f'min:\n{mu_l.min()}\n\n'
-        f'Inference M. Var:\n'
-        f'max:\n{var_l.max()}\n'
-        f'min:\n{var_l.min()}\n'
-        f'----------------------------------------\n\n'
-        f'Generative M. mean:\n'
-        f'max:\n{mu_r.max()}\n'
-        f'min:\n{mu_r.min()}\n\n'
-        f'Generative M. Var:\n'
-        f'max:\n{var_r.max()}\n'
-        f'min:\n{var_r.min()}\n'
-        f'----------------------------------------\n\n'
-    )
-
-
-
-
-def VAE_iso_training_procedure_test():
-
-    from training.training_procedure import VAEIsoTrainingProcedure
-    # check computation backend to use
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("-device:", device)
-
-
-    ###--- Meta ---###
-    epochs = 4
-    batch_size = 100
-    latent_dim = 5
-
-
-    ###--- Load Data ---###
-    data_dir = Path("./data")
-    tensor_dir = data_dir / "tensors"
-
-    metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
-
-    X_data: torch.Tensor = torch.load(f = tensor_dir / 'X_data_tensor.pt')
-    y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
-
-
-    ##--- Normalise ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = RobustScalingNormaliser()
-
-    with torch.no_grad():
-        X_data[:, 1:] = normaliser.normalise(X_data[:, 1:])
-        print(X_data.shape)
-
-        X_data_isnan = X_data.isnan().all(dim = 0)
-        X_data = X_data[:, ~X_data_isnan]
-        print(X_data.shape)
-
-
-    ###--- Dataset---###
-    dataset = TensorDataset(X_data, y_data, metadata_df)
-    
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-
-
-    ###--- DataLoader ---###
-    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
-
-
-    ###--- Models ---###
-    input_dim = dataset.X_dim - 1
-    print(f"Input_dim: {input_dim}")
-
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
-
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
-
-    model = GaussVAE(encoder = encoder, decoder = decoder)
-
-
-    ###--- Loss ---###
-    ll_term = Weigh(GaussianDiagLL(), weight = -1)
-
-    kld_term = GaussianAnaKLDiv()
-    #kld_term = GaussianMCKLDiv()
-
-    loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    loss = Loss(CompositeLossTerm(**loss_terms))
+    loss = Loss(CompositeLossTerm(observer = loss_observer, **loss_terms))
 
     test_reconstr_loss = Loss(AEAdapter(RelativeLpNorm(p = 2)))
 
@@ -399,35 +239,28 @@ def VAE_iso_training_procedure_test():
     scheduler = ExponentialLR(optimizer, gamma = 0.5)
 
 
-    ###--- Set up Observers ---###
-    n_iterations = len(dataloader)
-    dataset_size = len(train_dataset)
-
-    loss_observer = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations)
-    latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
-    model_observer = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
-
-
     ###--- Training Procedure ---###
-    training_procedure = VAEIsoTrainingProcedure(
+    training_procedure = AEIsoTrainingProcedure(
         train_dataloader = dataloader,
-        vae_model = model,
+        ae_model = model,
         loss = loss,
         optimizer = optimizer,
         scheduler = scheduler,
         epochs = epochs,
-        #batch_size = batch_size
     )
 
-    training_procedure.register_observers(loss_observer, latent_observer, model_observer)
+    training_procedure.register_observers(
+        latent_observer, 
+        #model_observer,
+    )
     
     training_procedure()
 
 
     ###--- Test Observers ---###
-    plot_loss_tensor(loss_observer.losses)
-    latent_observer.plot_dist_params_batch(functional = torch.max)
-    model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+    loss_observer.plot_results()
+    latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
+    #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
 
     ###--- Test Loss ---###
@@ -716,7 +549,7 @@ def train_joint_seq_VAE():
     #kld_term = GaussianMCKLDiv()
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    vae_loss_term = CompositeLossTermAlt(print_losses = True, **vae_loss_terms)
+    vae_loss_term = CompositeLossTerm(**vae_loss_terms)
 
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
@@ -949,7 +782,7 @@ def train_joint_epoch_wise_AE():
         'Regression Term': Weigh(regr_loss_term, weight = 0.9),
     }
 
-    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTerm(observer = loss_observer, **ete_loss_terms))
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1138,7 +971,7 @@ def train_joint_epoch_wise_VAE():
     #kld_term = GaussianMCKLDiv()
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    vae_loss_term = CompositeLossTermAlt(print_losses = True, **vae_loss_terms)
+    vae_loss_term = CompositeLossTerm(**vae_loss_terms)
 
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
@@ -1154,7 +987,7 @@ def train_joint_epoch_wise_VAE():
 
     ###--- Losses ---###
     vae_loss = Loss(vae_loss_term)
-    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTerm(observer = loss_observer, **ete_loss_terms))
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1358,7 +1191,7 @@ def train_joint_epoch_wise_VAE_recon():
     kld_term = GaussianMCKLDiv()
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    vae_elbo_term = CompositeLossTermAlt(print_losses = True, **vae_loss_terms)
+    vae_elbo_term = CompositeLossTerm(**vae_loss_terms)
 
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
@@ -1374,7 +1207,7 @@ def train_joint_epoch_wise_VAE_recon():
 
     ###--- Losses ---###
     vae_loss = Loss(vae_elbo_term)
-    ete_loss = Loss(CompositeLossTermObs(observer= loss_observer, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTerm(observer= loss_observer, **ete_loss_terms))
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1511,12 +1344,8 @@ def train_joint_epoch_wise_VAE_recon():
 
 def train_joint_epoch_procedure():
 
-    from training.training_procedure import JointEpochTrainingProcedure
+    from training.procedure_joint import JointEpochTrainingProcedure
     from datasets import SplitSubsetFactory
-
-    # check computation backend to use
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("-device:", device)
 
     ###--- Meta ---###
     epochs = 3
@@ -1594,7 +1423,7 @@ def train_joint_epoch_procedure():
         'Regression Term': Weigh(regr_loss_term, weight = 0.9),
     }
 
-    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTerm(observer = loss_observer, **ete_loss_terms))
     #reconstr_loss = Loss(Observe(observer = ae_loss_obs, loss_term = reconstr_loss_term))
     reconstr_loss = Loss(loss_term = reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
@@ -1669,10 +1498,6 @@ def train_joint_epoch_procedure():
 def train_baseline():
 
     from datasets import SplitSubsetFactory
-
-    # check computation backend to use
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("-device:", device)
 
     ###--- Meta ---###
     epochs = 4
@@ -1795,15 +1620,19 @@ Main Executions
 """
 if __name__=="__main__":
 
-    ###--- AE in isolation ---###
-    #train_AE_NVAE_iso()
+    # check computation backend to use
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("-device:", device)
 
+    ###--- AE in isolation ---###
+    AE_iso_training_procedure()
+    
     ###--- VAE in isolation ---###
     #train_VAE_iso()
-    #VAE_iso_training_procedure_test()
+    #VAE_iso_training_procedure()
 
     ###--- Compositions ---###
-    train_joint_seq_AE()
+    #train_joint_seq_AE()
     #train_joint_seq_VAE()
     #train_joint_epoch_wise_AE()
     #train_joint_epoch_wise_VAE()
@@ -1811,6 +1640,6 @@ if __name__=="__main__":
     #train_joint_epoch_procedure()
 
     ###--- Baseline ---###
-    train_baseline()
+    #train_baseline()
 
     pass
