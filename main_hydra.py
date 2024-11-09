@@ -17,11 +17,11 @@ from pathlib import Path
 from tqdm import tqdm
 
 from models.encoders import (
-    GeneralLinearReluEncoder,
+    LinearEncoder,
 )
 
 from models.decoders import (
-    GeneralLinearReluDecoder,
+    LinearDecoder,
 )
 
 from models.var_encoders import VarEncoder
@@ -86,8 +86,8 @@ def train_AE_iso_hydra(cfg: DictConfig):
     ###--- Models AE ---###
     input_dim = dataset.X_dim - 1
 
-    # encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e)
-    # decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d)
+    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e)
+    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d)
 
     # model = AE(encoder = encoder, decoder = decoder)
 
@@ -315,8 +315,8 @@ def train_joint_epoch_procedure(cfg: DictConfig):
     ###--- Models ---###
     input_dim = dataset.X_dim - 1
 
-    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e)
-    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d)
+    encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e)
+    decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d)
 
     # encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e)
     # decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d)

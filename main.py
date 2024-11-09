@@ -11,11 +11,11 @@ from pathlib import Path
 from tqdm import tqdm
 
 from models.encoders import (
-    GeneralLinearReluEncoder,
+    LinearEncoder,
 )
 
 from models.decoders import (
-    GeneralLinearReluDecoder,
+    LinearDecoder,
 )
 
 from models.var_encoders import VarEncoder
@@ -89,9 +89,9 @@ def AE_iso_training_procedure():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    # encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
+    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
-    # decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
+    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
     # model = AE(encoder = encoder, decoder = decoder)
 
@@ -341,9 +341,9 @@ def train_joint_seq_AE():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
+    encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
-    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
+    decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 5)
 
     regressor = LinearRegr(latent_dim = latent_dim)
 
@@ -945,8 +945,8 @@ def AE_joint_epoch_procedure():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = GeneralLinearReluEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
-    decoder = GeneralLinearReluDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
     # encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
     # decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
