@@ -1,0 +1,35 @@
+
+defaults:
+    - _self_
+    - override hydra/job_logging: stdout
+
+
+hydra:
+    mode: MULTIRUN
+    
+    sweep:
+        dir: results/multirun
+        subdir: ${hydra.job.name}
+    
+    output_subdir: null
+
+    job:
+        name: "joint_ae_regr_test"
+
+    sweeper:
+        params:
+          +epochs: 1, 2
+          +batch_size: 25
+          +latent_dim: 5, 10
+
+          +n_layers_e: 5
+          +n_layers_d: 5
+
+          +encoder_lr: 1e-3
+          +decoder_lr: 1e-3
+          +regr_lr: 1e-2
+          +scheduler_gamma: 0.9
+
+          +ete_regr_weight: 0.8, 0.9
+
+          
