@@ -1261,7 +1261,7 @@ def train_baseline():
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)
 
-    loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
+    loss_obs = LossTermObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
 
 
     ###--- Losses ---###
@@ -1269,8 +1269,8 @@ def train_baseline():
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
-    regr_loss = Loss(regr_loss_term)
-
+    regr_loss = Loss(Observe(observer = loss_obs, loss_term = regr_loss_term))
+    regr_loss_test = Loss(regr_loss_term)
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
@@ -1306,9 +1306,6 @@ def train_baseline():
 
             optimiser.step()
 
-            #--- Observer Call ---#
-            loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_regr)
-
 
         scheduler.step()
 
@@ -1328,7 +1325,7 @@ def train_baseline():
 
     y_test_l_hat = regressor(X_test_l)
 
-    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+    loss_regr = regr_loss_test(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
     print(
         f"Regression Baseline:\n"
         f"---------------------------------------------------------------\n"
@@ -1362,9 +1359,9 @@ if __name__=="__main__":
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
     #AE_joint_epoch_procedure()
-    VAE_joint_epoch_procedure()
+    #VAE_joint_epoch_procedure()
 
     ###--- Baseline ---###
-    #train_baseline()
+    train_baseline()
 
     pass

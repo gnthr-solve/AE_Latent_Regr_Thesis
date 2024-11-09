@@ -429,6 +429,102 @@ def train_joint_epoch_procedure(cfg: DictConfig):
 
 
 
+@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="baseline_regr_cfg_sweep")
+def train_baseline(cfg: DictConfig):
+
+    ###--- Meta ---###
+    epochs = cfg.epochs
+    batch_size = cfg.batch_size
+
+    regr_lr = cfg.regr_lr
+    scheduler_gamma = cfg.scheduler_gamma
+
+
+    ###--- DataLoader ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.8)
+    subsets = subset_factory.create_splits()
+
+    regr_train_ds = subsets['train_labeled']
+
+    dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    input_dim = dataset.X_dim - 1
+
+    regressor = LinearRegr(latent_dim = input_dim)
+
+
+    ###--- Losses ---###
+    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+
+    regr_loss = Loss(regr_loss_term)
+
+
+    ###--- Optimizer & Scheduler ---###
+    optimiser = Adam([
+        {'params': regressor.parameters(), 'lr': regr_lr},
+    ])
+
+    scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
+
+
+    ###--- Training Loop Joint---###
+    pbar = tqdm(range(epochs))
+
+    for epoch in pbar:
+        
+        ###--- Training Loop End-To-End ---###
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
+            
+            X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            y_hat_batch = regressor(X_batch)
+
+            loss_regr = regr_loss(
+                y_batch = y_batch,
+                y_hat_batch = y_hat_batch,
+            )
+
+            #--- Backward Pass ---#
+            loss_regr.backward()
+
+            optimiser.step()
+
+            
+        scheduler.step()
+
+
+    ###--- Test Loss ---###
+    regr_test_ds = subsets['test_labeled']
+
+    X_test_l = dataset.X_data[regr_test_ds.indices]
+    y_test_l = dataset.y_data[regr_test_ds.indices]
+
+    X_test_l = X_test_l[:, 1:]
+    y_test_l = y_test_l[:, 1:]
+
+    y_test_l_hat = regressor(X_test_l)
+
+    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+    
+    results.append({
+        'epochs': epochs,
+        'batch_size': batch_size,
+        'regr_lr': regr_lr,
+        'scheduler_gamma': scheduler_gamma,
+        'test_loss_regr': loss_regr.item(),
+    })
+
+
+
+
 """
 Main Executions
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -444,12 +540,13 @@ if __name__=="__main__":
 
 
     ###--- Dataset ---###
+    kind = 'key'
     normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
     #normaliser = None
     
     dataset_builder = DatasetBuilder(
-        kind = 'key',
+        kind = kind,
         normaliser = normaliser,
         exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     )
