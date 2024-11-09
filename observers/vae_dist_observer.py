@@ -16,8 +16,9 @@ from matplotlib.figure import Figure
 from .training_observer import IterObserver
 
 """
-VAE Latent Observer
+VAELatentObserver
 -------------------------------------------------------------------------------------------------------------------------------------------
+Designed to track the distribution parameters that are output by the inference model of a VAE.
 """
 class VAELatentObserver(IterObserver):
 
@@ -147,3 +148,27 @@ class VAELatentObserver(IterObserver):
 
         plt.tight_layout()
         plt.show()
+
+
+
+
+"""
+LatentVariableObserver
+-------------------------------------------------------------------------------------------------------------------------------------------
+Designed to track the latent variables that are put out by an encoder model.
+The motivation is to be able to investigate the properties of the latent space.
+"""
+class LatentVariableObserver(IterObserver):
+
+    def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, latent_dim: int):
+
+        self.dist_params = torch.zeros(size = (n_epochs, dataset_size, latent_dim)) 
+        self.batch_size = batch_size
+
+
+    def __call__(self, epoch: int, iter_idx: int, Z_batch: Tensor, **kwargs):
+
+        start_idx = self.batch_size * iter_idx
+        end_idx = self.batch_size * (iter_idx + 1)
+
+        self.dist_params[epoch, start_idx:end_idx] = Z_batch.detach()

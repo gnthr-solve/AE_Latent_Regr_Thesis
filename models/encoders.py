@@ -55,3 +55,8 @@ class LinearEncoder(nn.Module):
         x = self.layers[-1](x)
 
         return x
+    
+
+"""
+NOTE: PReLU acts in the same way as LeakyReLU, but it learns the slope of the negative part of the function.
+"""

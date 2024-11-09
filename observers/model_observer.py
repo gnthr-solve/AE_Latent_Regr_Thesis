@@ -20,6 +20,13 @@ from helper_tools import plot_training_losses, plot_param_norms
 """
 ModelObserver
 -------------------------------------------------------------------------------------------------------------------------------------
+Observer that monitors both the values and gradients of the parameters of a Module and its Submodules.
+This can allow identifying trends and potential issues of exploding or vanishing gradients and values.
+
+NOTE:
+This Observer easily produces memory overflow, as, especially for large input sizes, the parameter values and gradients
+of the NN layer weights can be too large to store for every iteration. 
+Usage failed for the 'max' dataset where the input dimension was ~1300, but worked for 'key' dataset with input dimension ~180.
 """
 class ModelObserver(IterObserver):
 

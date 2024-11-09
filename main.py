@@ -40,8 +40,7 @@ from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
-from observers.ae_param_observer import AEParameterObserver
-from observers import LossTermObserver, CompositeLossTermObserver, TrainingLossObserver, ModelObserver, VAELatentObserver
+from observers import LossTermObserver, CompositeLossTermObserver, LossObserver, ModelObserver, VAELatentObserver
 
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
@@ -356,10 +355,10 @@ def train_joint_seq_AE():
     n_iterations_regr = len(dataloader_regr)
 
     #ae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = ae_model)
-    ae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
+    #ae_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
 
     regr_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_regr, model = regr_model)
-    regr_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
+    regr_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
 
 
     ###--- Losses ---###
@@ -399,7 +398,7 @@ def train_joint_seq_AE():
 
             #--- Observer Call ---#
             #ae_model_obs(epoch = epoch, iter_idx = iter_idx, model = ae_model)
-            ae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
+            #ae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_reconst)
 
 
         scheduler_ae.step()
@@ -434,7 +433,7 @@ def train_joint_seq_AE():
 
 
     ###--- Plot Observations ---###
-    plot_loss_tensor(observed_losses = ae_loss_obs.losses)
+    #plot_loss_tensor(observed_losses = ae_loss_obs.losses)
     plot_loss_tensor(observed_losses = regr_loss_obs.losses)
 
     #ae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
@@ -525,9 +524,9 @@ def train_joint_seq_VAE():
     n_iterations_regr = len(dataloader_regr)
 
     vae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = vae_model)
-    vae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
+    #vae_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
 
-    regr_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
+    #regr_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
 
 
     ###--- Loss Terms ---###
@@ -598,7 +597,7 @@ def train_joint_seq_VAE():
 
             #--- Observer Call ---#
             vae_model_obs(epoch = epoch, iter_idx = iter_idx, model = vae_model)
-            vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_vae)
+            #vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_vae)
 
         scheduler_vae.step()
 
@@ -627,15 +626,15 @@ def train_joint_seq_VAE():
             optimiser_regr.step()
 
             #--- Observer Call ---#
-            regr_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_regr)
+            #regr_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_regr)
 
 
         scheduler_regr.step()
 
 
     ###--- Plot Observations ---###
-    plot_loss_tensor(observed_losses = vae_loss_obs.losses)
-    plot_loss_tensor(observed_losses = regr_loss_obs.losses)
+    #plot_loss_tensor(observed_losses = vae_loss_obs.losses)
+    #plot_loss_tensor(observed_losses = regr_loss_obs.losses)
 
     vae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
     
@@ -739,7 +738,7 @@ def train_joint_epoch_wise_VAE_recon():
     n_iterations_vae = len(dataloader_ae)
     n_iterations_regr = len(dataloader_regr)
 
-    vae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_vae)
+    #vae_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_vae)
 
     loss_observer = CompositeLossTermObserver(
         n_epochs = epochs, 
@@ -821,7 +820,7 @@ def train_joint_epoch_wise_VAE_recon():
             optimiser_vae.step()
 
             #--- Observer Call ---#
-            vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_vae)
+            #vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_vae)
 
 
         ###--- Training Loop End-To-End ---###
@@ -857,7 +856,7 @@ def train_joint_epoch_wise_VAE_recon():
 
 
     ###--- Plot Observations ---###
-    plot_loss_tensor(observed_losses = vae_loss_obs.losses)
+    #plot_loss_tensor(observed_losses = vae_loss_obs.losses)
     loss_observer.plot_results()
 
 
@@ -1108,8 +1107,6 @@ def VAE_joint_epoch_procedure():
     n_iterations_vae = len(dataloader_ae)
     n_iterations_regr = len(dataloader_regr)
 
-    vae_loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_vae)
-
     loss_observer = CompositeLossTermObserver(
         n_epochs = epochs, 
         n_iterations = n_iterations_regr,
@@ -1177,7 +1174,6 @@ def VAE_joint_epoch_procedure():
 
 
     ###--- Plot Observations ---###
-    plot_loss_tensor(observed_losses = vae_loss_obs.losses)
     loss_observer.plot_results()
 
 
@@ -1265,7 +1261,7 @@ def train_baseline():
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)
 
-    loss_obs = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
+    loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
 
 
     ###--- Losses ---###

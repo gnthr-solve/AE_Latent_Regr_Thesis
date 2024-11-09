@@ -13,7 +13,7 @@ from .loss_classes import LossTerm
 
 
 """
-Decorators - Weighted Loss
+Decorators - Weighted LossTerm
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 class Weigh(LossTerm):
@@ -32,6 +32,12 @@ class Weigh(LossTerm):
     
 
 
+"""
+Decorators - Observed LossTerm
+-------------------------------------------------------------------------------------------------------------------------------------------
+CompositeLossTerm allows to register an Observer directly, however for a single LossTerm this is not a good approach.
+Single LossTerms can instead be wrapped by the Observe decorator, allowing to track the loss values in a similar fashion.
+"""
 class Observe(LossTerm):
 
     def __init__(self, observer, loss_term: LossTerm):

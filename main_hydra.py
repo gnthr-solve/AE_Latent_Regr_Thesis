@@ -46,8 +46,7 @@ from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
-from observers.ae_param_observer import AEParameterObserver
-from observers import LossTermObserver, CompositeLossTermObserver, TrainingLossObserver, ModelObserver, VAELatentObserver
+from observers import LossTermObserver, CompositeLossTermObserver, LossObserver, ModelObserver, VAELatentObserver
 
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
@@ -105,7 +104,7 @@ def train_AE_iso_hydra(cfg: DictConfig):
     ###--- Observers ---###
     n_iterations = len(dataloader)
     model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations, model = model)
-    loss_observer = TrainingLossObserver(n_epochs = epochs, n_iterations = n_iterations)
+    #loss_observer = LossObserver(n_epochs = epochs, n_iterations = n_iterations)
 
 
     ###--- Loss ---###
@@ -140,7 +139,7 @@ def train_AE_iso_hydra(cfg: DictConfig):
 
 
     ###--- Test Observers ---###
-    loss_observer.plot_results()
+    #loss_observer.plot_results()
     #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 

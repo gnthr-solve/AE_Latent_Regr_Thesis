@@ -23,8 +23,10 @@ class LossTerm(ABC):
 
 
 """
-Single-Term Loss
+Loss
 -------------------------------------------------------------------------------------------------------------------------------------------
+Loss converts a single or composite LossTerm into an actual loss function, 
+by aggregating the loss term values of a batch to a single scalar value.
 """
 class Loss:
 

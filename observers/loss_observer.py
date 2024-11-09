@@ -7,49 +7,84 @@ from torch.nn import Module
 
 from itertools import product
 from functools import wraps
+from abc import ABC, abstractmethod
 
 import matplotlib.pyplot as plt
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from .training_observer import IterObserver
-
 from helper_tools import plot_training_losses, plot_param_norms
 
 
+"""
+LossComponentObserver ABC
+-------------------------------------------------------------------------------------------------------------------------------------------
+Abstract Base Class for Observers for either a Loss or a LossTerm.
+These Observers are incorporated and called in the loss components themselves, 
+while IterObservers are incorporated and called in a TrainingProcedure class.
+
+This distinction is necessary to track the contributions of individual loss components in a composite loss function.
+"""
+class LossComponentObserver(ABC):
+
+    @abstractmethod
+    def __call__(self, *args, **kwargs):
+        pass
+
+
+
 
 """
-Loss Observer Prime
+LossObserver
 -------------------------------------------------------------------------------------------------------------------------------------------
+Tracks scalar losses, i.e. batch-aggregated single loss values, produced by Loss instances.
 """
-class TrainingLossObserver(IterObserver):
+class LossObserver(LossComponentObserver):
 
     def __init__(self, n_epochs: int, n_iterations: int):
         
+        self.n_epochs = n_epochs
+        self.n_iterations = n_iterations
+
         self.losses = torch.zeros(size = (n_epochs, n_iterations))
+
+        self.epoch = 0
+        self.iter_idx = 0
     
 
-    def __call__(self, epoch: int, iter_idx: int, batch_loss: Tensor, **kwargs):
+    def __call__(self, batch_loss: Tensor, **kwargs):
 
         if torch.isnan(batch_loss).any():
-            print(f"Loss at epoch = {epoch}, iteration = {iter_idx} contains NaN values")
+            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains NaN values")
             raise StopIteration
         
         if torch.isinf(batch_loss).any():
-            print(f"Loss at epoch = {epoch}, iteration = {iter_idx} contains Inf values")
+            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
             raise StopIteration
         
-        self.losses[epoch, iter_idx] = batch_loss.detach()
+        self.losses[self.epoch, self.iter_idx] = batch_loss.detach()
+
+        #update indices
+        if self.iter_idx + 1 == self.n_iterations:
+
+            self.epoch += 1
+            self.iter_idx = 0
+
+        else:
+            self.iter_idx += 1
 
 
 
 """
-DictLoss Observer Prime
+LossTermObserver
 -------------------------------------------------------------------------------------------------------------------------------------------
-"""
+For tracking individual loss terms that can occur by themselves or in a composite loss term.
 
-class LossTermObserver(IterObserver):
+Suppose the same LossTerm is used both in isolation to create a Loss instance, for example for an autoencoder,
+and at the same time in a CompositeLossTerm, when also used in an End-to-End fashion in a composed model.
+"""
+class LossTermObserver(LossComponentObserver):
 
     def __init__(self, n_epochs: int, n_iterations: int):
         
@@ -86,8 +121,15 @@ class LossTermObserver(IterObserver):
 
 
 
+"""
+CompositeLossTermObserver
+-------------------------------------------------------------------------------------------------------------------------------------------
+This Observer is designed to track all the LossTerms in a CompositeLossTerm individually.
 
-class CompositeLossTermObserver(IterObserver):
+For example in a VAE loss, we have both a Log-Likelihood and a KL-Divergence term, 
+and understanding the training process requires understanding the contributions of both.
+"""
+class CompositeLossTermObserver(LossComponentObserver):
 
     def __init__(self, n_epochs: int, n_iterations: int, loss_names: list[str]):
         
