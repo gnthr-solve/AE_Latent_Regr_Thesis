@@ -18,7 +18,11 @@ hydra:
     job:
         #name: "Test_${hydra.job.id}"
         name: "Test"
-        
+    
+    callbacks:
+        save_results: 
+            _target_: helper_tools.SaveResultsCallback
+
     #job_logging: 
 
     sweeper:

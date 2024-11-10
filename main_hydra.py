@@ -59,7 +59,7 @@ from helper_tools import DatasetBuilder
 
 
 
-@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="ae_iso_cfg_sweep")
+@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="ae_iso_cfg_test")
 def train_AE_iso_hydra(cfg: DictConfig):
 
     ###--- Meta ---###
@@ -147,11 +147,11 @@ def train_AE_iso_hydra(cfg: DictConfig):
     ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
     X_test = X_test[:, 1:]
-    X_test_hat = model(X_test)
+    Z_batch_hat, X_test_hat = model(X_test)
 
     loss_reconst = reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
 
-    results.append({
+    return {
         'epochs': epochs,
         'batch_size': batch_size,
         'latent_dim': latent_dim,
@@ -160,7 +160,7 @@ def train_AE_iso_hydra(cfg: DictConfig):
         'learning_rate': learning_rate,
         'scheduler_gamma': scheduler_gamma,
         'test_loss': loss_reconst.item(),
-    })
+    }
     
 
 
@@ -265,7 +265,7 @@ def train_VAE_iso_hydra(cfg: DictConfig):
 
     loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
 
-    results.append({
+    return {
         'epochs': epochs,
         'batch_size': batch_size,
         'latent_dim': latent_dim,
@@ -274,12 +274,12 @@ def train_VAE_iso_hydra(cfg: DictConfig):
         'learning_rate': learning_rate,
         'scheduler_gamma': scheduler_gamma,
         'test_loss': loss_reconst_test.item(),
-    })
+    }
 
 
 
 
-@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="joint_ae_regr_cfg_test")
+@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="joint_ae_regr_cfg_sweep")
 def train_joint_epoch_procedure(cfg: DictConfig):
 
     ###--- Meta ---###
@@ -411,7 +411,7 @@ def train_joint_epoch_procedure(cfg: DictConfig):
 
     loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
     
-    results.append({
+    return {
         'epochs': epochs,
         'batch_size': batch_size,
         'latent_dim': latent_dim,
@@ -424,7 +424,7 @@ def train_joint_epoch_procedure(cfg: DictConfig):
         'ete_regr_weight': ete_regr_weight,
         'test_loss_reconst': loss_reconst.item(),
         'test_loss_regr': loss_regr.item(),
-    })
+    }
 
 
 
@@ -514,13 +514,13 @@ def train_baseline(cfg: DictConfig):
 
     loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
     
-    results.append({
+    return {
         'epochs': epochs,
         'batch_size': batch_size,
         'regr_lr': regr_lr,
         'scheduler_gamma': scheduler_gamma,
         'test_loss_regr': loss_regr.item(),
-    })
+    }
 
 
 
@@ -531,7 +531,9 @@ Main Executions
 """
 if __name__=="__main__":
     
-    experiment_name = 'joint_ae_regr_test'
+    #experiment_name = 'joint_ae_regr_norm'
+    #experiment_name = 'baseline_regr'
+    experiment_name = 'ae_iso_test'
 
     ###--- Device ---###
     # check computation backend to use
@@ -556,14 +558,9 @@ if __name__=="__main__":
 
 
     ###--- Setup and calculate results ---###
-    results = []
-
-    #train_AE_iso_hydra()
+    train_AE_iso_hydra()
     #train_VAE_iso_hydra()
-    train_joint_epoch_procedure()
+    #train_joint_epoch_procedure()
+    #train_baseline()
 
-    df = pd.DataFrame(results)
     
-    print(df)
-    
-    df.to_csv(f"./results/{experiment_name}.csv", index=False)
