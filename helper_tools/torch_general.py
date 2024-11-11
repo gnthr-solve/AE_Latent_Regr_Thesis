@@ -7,6 +7,7 @@ Torch General Helper Tools (GHTs) - DataFrameNamedTupleDataset
 import torch
 import torch.nn as nn
 import numpy as np
+import re
 
 from torch.nn import Module
 from torch import Tensor
@@ -214,3 +215,34 @@ def plot_loss_tensor(observed_losses: Tensor):
     plt.ylabel('Loss')
     plt.title('Training Loss')
     plt.show()
+
+
+
+
+
+"""
+Torch GHTs - plot_loss_tensor
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def plot_latent_with_reconstruction_error(latent_tensor: Tensor, loss_tensor: Tensor, title: str, save: bool = False):
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    scatter = ax.scatter(latent_tensor[:, 0], latent_tensor[:, 1], latent_tensor[:, 2], c = loss_tensor, cmap = 'RdYlGn_r')
+
+    # Add colorbar
+    colorbar = fig.colorbar(scatter)
+    colorbar.set_label('Reconstruction Error')
+
+    # Set plot labels and title
+    ax.set_xlabel('$x_l$')
+    ax.set_ylabel('$y_l$')
+    ax.set_zlabel('$z_l$')
+    plt.title(title)
+
+    plt.show()
+
+    if save:
+        file_name = re.sub(r'\s+', '_', title).lower()
+        plt.savefig(f"./results/figures/{file_name}.png", format='png')

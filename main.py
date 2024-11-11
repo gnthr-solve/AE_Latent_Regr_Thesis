@@ -49,6 +49,7 @@ from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, Robust
 from datasets import SplitSubsetFactory
 
 from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_characteristics, simple_timer
+from helper_tools import plot_latent_with_reconstruction_error
 from helper_tools import DatasetBuilder
 
 """
@@ -58,15 +59,15 @@ Main Functions - Training
 def AE_iso_training_procedure():
     
     ###--- Meta ---###
-    epochs = 2
+    epochs = 3
     batch_size = 50
-    latent_dim = 10
+    latent_dim = 3
 
 
     ###--- Dataset ---###
     #normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    normaliser = None
+    normaliser = ZScoreNormaliser()
+    #normaliser = None
 
     dataset_builder = DatasetBuilder(
         kind = 'key',
@@ -98,9 +99,9 @@ def AE_iso_training_procedure():
     encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
     decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
 
-    model = NaiveVAE_LogVar(encoder = encoder, decoder = decoder, input_dim = input_dim)
+    #model = NaiveVAE_LogVar(encoder = encoder, decoder = decoder, input_dim = input_dim)
     #model = NaiveVAE_LogSigma(encoder = encoder, decoder = decoder)
-    #model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+    model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
 
 
     ###--- Observers ---###
@@ -122,7 +123,7 @@ def AE_iso_training_procedure():
     loss_terms = {'Reconstruction': reconstr_term}
     reconstr_loss = Loss(CompositeLossTerm(observer=loss_observer, **loss_terms))
 
-    test_reconstr_loss = Loss(test_reconstr_term)
+    test_reconstr_loss = test_reconstr_term
 
 
     ###--- Optimizer & Scheduler ---###
@@ -157,14 +158,25 @@ def AE_iso_training_procedure():
     ###--- Test Loss ---###
     X_test = test_dataset.dataset.X_data[test_dataset.indices]
     X_test = X_test[:, 1:]
-    Z_batch_hat, X_test_hat = model(X_test)
 
-    loss_reconst = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+    with torch.no_grad():
+
+        Z_batch_hat, X_test_hat = model(X_test)
+
+        loss_reconst = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+
     print(
         f"After {epochs} epochs with {n_iterations} iterations each\n"
-        f"Avg. Loss on testing subset: {loss_reconst}\n"
+        f"Avg. Loss on testing subset: {loss_reconst.mean()}\n"
     )
 
+    if latent_dim == 3:
+        title = f'AE Normalised (epochs = {epochs})'
+        plot_latent_with_reconstruction_error(
+            latent_tensor = Z_batch_hat,
+            loss_tensor = loss_reconst,
+            title = title
+        )
 
 
 
@@ -296,6 +308,139 @@ def VAE_iso_training_procedure():
         f'max:\n{var_r.max()}\n'
         f'min:\n{var_r.min()}\n'
         f'----------------------------------------\n\n'
+    )
+
+
+
+
+def VAE_latent_visualisation():
+    
+    from helper_tools import plot_latent_with_reconstruction_error
+
+    ###--- Meta ---###
+    epochs = 3
+    batch_size = 30
+    latent_dim = 3
+
+
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
+
+    dataset_builder = DatasetBuilder(
+        kind = 'key',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+
+    ###--- DataLoader ---###
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
+
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
+
+    model = GaussVAE(encoder = encoder, decoder = decoder)
+
+
+    ###--- Observers ---###
+    n_iterations = len(dataloader)
+    dataset_size = len(train_dataset)
+
+    latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
+    loss_observer = CompositeLossTermObserver(
+        n_epochs = epochs, 
+        n_iterations = n_iterations,
+        loss_names = ['Log-Likelihood', 'KL-Divergence'],
+    )
+
+
+    ###--- Loss Construction ---###
+    ll_term = Weigh(GaussianDiagLL(), weight = -1)
+
+    #--- Beta VAE Loss ---#
+    beta = 10
+    kld_term = GaussianAnaKLDiv()
+    #kld_term = GaussianMCKLDiv()
+    kld_term = Weigh(kld_term, weight = beta)
+
+    #--- Composition ---#
+    loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
+    loss = Loss(CompositeLossTerm(observer = loss_observer, **loss_terms))
+
+    test_reconstr_loss = AEAdapter(RelativeLpNorm(p = 2))
+
+
+    ###--- Optimizer & Scheduler ---###
+    gamma = 0.5
+    lr = 1e-3
+    print(f"Learning rates: {[lr * gamma**epoch for epoch in range(epochs)]}")
+    optimizer = Adam(model.parameters(), lr = lr)
+    scheduler = ExponentialLR(optimizer, gamma = gamma)
+
+
+    ###--- Training Procedure ---###
+    training_procedure = AEIsoTrainingProcedure(
+        train_dataloader = dataloader,
+        ae_model = model,
+        loss = loss,
+        optimizer = optimizer,
+        scheduler = scheduler,
+        epochs = epochs,
+    )
+
+    training_procedure.register_observers(
+        latent_observer, 
+        #model_observer,
+    )
+    
+    training_procedure()
+
+
+    ###--- Test Observers ---###
+    loss_observer.plot_results()
+    #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
+    #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+
+
+    ###--- Test Loss ---###
+    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    X_test = X_test[:, 1:]
+
+    with torch.no_grad():
+
+        Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
+
+        mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
+        mu_r, logvar_r = genm_dist_params.unbind(dim = -1)
+
+        X_test_hat = mu_r
+
+        loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+
+    print(
+        f'After {epochs} epochs with {len(dataloader)} iterations each\n'
+        f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test.mean()}\n'
+    )
+
+    title = f'VAE Latent Representation (beta = {beta}, epochs = {epochs})'
+    plot_latent_with_reconstruction_error(
+        latent_tensor = mu_l,
+        loss_tensor = loss_reconst_test,
+        title = title
     )
 
 
@@ -1347,11 +1492,12 @@ if __name__=="__main__":
     print("-device:", device)
 
     ###--- AE in isolation ---###
-    #AE_iso_training_procedure()
+    AE_iso_training_procedure()
     
     ###--- VAE in isolation ---###
     #train_VAE_iso()
     #VAE_iso_training_procedure()
+    #VAE_latent_visualisation()
 
     ###--- Compositions ---###
     #train_joint_seq_AE()
@@ -1362,6 +1508,6 @@ if __name__=="__main__":
     #VAE_joint_epoch_procedure()
 
     ###--- Baseline ---###
-    train_baseline()
+    #train_baseline()
 
     pass
