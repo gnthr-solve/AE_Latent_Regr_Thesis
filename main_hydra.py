@@ -165,7 +165,7 @@ def train_AE_iso_hydra(cfg: DictConfig):
 
 
 
-@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="ae_iso_cfg_sweep")
+@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="vae_iso_cfg_test")
 def train_VAE_iso_hydra(cfg: DictConfig):
 
     
@@ -247,8 +247,8 @@ def train_VAE_iso_hydra(cfg: DictConfig):
 
 
     ###--- Test Observers ---###
-    loss_observer.plot_results()
-    latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
+    #loss_observer.plot_results()
+    #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
 
@@ -531,10 +531,6 @@ Main Executions
 """
 if __name__=="__main__":
     
-    #experiment_name = 'joint_ae_regr_norm'
-    #experiment_name = 'baseline_regr'
-    experiment_name = 'ae_iso_test'
-
     ###--- Device ---###
     # check computation backend to use
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -558,8 +554,8 @@ if __name__=="__main__":
 
 
     ###--- Setup and calculate results ---###
-    train_AE_iso_hydra()
-    #train_VAE_iso_hydra()
+    #train_AE_iso_hydra()
+    train_VAE_iso_hydra()
     #train_joint_epoch_procedure()
     #train_baseline()
 
