@@ -28,44 +28,22 @@ This distinction is necessary to track the contributions of individual loss comp
 """
 class LossComponentObserver(ABC):
 
-    @abstractmethod
-    def __call__(self, *args, **kwargs):
-        pass
-
-
-
-
-"""
-LossObserver
--------------------------------------------------------------------------------------------------------------------------------------------
-Tracks scalar losses, i.e. batch-aggregated single loss values, produced by Loss instances.
-"""
-class LossObserver(LossComponentObserver):
-
-    def __init__(self, n_epochs: int, n_iterations: int):
+    def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, name: str, aggregated: bool = False):
         
-        self.n_epochs = n_epochs
-        self.n_iterations = n_iterations
+        self.name = name
 
-        self.losses = torch.zeros(size = (n_epochs, n_iterations))
+        self.n_epochs = n_epochs
+        self.n_iterations = dataset_size // batch_size + (dataset_size % batch_size > 0)
+        self.batch_size = batch_size
 
         self.epoch = 0
         self.iter_idx = 0
+
+        self.losses: Tensor
     
 
-    def __call__(self, batch_loss: Tensor, **kwargs):
+    def update_indices(self):
 
-        if torch.isnan(batch_loss).any():
-            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains NaN values")
-            raise StopIteration
-        
-        if torch.isinf(batch_loss).any():
-            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
-            raise StopIteration
-        
-        self.losses[self.epoch, self.iter_idx] = batch_loss.detach()
-
-        #update indices
         if self.iter_idx + 1 == self.n_iterations:
 
             self.epoch += 1
@@ -73,6 +51,22 @@ class LossObserver(LossComponentObserver):
 
         else:
             self.iter_idx += 1
+
+
+    
+    def verify_integrity(self):
+        pass
+
+    
+    def truncate_observations(self):
+        self.losses = self.losses[:self.epoch, :self.iter_idx * self.batch_size].flatten()
+
+
+    @abstractmethod
+    def __call__(self, *args, **kwargs):
+        pass
+
+
 
 
 
@@ -86,41 +80,40 @@ and at the same time in a CompositeLossTerm, when also used in an End-to-End fas
 """
 class LossTermObserver(LossComponentObserver):
 
-    def __init__(self, n_epochs: int, n_iterations: int):
+    def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, name: str = None, aggregated: bool = False):
+        super().__init__(n_epochs, dataset_size, batch_size)
+
+        self.losses = torch.zeros(size = (n_epochs, dataset_size))
+
         
-        self.n_epochs = n_epochs
-        self.n_iterations = n_iterations
+    def __call__(self, loss_batch: Tensor, **kwargs):
 
-        self.losses = torch.zeros(size = (n_epochs, n_iterations))
+        if not self.verify_integrity(loss_batch):
+            self.truncate_observations()
+            raise AbortTrainingError
 
-        self.epoch = 0
-        self.iter_idx = 0
+        start_idx = self.batch_size * self.iter_idx
+        end_idx = self.batch_size * (self.iter_idx + 1)
+
+        self.losses[self.epoch, start_idx:end_idx] = loss_batch.detach()
+        #self.losses[self.epoch, self.iter_idx] = loss_batch.detach()
+
+        self.update_indices()
+
+
+    def verify_integrity(self, loss_batch: Tensor) -> bool:
         
-
-    def __call__(self, batch_loss: Tensor, **kwargs):
-
-        if torch.isnan(batch_loss).any():
-            self.losses = self.losses[:self.epoch, :self.iter_idx]
+        loss_batch_valid = True
+        
+        if torch.isnan(loss_batch).any():
             print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains NaN values")
-            raise AbortTrainingError
-        
-        if torch.isinf(batch_loss).any():
-            self.losses = self.losses[:self.epoch, :self.iter_idx]
-            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
-            raise AbortTrainingError
+            loss_batch_valid = False
             
-        self.losses[self.epoch, self.iter_idx] = batch_loss.detach()
+        if torch.isinf(loss_batch).any():
+            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
+            loss_batch_valid = False
 
-        #update indices
-        if self.iter_idx + 1 == self.n_iterations:
-
-            self.epoch += 1
-            self.iter_idx = 0
-
-        else:
-            self.iter_idx += 1
-
-
+        return loss_batch_valid
 
 
 """
@@ -133,40 +126,44 @@ and understanding the training process requires understanding the contributions 
 """
 class CompositeLossTermObserver(LossComponentObserver):
 
-    def __init__(self, n_epochs: int, n_iterations: int, loss_names: list[str]):
+    def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, loss_names: list[str], name: str = None, aggregated: bool = False):
         
-        self.n_epochs = n_epochs
-        self.n_iterations = n_iterations
+        super().__init__(n_epochs, dataset_size, batch_size)
 
-        self.losses = {name: torch.zeros(size = (n_epochs, n_iterations)) for name in loss_names}
+        self.loss_obs = {
+            name: LossTermObserver(n_epochs, dataset_size, batch_size, name)
+            for name in loss_names
+        }
 
-        self.epoch = 0
-        self.iter_idx = 0
+        self.losses = torch.zeros(size = (n_epochs, dataset_size))
         
 
-    def __call__(self, batch_losses: Tensor, **kwargs):
+    def __call__(self, loss_batches: Tensor, **kwargs):
 
-        for name, batch_loss in batch_losses.items():
+        for name, loss_batch in loss_batches.items():
 
-            if torch.isnan(batch_loss).any():
-                print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains NaN values")
-                raise StopIteration
-            
-            if torch.isinf(batch_loss).any():
-                print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
-                raise StopIteration
-            
-            self.losses[name][self.epoch, self.iter_idx] = batch_loss.detach()
+            try:
+                self.loss_obs[name](loss_batch)
 
-        #update indices
-        if self.iter_idx + 1 == self.n_iterations:
+            except AbortTrainingError:
+                self.truncate_observations()
+                raise AbortTrainingError
 
-            self.epoch += 1
-            self.iter_idx = 0
+            start_idx = self.batch_size * self.iter_idx
+            end_idx = self.batch_size * (self.iter_idx + 1)
 
-        else:
-            self.iter_idx += 1
+            self.losses[self.epoch, start_idx:end_idx] += loss_batch.detach()
 
+        self.update_indices()
+
+
+    def truncate_observations(self):
+        super().truncate_observations()
+
+        for loss_observer in self.loss_obs.values():
+
+            loss_observer.truncate_observations()
+    
 
     def plot_results(self):
 
@@ -215,9 +212,9 @@ class CompositeLossTermObserver(LossComponentObserver):
 #         self.sample_losses = torch.zeros(size = (n_epochs, dataset_size))
 
     
-#     def __call__(self, epoch: int, batch_idx: int, sample_batch_losses: Tensor):
+#     def __call__(self, epoch: int, batch_idx: int, sample_loss_batches: Tensor):
 
 #         start_idx = self.batch_size * batch_idx
 #         end_idx = start_idx + self.batch_size
 
-#         self.sample_losses[epoch, start_idx:end_idx] = sample_batch_losses.detach()
+#         self.sample_losses[epoch, start_idx:end_idx] = sample_loss_batches.detach()

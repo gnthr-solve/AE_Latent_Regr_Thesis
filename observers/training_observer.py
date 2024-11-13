@@ -33,6 +33,10 @@ For 2.
 If the observer is dependent on the size of the batch then the initialisation should be done with the size of the dataset,
 and the batch size needs to be saved for determining the slice indices in the assignment.
 Otherwise the last assignment will be incomplete if the dataset size is not a multiple of the batch size.
+
+Another crucial distinction between observers is how they are updated. 
+There is those that have to track the current epoch and iterations themselves, 
+and those that are provided with these values by the subject interface.
 """
 
 
