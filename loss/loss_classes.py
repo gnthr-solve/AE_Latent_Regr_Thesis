@@ -72,7 +72,7 @@ class CompositeLossTerm(LossTerm):
 
     def notify_observer(self, loss_batches: dict[str, Tensor]):
 
-        losses = {name: loss_batch.detach().mean() for name, loss_batch in loss_batches.items()}
+        losses = {name: loss_batch.detach() for name, loss_batch in loss_batches.items()}
 
         self.observer(losses)
         

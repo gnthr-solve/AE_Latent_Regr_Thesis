@@ -57,7 +57,7 @@ class Observe(LossTerm):
 
     def notify_observer(self, loss_batch: Tensor):
 
-        batch_loss = loss_batch.detach().mean()
+        batch_loss = loss_batch.detach()
 
         self.observer(batch_loss)
 

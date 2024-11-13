@@ -40,7 +40,7 @@ from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
-from observers import LossTermObserver, CompositeLossTermObserver, LossObserver, ModelObserver, VAELatentObserver
+from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
 
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
@@ -189,9 +189,9 @@ def VAE_iso_training_procedure():
 
 
     ###--- Dataset ---###
-    #normaliser = MinMaxNormaliser()
+    normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
-    normaliser = None
+    #normaliser = None
 
     dataset_builder = DatasetBuilder(
         kind = 'key',
@@ -227,9 +227,12 @@ def VAE_iso_training_procedure():
 
     latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
     loss_observer = CompositeLossTermObserver(
-        n_epochs = epochs, 
-        n_iterations = n_iterations,
+        n_epochs = epochs,
+        dataset_size = dataset_size,
+        batch_size = batch_size,
         loss_names = ['Log-Likelihood', 'KL-Divergence'],
+        name = 'VAE Loss',
+        aggregated = True,
     )
 
 
@@ -269,7 +272,7 @@ def VAE_iso_training_procedure():
 
 
     ###--- Test Observers ---###
-    loss_observer.plot_results()
+    loss_observer.plot_agg_results()
     latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
@@ -362,9 +365,12 @@ def VAE_latent_visualisation():
 
     latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
     loss_observer = CompositeLossTermObserver(
-        n_epochs = epochs, 
-        n_iterations = n_iterations,
+        n_epochs = epochs,
+        dataset_size = dataset_size,
+        batch_size = batch_size,
         loss_names = ['Log-Likelihood', 'KL-Divergence'],
+        name = 'VAE Loss',
+        aggregated = True,
     )
 
 
@@ -411,7 +417,7 @@ def VAE_latent_visualisation():
 
 
     ###--- Test Observers ---###
-    loss_observer.plot_results()
+    loss_observer.plot_agg_results()
     #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
@@ -503,7 +509,7 @@ def train_joint_seq_AE():
     #ae_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
 
     regr_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_regr, model = regr_model)
-    regr_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
+    #regr_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
 
 
     ###--- Losses ---###
@@ -572,14 +578,14 @@ def train_joint_seq_AE():
 
             #--- Observer Call ---#
             regr_model_obs(epoch = epoch, iter_idx = iter_idx, model = regr_model)
-            regr_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_regr)
+            #regr_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_regr)
 
         scheduler_regr.step()
 
 
     ###--- Plot Observations ---###
     #plot_loss_tensor(observed_losses = ae_loss_obs.losses)
-    plot_loss_tensor(observed_losses = regr_loss_obs.losses)
+    #plot_loss_tensor(observed_losses = regr_loss_obs.losses)
 
     #ae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
     regr_model_obs.plot_child_param_development(child_name = 'regressor', functional = lambda t: torch.max(t) - torch.min(t))
@@ -882,13 +888,17 @@ def train_joint_epoch_wise_VAE_recon():
     ###--- Observation Test Setup ---###
     n_iterations_vae = len(dataloader_ae)
     n_iterations_regr = len(dataloader_regr)
+    dataset_size_ete = len(regr_train_ds)
 
     #vae_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_vae)
-
+    
     loss_observer = CompositeLossTermObserver(
-        n_epochs = epochs, 
-        n_iterations = n_iterations_regr,
+        n_epochs = epochs,
+        dataset_size= dataset_size_ete,
+        batch_size= batch_size,
         loss_names = ['Reconstruction Term', 'Regression Term'],
+        name = 'ETE Loss',
+        aggregated = True,
     )
 
 
@@ -1104,14 +1114,17 @@ def AE_joint_epoch_procedure():
 
     ###--- Observation Test Setup ---###
     n_iterations_ae = len(dataloader_ae)
-    n_iterations_regr = len(dataloader_regr)
+    dataset_size_ete = len(regr_train_ds)
 
     ae_loss_obs = LossTermObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
     
     loss_observer = CompositeLossTermObserver(
-        n_epochs = epochs, 
-        n_iterations = len(dataloader_regr),
+        n_epochs = epochs,
+        dataset_size= dataset_size_ete,
+        batch_size= batch_size,
         loss_names = ['Reconstruction Term', 'Regression Term'],
+        name = 'ETE Loss',
+        aggregated = True,
     )
 
 
@@ -1249,15 +1262,16 @@ def VAE_joint_epoch_procedure():
 
 
     ###--- Observation Test Setup ---###
-    n_iterations_vae = len(dataloader_ae)
-    n_iterations_regr = len(dataloader_regr)
+    dataset_size_ete = len(regr_train_ds)
 
     loss_observer = CompositeLossTermObserver(
-        n_epochs = epochs, 
-        n_iterations = n_iterations_regr,
+        n_epochs = epochs,
+        dataset_size= dataset_size_ete,
+        batch_size= batch_size,
         loss_names = ['Reconstruction Term', 'Regression Term'],
+        name = 'ETE Loss',
+        aggregated = True,
     )
-
 
     ###--- Loss Terms ---###
     ll_term = Weigh(GaussianDiagLL(), weight = -1)

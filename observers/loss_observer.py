@@ -31,16 +31,32 @@ class LossComponentObserver(ABC):
     def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, name: str, aggregated: bool = False):
         
         self.name = name
+        self.aggregated = aggregated
 
         self.n_epochs = n_epochs
         self.n_iterations = dataset_size // batch_size + (dataset_size % batch_size > 0)
         self.batch_size = batch_size
 
+        if self.aggregated:
+            self.losses = torch.zeros(size = (n_epochs, self.n_iterations))
+        else:
+            self.losses = torch.zeros(size = (n_epochs, dataset_size))
+
         self.epoch = 0
         self.iter_idx = 0
 
-        self.losses: Tensor
     
+    def inscribe(self, loss: Tensor, **kwargs):
+
+        if self.aggregated:
+            self.losses[self.epoch, self.iter_idx] += loss
+
+        else:
+            start_idx = self.batch_size * self.iter_idx
+            end_idx = self.batch_size * (self.iter_idx + 1)
+
+            self.losses[self.epoch, start_idx:end_idx] += loss
+
 
     def update_indices(self):
 
@@ -59,7 +75,12 @@ class LossComponentObserver(ABC):
 
     
     def truncate_observations(self):
-        self.losses = self.losses[:self.epoch, :self.iter_idx * self.batch_size].flatten()
+        if self.aggregated:
+            #print(f'{self.name} up to epoch={self.epoch}, iter_idx ={self.iter_idx}, loss_shape = {self.losses.shape}, losses: \n{self.losses}\n')
+            self.losses = self.losses[:self.epoch, :self.iter_idx].flatten()
+
+        else:
+            self.losses = self.losses[:self.epoch, :self.iter_idx * self.batch_size].flatten()
 
 
     @abstractmethod
@@ -81,9 +102,7 @@ and at the same time in a CompositeLossTerm, when also used in an End-to-End fas
 class LossTermObserver(LossComponentObserver):
 
     def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, name: str = None, aggregated: bool = False):
-        super().__init__(n_epochs, dataset_size, batch_size)
-
-        self.losses = torch.zeros(size = (n_epochs, dataset_size))
+        super().__init__(n_epochs, dataset_size, batch_size, name, aggregated)
 
         
     def __call__(self, loss_batch: Tensor, **kwargs):
@@ -92,11 +111,13 @@ class LossTermObserver(LossComponentObserver):
             self.truncate_observations()
             raise AbortTrainingError
 
-        start_idx = self.batch_size * self.iter_idx
-        end_idx = self.batch_size * (self.iter_idx + 1)
+        loss = loss_batch.detach()
 
-        self.losses[self.epoch, start_idx:end_idx] = loss_batch.detach()
-        #self.losses[self.epoch, self.iter_idx] = loss_batch.detach()
+        if self.aggregated:
+            self.inscribe(loss.mean())
+
+        else:
+            self.inscribe(loss)
 
         self.update_indices()
 
@@ -106,11 +127,11 @@ class LossTermObserver(LossComponentObserver):
         loss_batch_valid = True
         
         if torch.isnan(loss_batch).any():
-            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains NaN values")
+            print(f"{self.name}-Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains NaN values")
             loss_batch_valid = False
             
         if torch.isinf(loss_batch).any():
-            print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
+            print(f"{self.name}-Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
             loss_batch_valid = False
 
         return loss_batch_valid
@@ -128,56 +149,64 @@ class CompositeLossTermObserver(LossComponentObserver):
 
     def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, loss_names: list[str], name: str = None, aggregated: bool = False):
         
-        super().__init__(n_epochs, dataset_size, batch_size)
+        super().__init__(n_epochs, dataset_size, batch_size, name, aggregated)
 
         self.loss_obs = {
-            name: LossTermObserver(n_epochs, dataset_size, batch_size, name)
-            for name in loss_names
+            child_name: LossTermObserver(n_epochs, dataset_size, batch_size, child_name, aggregated)
+            for child_name in loss_names
         }
-
-        self.losses = torch.zeros(size = (n_epochs, dataset_size))
         
 
-    def __call__(self, loss_batches: Tensor, **kwargs):
+    def __call__(self, loss_batches: dict[str, Tensor], **kwargs):
 
         for name, loss_batch in loss_batches.items():
+            
+            loss_batch_detached = loss_batch.detach()
 
             try:
-                self.loss_obs[name](loss_batch)
+                self.loss_obs[name](loss_batch_detached)
 
             except AbortTrainingError:
-                self.truncate_observations()
+                self.truncate_observations(name)
                 raise AbortTrainingError
 
-            start_idx = self.batch_size * self.iter_idx
-            end_idx = self.batch_size * (self.iter_idx + 1)
 
-            self.losses[self.epoch, start_idx:end_idx] += loss_batch.detach()
+            if self.aggregated:
+                self.inscribe(loss_batch_detached.mean())
 
+            else:
+                self.inscribe(loss_batch_detached)
+        
         self.update_indices()
 
 
-    def truncate_observations(self):
+    def truncate_observations(self, name_raiser: str):
         super().truncate_observations()
 
-        for loss_observer in self.loss_obs.values():
+        for name, loss_observer in self.loss_obs.items():
 
-            loss_observer.truncate_observations()
+            #raisers observations are truncated already
+            if not name == name_raiser:
+
+                loss_observer.truncate_observations()
     
 
-    def plot_results(self):
+    def plot_agg_results(self):
 
         title: str = "Loss Development",
 
-        mosaic_layout = [
+        mosaic_layout_children = [
             [f'loss_{name}', f'loss_{name}']
-            for name in self.losses.keys()
+            for name in self.loss_obs.keys()
         ]
+
+        mosaic_layout = [[f'loss_{self.name}', f'loss_{self.name}'], * mosaic_layout_children]
 
         fig = plt.figure(figsize=(14, 7), layout = 'constrained')  
         axs = fig.subplot_mosaic(mosaic_layout)
 
-        for name, loss_tensor in self.losses.items():
+        losses = {self.name: self.losses, **{name: loss_ob.losses for name, loss_ob in self.loss_obs.items()}}
+        for name, loss_tensor in losses.items():
             
             ax: Axes = axs[f'loss_{name}']
             loss_values = loss_tensor.flatten(start_dim = 0, end_dim = 1)
