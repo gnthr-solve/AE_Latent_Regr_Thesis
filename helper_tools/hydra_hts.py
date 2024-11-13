@@ -1,4 +1,6 @@
 
+import torch
+import json
 
 from hydra.core.hydra_config import HydraConfig
 from hydra.core.utils import JobReturn, JobStatus
@@ -43,8 +45,8 @@ class SaveResultsRefactor(Callback):
     def on_job_end(self, config, job_return, **kwargs):
 
         # I don't need to pass the parameters as a return value, I can just get them from the config object
-        result_dict = {param: config.get(param) for param in config.track_params}
-        print(f"Result dict: \n{result_dict}\n")
+        result_params = {param: config.get(param) for param in config.track_params}
+        print(f"Result dict: \n{result_params}\n")
 
         if job_return.status == JobStatus.COMPLETED:
             
@@ -58,6 +60,51 @@ class SaveResultsRefactor(Callback):
 
             df.to_csv(os.path.join(output_dir, f"{hydra_cfg.job.name}.csv"), index=False)
 
+
+
+
+class BestModelCallback(Callback):
+
+    def __init__(self, tracked_loss: str):
+
+        self.tracked_loss = tracked_loss
+        self.best_loss = float('inf')
+        self.best_model = None
+        self.best_model_params = None
+
+
+    def on_job_end(self, config, job_return, **kwargs):
+
+        result_params = {param: config.get(param) for param in config.track_params}
+
+        if job_return.status == JobStatus.COMPLETED:
+            
+            loss = job_return.return_value[self.tracked_loss]
+
+            if loss < self.best_loss:
+
+                self.best_loss = loss
+                self.best_model = job_return.return_value['model']
+                self.best_model_params = result_params
+
+                result_dict = {**result_params, self.tracked_loss: loss}
+
+                ###- Save model and params -###
+                output_dir = self.get_output_dir()
+
+                torch.save(self.best_model.state_dict(), os.path.join(output_dir, f"best_model.pth"))
+
+                with open(os.path.join(output_dir, f"best_model_params.json"), 'w') as f:
+                    json.dump(result_dict, f)
+
+
+    def get_output_dir(self):
+
+        hydra_cfg = HydraConfig.get()
+        main_dir = Path(hydra_cfg.sweep.dir)
+        output_dir = main_dir / hydra_cfg.sweep.subdir
+
+        return output_dir
 
 
 """

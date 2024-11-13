@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from helper_tools import plot_training_losses, plot_param_norms
+from helper_tools import AbortTrainingError
 
 
 """
@@ -100,12 +100,14 @@ class LossTermObserver(LossComponentObserver):
     def __call__(self, batch_loss: Tensor, **kwargs):
 
         if torch.isnan(batch_loss).any():
+            self.losses = self.losses[:self.epoch, :self.iter_idx]
             print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains NaN values")
-            raise StopIteration
+            raise AbortTrainingError
         
         if torch.isinf(batch_loss).any():
+            self.losses = self.losses[:self.epoch, :self.iter_idx]
             print(f"Loss at epoch = {self.epoch}, iteration = {self.iter_idx} contains Inf values")
-            raise StopIteration
+            raise AbortTrainingError
             
         self.losses[self.epoch, self.iter_idx] = batch_loss.detach()
 

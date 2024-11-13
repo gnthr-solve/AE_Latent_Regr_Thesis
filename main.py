@@ -183,15 +183,15 @@ def AE_iso_training_procedure():
 def VAE_iso_training_procedure():
     
     ###--- Meta ---###
-    epochs = 2
+    epochs = 5
     batch_size = 50
     latent_dim = 10
 
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
+    #normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = None
 
     dataset_builder = DatasetBuilder(
         kind = 'key',
@@ -214,9 +214,9 @@ def VAE_iso_training_procedure():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3)
 
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3)
 
     model = GaussVAE(encoder = encoder, decoder = decoder)
 
@@ -318,8 +318,8 @@ def VAE_latent_visualisation():
     from helper_tools import plot_latent_with_reconstruction_error
 
     ###--- Meta ---###
-    epochs = 3
-    batch_size = 30
+    epochs = 5
+    batch_size = 50
     latent_dim = 3
 
 
@@ -349,9 +349,9 @@ def VAE_latent_visualisation():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3)
 
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3)
 
     model = GaussVAE(encoder = encoder, decoder = decoder)
 
@@ -372,7 +372,7 @@ def VAE_latent_visualisation():
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
 
     #--- Beta VAE Loss ---#
-    beta = 10
+    beta = 1
     kld_term = GaussianAnaKLDiv()
     #kld_term = GaussianMCKLDiv()
     kld_term = Weigh(kld_term, weight = beta)
@@ -1380,7 +1380,7 @@ def train_baseline():
     #normaliser = None
 
     dataset_builder = DatasetBuilder(
-        kind = 'max',
+        kind = 'key',
         normaliser = normaliser,
         exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     )
@@ -1492,11 +1492,11 @@ if __name__=="__main__":
     print("-device:", device)
 
     ###--- AE in isolation ---###
-    AE_iso_training_procedure()
+    #AE_iso_training_procedure()
     
     ###--- VAE in isolation ---###
     #train_VAE_iso()
-    #VAE_iso_training_procedure()
+    VAE_iso_training_procedure()
     #VAE_latent_visualisation()
 
     ###--- Compositions ---###

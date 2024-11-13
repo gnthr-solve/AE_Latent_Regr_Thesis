@@ -266,14 +266,8 @@ def train_VAE_iso_hydra(cfg: DictConfig):
     loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
 
     return {
-        'epochs': epochs,
-        'batch_size': batch_size,
-        'latent_dim': latent_dim,
-        'n_layers_e': n_layers_e,
-        'n_layers_d': n_layers_d,
-        'learning_rate': learning_rate,
-        'scheduler_gamma': scheduler_gamma,
-        'test_loss': loss_reconst_test.item(),
+        'test_reconstr_loss': loss_reconst_test.item(),
+        'model': model,
     }
 
 

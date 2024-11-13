@@ -16,6 +16,9 @@ from models.autoencoders import AE
 
 from loss import Loss
 
+from helper_tools import AbortTrainingError
+
+
 """
 TrainingProcedure - AE | VAE Iso
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -52,7 +55,11 @@ class AEIsoTrainingProcedure(Subject):
 
         for epoch in epoch_progress_bar:
 
-            self.training_epoch(epoch = epoch)
+            try:
+                self.training_epoch(epoch = epoch)
+                
+            except AbortTrainingError:
+                return
 
             if self.scheduler != None:
                 self.scheduler.step()
