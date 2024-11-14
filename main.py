@@ -38,14 +38,14 @@ from loss import (
 from loss.decorators import Weigh, Observe
 from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_ll import GaussianDiagLL
+from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
 
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
     
-from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
+from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 from datasets import SplitSubsetFactory
 
 from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_characteristics, simple_timer
@@ -186,13 +186,14 @@ def AE_iso_training_procedure():
 def VAE_iso_training_procedure():
     
     ###--- Meta ---###
-    epochs = 5
+    epochs = 3
     batch_size = 50
     latent_dim = 10
 
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
+    #normaliser = MinMaxNormaliser()
+    normaliser = MinMaxEpsNormaliser(epsilon=1e-3)
     #normaliser = ZScoreNormaliser()
     #normaliser = None
 
@@ -241,9 +242,10 @@ def VAE_iso_training_procedure():
 
     ###--- Loss ---###
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
+    #ll_term = Weigh(IndBetaLL(), weight = -1)
 
-    #kld_term = GaussianAnaKLDiv()
-    kld_term = GaussianMCKLDiv()
+    kld_term = GaussianAnaKLDiv()
+    #kld_term = GaussianMCKLDiv()
 
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
     loss = Loss(CompositeLossTerm(observer = loss_observer, **loss_terms))
@@ -276,45 +278,45 @@ def VAE_iso_training_procedure():
 
     ###--- Test Observers ---###
     loss_observer.plot_agg_results()
-    latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
+    #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
 
-    ###--- Test Loss ---###
-    X_test = test_dataset.dataset.X_data[test_dataset.indices]
-    X_test = X_test[:, 1:]
+    # ##--- Test Loss ---###
+    # X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    # X_test = X_test[:, 1:]
 
-    Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
+    # Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
 
-    mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
-    mu_r, logvar_r = genm_dist_params.unbind(dim = -1)
+    # mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
+    # mu_r, logvar_r = genm_dist_params.unbind(dim = -1)
 
-    var_l = torch.exp(logvar_l)
-    var_r = torch.exp(logvar_r)
+    # var_l = torch.exp(logvar_l)
+    # var_r = torch.exp(logvar_r)
 
-    #X_test_hat = model.reparameterise(genm_dist_params)
-    X_test_hat = mu_r
+    # #X_test_hat = model.reparameterise(genm_dist_params)
+    # X_test_hat = mu_r
 
-    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
-    print(
-        f'After {epochs} epochs with {len(dataloader)} iterations each\n'
-        f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
-        f'----------------------------------------\n\n'
-        f'Inference M. mean:\n'
-        f'max:\n{mu_l.max()}\n'
-        f'min:\n{mu_l.min()}\n\n'
-        f'Inference M. Var:\n'
-        f'max:\n{var_l.max()}\n'
-        f'min:\n{var_l.min()}\n'
-        f'----------------------------------------\n\n'
-        f'Generative M. mean:\n'
-        f'max:\n{mu_r.max()}\n'
-        f'min:\n{mu_r.min()}\n\n'
-        f'Generative M. Var:\n'
-        f'max:\n{var_r.max()}\n'
-        f'min:\n{var_r.min()}\n'
-        f'----------------------------------------\n\n'
-    )
+    # loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+    # print(
+    #     f'After {epochs} epochs with {len(dataloader)} iterations each\n'
+    #     f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
+    #     f'----------------------------------------\n\n'
+    #     f'Inference M. mean:\n'
+    #     f'max:\n{mu_l.max()}\n'
+    #     f'min:\n{mu_l.min()}\n\n'
+    #     f'Inference M. Var:\n'
+    #     f'max:\n{var_l.max()}\n'
+    #     f'min:\n{var_l.min()}\n'
+    #     f'----------------------------------------\n\n'
+    #     f'Generative M. mean:\n'
+    #     f'max:\n{mu_r.max()}\n'
+    #     f'min:\n{mu_r.min()}\n\n'
+    #     f'Generative M. Var:\n'
+    #     f'max:\n{var_r.max()}\n'
+    #     f'min:\n{var_r.min()}\n'
+    #     f'----------------------------------------\n\n'
+    # )
 
 
 

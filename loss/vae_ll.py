@@ -70,3 +70,25 @@ class GaussianDiagLL(LogLikelihood):
         
         return ll_batch.squeeze()
     
+
+
+
+"""
+Reconstruction Term for Independent Beta
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class IndBetaLL(LogLikelihood):
+
+    def __call__(self, X_batch: Tensor, genm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
+        
+        logalpha, logbeta = genm_dist_params.unbind(dim = -1)
+        alpha, beta = torch.exp(logalpha), torch.exp(logbeta)
+        
+        const_comp = torch.lgamma(alpha + beta) - torch.lgamma(alpha) - torch.lgamma(beta)
+        
+        ll_batch_summands = const_comp + (alpha - 1) * torch.log(X_batch) + (beta - 1) * torch.log(1 - X_batch)
+        
+        ll_batch = ll_batch_summands.sum(dim = -1)
+
+        return ll_batch.squeeze()
+    

@@ -53,6 +53,54 @@ class MinMaxNormaliser:
 
 
 
+
+"""
+Normalisers - Min-Max Epsilon
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class MinMaxEpsNormaliser:
+
+    def __init__(self, epsilon: float = 1e-6):
+
+        self.epsilon = epsilon
+        self.min_val = None
+        self.max_val = None
+
+
+    def normalise(self, tensor: Tensor) -> Tensor:
+        """
+        Performs Min-Max normalisation on a tensor.
+
+        Args:
+            tensor (torch.Tensor): The input tensor of shape (m, n).
+
+        Returns:
+            torch.Tensor: The normalised tensor.
+        """
+
+        self.min_val = tensor.min(dim = 0, keepdim = True)[0]
+        self.max_val = tensor.max(dim = 0, keepdim = True)[0]
+        
+        normalised_tensor = (tensor - self.min_val) / (self.max_val - self.min_val)
+        
+        normalised_tensor = torch.where(normalised_tensor == 0, torch.tensor(self.epsilon), normalised_tensor)
+        normalised_tensor = torch.where(normalised_tensor == 1, torch.tensor(1 - self.epsilon), normalised_tensor)
+        
+        return normalised_tensor
+
+
+    def invert(self, normalised_tensor: Tensor) -> Tensor:
+
+        if self.min_val is not None:
+
+            tensor = normalised_tensor * (self.max_val - self.min_val) + self.min_val
+
+            return tensor
+
+        else:
+            print('Cannot invert without previous normalise call.')
+
+
 """
 Normalisers - Z-Score
 -------------------------------------------------------------------------------------------------------------------------------------------
