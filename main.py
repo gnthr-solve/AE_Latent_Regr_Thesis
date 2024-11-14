@@ -111,8 +111,11 @@ def AE_iso_training_procedure():
     #latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
     loss_observer = CompositeLossTermObserver(
         n_epochs = epochs, 
-        n_iterations = n_iterations,
-        loss_names = ['Reconstruction'],
+        dataset_size = dataset_size,
+        batch_size = batch_size,
+        members = ['Reconstruction'],
+        name = 'AE Loss',
+        aggregated = True,
     )
 
     
@@ -150,7 +153,7 @@ def AE_iso_training_procedure():
 
 
     ###--- Test Observers ---###
-    loss_observer.plot_results()
+    loss_observer.plot_agg_results()
     #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
@@ -230,7 +233,7 @@ def VAE_iso_training_procedure():
         n_epochs = epochs,
         dataset_size = dataset_size,
         batch_size = batch_size,
-        loss_names = ['Log-Likelihood', 'KL-Divergence'],
+        members = ['Log-Likelihood', 'KL-Divergence'],
         name = 'VAE Loss',
         aggregated = True,
     )
@@ -368,7 +371,7 @@ def VAE_latent_visualisation():
         n_epochs = epochs,
         dataset_size = dataset_size,
         batch_size = batch_size,
-        loss_names = ['Log-Likelihood', 'KL-Divergence'],
+        members = ['Log-Likelihood', 'KL-Divergence'],
         name = 'VAE Loss',
         aggregated = True,
     )
@@ -896,7 +899,7 @@ def train_joint_epoch_wise_VAE_recon():
         n_epochs = epochs,
         dataset_size= dataset_size_ete,
         batch_size= batch_size,
-        loss_names = ['Reconstruction Term', 'Regression Term'],
+        members = ['Reconstruction Term', 'Regression Term'],
         name = 'ETE Loss',
         aggregated = True,
     )
@@ -1012,7 +1015,7 @@ def train_joint_epoch_wise_VAE_recon():
 
     ###--- Plot Observations ---###
     #plot_loss_tensor(observed_losses = vae_loss_obs.losses)
-    loss_observer.plot_results()
+    loss_observer.plot_agg_results()
 
 
     ###--- Test Loss ---###
@@ -1122,7 +1125,7 @@ def AE_joint_epoch_procedure():
         n_epochs = epochs,
         dataset_size= dataset_size_ete,
         batch_size= batch_size,
-        loss_names = ['Reconstruction Term', 'Regression Term'],
+        members = ['Reconstruction Term', 'Regression Term'],
         name = 'ETE Loss',
         aggregated = True,
     )
@@ -1174,7 +1177,7 @@ def AE_joint_epoch_procedure():
 
     ###--- Plot Observations ---###
     plot_loss_tensor(observed_losses = ae_loss_obs.losses)
-    loss_observer.plot_results()
+    loss_observer.plot_agg_results()
 
 
     ###--- Test Loss ---###
@@ -1268,7 +1271,7 @@ def VAE_joint_epoch_procedure():
         n_epochs = epochs,
         dataset_size= dataset_size_ete,
         batch_size= batch_size,
-        loss_names = ['Reconstruction Term', 'Regression Term'],
+        members = ['Reconstruction Term', 'Regression Term'],
         name = 'ETE Loss',
         aggregated = True,
     )
@@ -1333,7 +1336,7 @@ def VAE_joint_epoch_procedure():
 
 
     ###--- Plot Observations ---###
-    loss_observer.plot_results()
+    loss_observer.plot_agg_results()
 
 
     ###--- Test Loss ---###

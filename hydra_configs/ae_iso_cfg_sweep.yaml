@@ -4,6 +4,16 @@ defaults:
     - override hydra/job_logging: stdout
 
 
+hyper_params:
+  - epochs
+  - latent_dim
+  - batch_size
+  - n_layers_e
+  - n_layers_d
+  - learning_rate
+  - scheduler_gamma
+
+  
 hydra:
     mode: MULTIRUN
     
@@ -16,9 +26,19 @@ hydra:
     job:
         name: "nvae_logsigma_norm_rel_l2"
 
+
     callbacks:
+
         save_results: 
-            _target_: helper_tools.SaveResultsCallback
+            _target_: helper_tools.SaveResultsTable
+            tracked_results: 
+              - reconstr_loss
+
+        save_best_model:
+            _target_: helper_tools.BestModelCallback
+            tracked_loss: reconstr_loss
+            tracked_model: ae
+
 
     sweeper:
         params:

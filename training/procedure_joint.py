@@ -16,6 +16,7 @@ from models.autoencoders import AE
 
 from loss import Loss
 
+from helper_tools import AbortTrainingError
 
 """
 TrainingProcedure - Joint Epochs
@@ -62,7 +63,11 @@ class JointEpochTrainingProcedure(Subject):
 
         for epoch in epoch_progress_bar:
 
-            self.training_epoch(epoch = epoch)
+            try:
+                self.training_epoch(epoch = epoch)
+                
+            except AbortTrainingError:
+                return
 
             if self.scheduler != None:
                 self.scheduler.step()
@@ -235,16 +240,24 @@ class JointSequentialTrainingProcedure(Subject):
 
         for epoch in epoch_progress_bar:
 
-            self.training_epoch_ae(epoch = epoch)
-
+            try:
+                self.training_epoch_ae(epoch = epoch)
+                
+            except AbortTrainingError:
+                return
+            
             if self.ae_scheduler != None:
                 self.ae_scheduler.step()
         
 
         for epoch in epoch_progress_bar:
 
-            self.training_epoch_regr(epoch = epoch)
-
+            try:
+                self.training_epoch_regr(epoch = epoch)
+                
+            except AbortTrainingError:
+                return
+            
             if self.regr_scheduler != None:
                 self.regr_scheduler.step()
 

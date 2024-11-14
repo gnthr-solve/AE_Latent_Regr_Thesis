@@ -4,6 +4,19 @@ defaults:
     - override hydra/job_logging: stdout
 
 
+hyper_params:
+  - epochs
+  - latent_dim
+  - batch_size
+  - n_layers_e
+  - n_layers_d
+  - encoder_lr
+  - decoder_lr
+  - regr_lr
+  - scheduler_gamma
+  - ete_regr_weight
+
+
 hydra:
     mode: MULTIRUN
     
@@ -16,9 +29,20 @@ hydra:
     job:
         name: "joint_ae_regr_norm"
 
+
     callbacks:
+
         save_results: 
-            _target_: helper_tools.SaveResultsCallback
+            _target_: helper_tools.SaveResultsTable
+            tracked_results: 
+              - loss_reconst
+              - loss_regr
+
+        # save_best_model:
+        #     _target_: helper_tools.BestModelCallback
+        #     tracked_loss: reconstr_loss
+        #     tracked_model: vae
+
 
     sweeper:
         params:
@@ -26,14 +50,14 @@ hydra:
           +batch_size: 25, 50, 100
           +latent_dim: 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 
-          +n_layers_e: 3, 4, 5, 6, 7, 8
-          +n_layers_d: 3, 4, 5, 6, 7, 8
+          +n_layers_e: 3, 4, 5, 6
+          +n_layers_d: 3, 4, 5, 6
 
           +encoder_lr: 1e-2, 5e-3, 1e-3
           +decoder_lr: 1e-2, 5e-3, 1e-3
           +regr_lr: 1e-2, 5e-3, 1e-3
           +scheduler_gamma: 0.9
           
-          +ete_regr_weight: 0.5, 0.6, 0.7, 0.8, 0.9
+          +ete_regr_weight: 0.7, 0.8, 0.9
 
           

@@ -4,6 +4,13 @@ defaults:
     - override hydra/job_logging: stdout
 
 
+hyper_params:
+  - epochs
+  - batch_size
+  - regr_lr
+  - scheduler_gamma
+  
+
 hydra:
     mode: MULTIRUN
     
@@ -18,7 +25,15 @@ hydra:
 
     callbacks:
         save_results: 
-            _target_: helper_tools.SaveResultsCallback
+            _target_: helper_tools.SaveResultsTable
+            tracked_results: 
+              - loss_regr
+
+        save_best_model:
+            _target_: helper_tools.BestModelCallback
+            tracked_loss: loss_regr
+            tracked_model: regressor
+
 
     sweeper:
         params:

@@ -147,14 +147,27 @@ and understanding the training process requires understanding the contributions 
 """
 class CompositeLossTermObserver(LossComponentObserver):
 
-    def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, loss_names: list[str], name: str = None, aggregated: bool = False):
+    def __init__(
+            self, 
+            n_epochs: int, 
+            dataset_size: int, 
+            batch_size: int, 
+            members: list[str] | dict[str, LossComponentObserver],
+            name: str = None, 
+            aggregated: bool = False
+        ):
         
         super().__init__(n_epochs, dataset_size, batch_size, name, aggregated)
 
-        self.loss_obs = {
-            child_name: LossTermObserver(n_epochs, dataset_size, batch_size, child_name, aggregated)
-            for child_name in loss_names
-        }
+        if isinstance(members, list):
+            self.loss_obs = {
+                member_name: LossTermObserver(n_epochs, dataset_size, batch_size, member_name, aggregated)
+                for member_name in members
+            }
+
+        elif isinstance(members, dict):
+            self.loss_obs = members
+        
         
 
     def __call__(self, loss_batches: dict[str, Tensor], **kwargs):
@@ -200,7 +213,7 @@ class CompositeLossTermObserver(LossComponentObserver):
             for name in self.loss_obs.keys()
         ]
 
-        mosaic_layout = [[f'loss_{self.name}', f'loss_{self.name}'], * mosaic_layout_children]
+        mosaic_layout = [[f'loss_{self.name}', f'loss_{self.name}'], *mosaic_layout_children]
 
         fig = plt.figure(figsize=(14, 7), layout = 'constrained')  
         axs = fig.subplot_mosaic(mosaic_layout)

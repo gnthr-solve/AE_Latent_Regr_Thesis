@@ -46,7 +46,7 @@ from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL
 
-from observers import LossTermObserver, CompositeLossTermObserver, LossObserver, ModelObserver, VAELatentObserver
+from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
 
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
@@ -152,14 +152,8 @@ def train_AE_iso_hydra(cfg: DictConfig):
     loss_reconst = reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
 
     return {
-        'epochs': epochs,
-        'batch_size': batch_size,
-        'latent_dim': latent_dim,
-        'n_layers_e': n_layers_e,
-        'n_layers_d': n_layers_d,
-        'learning_rate': learning_rate,
-        'scheduler_gamma': scheduler_gamma,
-        'test_loss': loss_reconst.item(),
+        'reconstr_loss': loss_reconst.item(),
+        'ae': model,
     }
     
 
@@ -199,14 +193,16 @@ def train_VAE_iso_hydra(cfg: DictConfig):
 
 
     ###--- Observers ---###
-    n_iterations = len(dataloader)
     dataset_size = len(train_dataset)
 
     latent_observer = VAELatentObserver(n_epochs=epochs, dataset_size=dataset_size, batch_size=batch_size, latent_dim=latent_dim, n_dist_params=2)
     loss_observer = CompositeLossTermObserver(
-        n_epochs = epochs, 
-        n_iterations = n_iterations,
-        loss_names = ['Log-Likelihood', 'KL-Divergence'],
+        n_epochs = epochs,
+        dataset_size = dataset_size,
+        batch_size = batch_size,
+        members = ['Log-Likelihood', 'KL-Divergence'],
+        name = 'VAE Loss',
+        aggregated = True,
     )
 
 
@@ -266,8 +262,8 @@ def train_VAE_iso_hydra(cfg: DictConfig):
     loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
 
     return {
-        'test_reconstr_loss': loss_reconst_test.item(),
-        'model': model,
+        'reconstr_loss': loss_reconst_test.item(),
+        'vae': model,
     }
 
 
@@ -330,7 +326,7 @@ def train_joint_epoch_procedure(cfg: DictConfig):
     # loss_observer = CompositeLossTermObserver(
     #     n_epochs = epochs, 
     #     n_iterations = len(dataloader_regr),
-    #     loss_names = ['Reconstruction Term', 'Regression Term'],
+    #     members = ['Reconstruction Term', 'Regression Term'],
     # )
 
 
@@ -406,18 +402,18 @@ def train_joint_epoch_procedure(cfg: DictConfig):
     loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
     
     return {
-        'epochs': epochs,
-        'batch_size': batch_size,
-        'latent_dim': latent_dim,
-        'n_layers_e': n_layers_e,
-        'n_layers_d': n_layers_d,
-        'encoder_lr': encoder_lr,
-        'decoder_lr': decoder_lr,
-        'regr_lr': regr_lr,
-        'scheduler_gamma': scheduler_gamma,
-        'ete_regr_weight': ete_regr_weight,
-        'test_loss_reconst': loss_reconst.item(),
-        'test_loss_regr': loss_regr.item(),
+        # 'epochs': epochs,
+        # 'batch_size': batch_size,
+        # 'latent_dim': latent_dim,
+        # 'n_layers_e': n_layers_e,
+        # 'n_layers_d': n_layers_d,
+        # 'encoder_lr': encoder_lr,
+        # 'decoder_lr': decoder_lr,
+        # 'regr_lr': regr_lr,
+        # 'scheduler_gamma': scheduler_gamma,
+        # 'ete_regr_weight': ete_regr_weight,
+        'loss_reconst': loss_reconst.item(),
+        'loss_regr': loss_regr.item(),
     }
 
 
@@ -509,11 +505,8 @@ def train_baseline(cfg: DictConfig):
     loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
     
     return {
-        'epochs': epochs,
-        'batch_size': batch_size,
-        'regr_lr': regr_lr,
-        'scheduler_gamma': scheduler_gamma,
-        'test_loss_regr': loss_regr.item(),
+        'loss_regr': loss_regr.item(),
+        'regressor': regressor,
     }
 
 

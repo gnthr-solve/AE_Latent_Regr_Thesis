@@ -4,7 +4,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 
-track_params:
+hyper_params:
   - epochs
   - latent_dim
   - batch_size
@@ -12,6 +12,7 @@ track_params:
   - n_layers_d
   - learning_rate
   - scheduler_gamma
+
 
 
 hydra:
@@ -29,11 +30,16 @@ hydra:
         name: "VAE_iso_test"
     
     callbacks:
+
         save_results: 
-            _target_: helper_tools.SaveResultsRefactor
+            _target_: helper_tools.SaveResultsTable
+            tracked_results: 
+              - reconstr_loss
+
         save_best_model:
             _target_: helper_tools.BestModelCallback
-            tracked_loss: test_reconstr_loss
+            tracked_loss: reconstr_loss
+            tracked_model: vae
 
     #job_logging: 
 
