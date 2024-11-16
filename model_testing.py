@@ -4,13 +4,28 @@ import torch
 from torch import Tensor
 from torch.nn import Module
 
-from models import (
-    SimpleLinearReluEncoder,
-    SimpleLinearReluDecoder, 
-    SimpleAutoencoder, 
-    SimpleLoss,
-    MeanLpLoss,
-    RelativeMeanLpLoss,
+from models.encoders import (
+    LinearEncoder,
+)
+
+from models.decoders import (
+    LinearDecoder,
+)
+from models.var_encoders import VarEncoder
+from models.var_decoders import VarDecoder
+
+from models.regressors import LinearRegr, ProductRegr
+from models import AE, GaussVAE, EnRegrComposite
+from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
+
+from loss import (
+    Loss,
+    CompositeLossTerm,
+    LpNorm,
+    RelativeLpNorm,
+    Huber,
+    RelativeHuber,
+    HuberOwn,
 )
 
 
@@ -24,10 +39,10 @@ def module_properties_test():
     ###--- Models ---###
     latent_dim = 10
 
-    encoder = SimpleLinearReluEncoder(latent_dim = latent_dim)
-    decoder = SimpleLinearReluDecoder(latent_dim = latent_dim)
+    encoder = LinearEncoder(latent_dim = latent_dim)
+    decoder = LinearDecoder(latent_dim = latent_dim)
 
-    model = SimpleAutoencoder(encoder = encoder, decoder = decoder)
+    model = AE(encoder = encoder, decoder = decoder)
 
 
     ###--- Properties of Composite Model ---###
@@ -63,11 +78,115 @@ def module_properties_test():
 
 
 """
+Test Functions - Product Regressor
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def product_regr_test():
+
+    ###--- Tensors ---###
+    latent_dim = 5
+    batch_size = 3
+    # z = torch.randint(1, 10, (latent_dim,))
+    # Z_batch = torch.randint(1, 10, (batch_size, latent_dim))
+    z = torch.rand((latent_dim,))
+    #Z_batch = torch.rand((batch_size, latent_dim))
+    Z_batch = torch.randn((batch_size, latent_dim))
+
+    print(
+        f'Input Tensors: \n'
+        f'-------------------------------------------------\n'
+        # f'z: \n{z}\n'
+        # f'z shape: {z.shape}\n'
+        # f'-------------------------------------------------\n'
+        f'Z_batch: \n{Z_batch}\n'
+        f'Z_batch shape: {Z_batch.shape}\n'
+        f'-------------------------------------------------\n'
+    )
+
+    # print(
+    #     f'Input Tensors unsqueezed: \n'
+    #     f'-------------------------------------------------\n'
+    #     f'z: \n{z.unsqueeze(dim = -1)}\n'
+    #     f'z shape: {z.unsqueeze(dim = -1).shape}\n'
+    #     f'-------------------------------------------------\n'
+    #     f'Z_batch: \n{Z_batch.unsqueeze(dim = -1)}\n'
+    #     f'Z_batch shape: {Z_batch.unsqueeze(dim = -1).shape}\n'
+    #     f'-------------------------------------------------\n'
+    # )
+
+
+    ###--- Model ---###
+    y_dim = 2
+    product_regr = ProductRegr(latent_dim = latent_dim, y_dim = y_dim)
+
+    ###--- Forward Pass ---###
+    #y_hat = product_regr(z)
+    Y_hat_batch = product_regr(Z_batch)
+    print(
+        f'Output Tensors: \n'
+        f'-------------------------------------------------\n'
+        #f'y_hat: \n{y_hat}\n'
+        #f'y_hat shape: {y_hat.shape}\n'
+        #f'-------------------------------------------------\n'
+        f'Y_hat_batch: \n{Y_hat_batch}\n'
+        f'Y_hat_batch shape: {Y_hat_batch.shape}\n'
+    )
+
+
+
+def test_huber_implementations():
+
+    ###--- Tensors ---###
+    y = torch.tensor(
+        [[1.0, 2.0, 3.0],
+         [2.0, 3.0, 4.0]]
+    )
+    y_hat = torch.tensor(
+        [[1.5, 3, 5],
+         [2.5, 3.5, 4.5]]
+    )
+
+    print(
+        f'Input Tensors: \n'
+        f'-------------------------------------------------\n'
+        f'y: \n{y}\n'
+        f'y_hat: \n{y_hat}\n'
+        f'-------------------------------------------------\n'
+    )
+
+    ###--- Huber Loss ---###
+    delta = 1.0
+    huber = Huber(delta = delta)
+    huber_own = HuberOwn(delta = delta)
+
+    loss = huber(y, y_hat)
+    loss_own = huber_own(y, y_hat)
+
+    print(
+        f'Loss: \n'
+        f'-------------------------------------------------\n'
+        f'loss term: {loss}\n'
+        f'loss term shape: {loss.shape}\n'
+        f'-------------------------------------------------\n'
+        f'own loss term: {loss_own}\n'
+        f'own loss term shape: {loss_own.shape}\n'
+        f'-------------------------------------------------\n'
+    )
+
+
+"""
 Test Functions Execution
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 
 if __name__=="__main__":
 
-    #--- Module ---#
-    module_properties_test()
+    ###--- Module ---###
+    #module_properties_test()
+
+    ###--- Product Regressor ---###
+    #product_regr_test()
+
+
+    ###--- Loss ---###
+    test_huber_implementations()

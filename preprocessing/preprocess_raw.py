@@ -53,7 +53,7 @@ def preprocess_raw():
 
     ###--- Paths and Settings ---###
     tensor_one_mapping = True
-    kind = 'key'
+    kind = 'max'
     data_dir = Path("./data")
     alignment_info_dir = data_dir / "alignment_info"
     tensor_dir = data_dir / "tensors"
@@ -122,7 +122,7 @@ def preprocess_raw():
     data_df.reset_index(inplace = True, drop = True)
 
     #--- 3.2. Divide y-values by Time to get MRR ---#
-    data_df[y_data_cols] = data_df[y_data_cols].div(data_df['Time_ptp'], axis = 0)
+    data_df[y_data_cols] = data_df[y_data_cols].div(data_df['Time_ps9_ptp'], axis = 0)
 
 
     ###--- 4. Create Index Map and Export ---###

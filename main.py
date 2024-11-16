@@ -21,7 +21,7 @@ from models.decoders import (
 from models.var_encoders import VarEncoder
 from models.var_decoders import VarDecoder
 
-from models.regressors import LinearRegr
+from models.regressors import LinearRegr, ProductRegr
 from models import AE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
@@ -32,7 +32,6 @@ from loss import (
     RelativeLpNorm,
     Huber,
     RelativeHuber,
-    HuberOwn,
 )
 
 from loss.decorators import Weigh, Observe
@@ -281,7 +280,25 @@ def VAE_iso_training_procedure():
     #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
+    from eval import eval_GVAE_iso, eval_BVAE_iso
 
+    eval_GVAE_iso(
+        dataset = dataset, 
+        subsets = {'test_unlabeled': test_dataset}, 
+        model = model, 
+        eval_loss = test_reconstr_loss, 
+        n_epochs = epochs, 
+        n_iterations = n_iterations
+    )
+
+    # eval_BVAE_iso(
+    #     dataset = dataset, 
+    #     subsets = {'test_unlabeled': test_dataset}, 
+    #     model = model, 
+    #     eval_loss = test_reconstr_loss, 
+    #     n_epochs = epochs, 
+    #     n_iterations = n_iterations
+    # )
     # ##--- Test Loss ---###
     # X_test = test_dataset.dataset.X_data[test_dataset.indices]
     # X_test = X_test[:, 1:]
@@ -383,7 +400,7 @@ def VAE_latent_visualisation():
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
 
     #--- Beta VAE Loss ---#
-    beta = 1
+    beta = 0.01
     kld_term = GaussianAnaKLDiv()
     #kld_term = GaussianMCKLDiv()
     kld_term = Weigh(kld_term, weight = beta)
@@ -697,7 +714,7 @@ def train_joint_seq_VAE():
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
 
-    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
@@ -919,7 +936,7 @@ def train_joint_epoch_wise_VAE_recon():
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
 
-    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
@@ -1075,6 +1092,7 @@ def AE_joint_epoch_procedure():
 
     ###--- Dataset ---###
     normaliser = MinMaxNormaliser()
+    #normaliser = MinMaxEpsNormaliser()
     #normaliser = ZScoreNormaliser()
     #normaliser = None
     
@@ -1115,13 +1133,20 @@ def AE_joint_epoch_procedure():
     
     ae_model = AE(encoder = encoder, decoder = decoder)
     regressor = LinearRegr(latent_dim = latent_dim)
+    #regressor = ProductRegr(latent_dim = latent_dim)
 
 
     ###--- Observation Test Setup ---###
-    n_iterations_ae = len(dataloader_ae)
+    dataset_size_ae = len(ae_train_ds)
     dataset_size_ete = len(regr_train_ds)
 
-    ae_loss_obs = LossTermObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
+    ae_loss_obs = LossTermObserver(
+        n_epochs = epochs, 
+        dataset_size= dataset_size_ae,
+        batch_size= batch_size,
+        name = 'AE Loss',
+        aggregated = True,
+    )
     
     loss_observer = CompositeLossTermObserver(
         n_epochs = epochs,
@@ -1137,7 +1162,7 @@ def AE_joint_epoch_procedure():
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
 
-    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
@@ -1178,7 +1203,7 @@ def AE_joint_epoch_procedure():
     training_procedure()
 
     ###--- Plot Observations ---###
-    plot_loss_tensor(observed_losses = ae_loss_obs.losses)
+    #plot_loss_tensor(observed_losses = ae_loss_obs.losses)
     loss_observer.plot_agg_results()
 
 
@@ -1196,25 +1221,36 @@ def AE_joint_epoch_procedure():
     X_test_l = X_test_l[:, 1:]
     y_test_l = y_test_l[:, 1:]
 
-    X_test_ul_hat = decoder(encoder((X_test_ul)))
+    with torch.no_grad():
 
-    loss_reconst = reconstr_loss(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
+        Z_batch_ul, X_test_ul_hat = ae_model(X_test_ul)
 
-    y_test_l_hat = regressor(encoder(X_test_l))
+        loss_reconst = reconstr_loss_term(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
 
-    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+        Z_batch_l, X_test_l_hat = ae_model(X_test_l)
+        y_test_l_hat = regressor(Z_batch_l)
+
+        loss_regr = regr_loss_term(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+
     print(
         f"Autoencoder:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_ae)} iterations each\n"
-        f"Avg. Loss on unlabelled testing subset: {loss_reconst}\n\n"
+        f"Avg. Loss on unlabelled testing subset: {loss_reconst.mean()}\n\n"
         
         f"Regression End-To-End:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
-        f"Avg. Loss on labelled testing subset: {loss_regr}\n"
+        f"Avg. Loss on labelled testing subset: {loss_regr.mean()}\n"
     )
 
+    if latent_dim == 3:
+        title = f'AE Normalised (epochs = {epochs})'
+        plot_latent_with_reconstruction_error(
+            latent_tensor = Z_batch_ul,
+            loss_tensor = loss_reconst,
+            title = title
+        )
 
 
 
@@ -1290,7 +1326,7 @@ def VAE_joint_epoch_procedure():
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
 
-    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
@@ -1429,7 +1465,7 @@ def train_baseline():
 
 
     ###--- Losses ---###
-    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 

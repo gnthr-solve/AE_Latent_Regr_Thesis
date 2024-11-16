@@ -68,7 +68,7 @@ class Huber(LossTerm):
 
         loss_batch = self.loss_fn(t_batch, t_hat_batch)
 
-        return loss_batch
+        return loss_batch.sum(dim = -1)
     
 
 
@@ -85,7 +85,7 @@ class RelativeHuber(LossTerm):
 
         loss_batch = self.loss_fn(t_batch, t_hat_batch) / t_batch_norms.mean()
 
-        return loss_batch
+        return loss_batch.sum(dim = -1)
     
 
     def norm(self, t_batch: Tensor) -> Tensor:
@@ -100,6 +100,9 @@ class RelativeHuber(LossTerm):
 """
 Loss Functions - HuberLossOwn
 -------------------------------------------------------------------------------------------------------------------------------------------
+Own implementation of the Huber loss function. 
+The idea was to allow conformity with the LossTerm interface, as setting reduction = 'None' preserved the complete shape.
+It turned out unnecessary, as summing over the last dimension of the loss tensor solves the problem with the original Huber loss function.
 """
 class HuberOwn(LossTerm):
 
@@ -125,27 +128,6 @@ class HuberOwn(LossTerm):
 
         return loss_batch.sum(dim = -1)
     
-
-
-# class HuberOwn(LossTerm):
-
-#     def __init__(self, delta: float = 1.0):
-        
-#         self.delta = delta
-
-
-#     def __call__(self, t_batch: Tensor, t_hat_batch: Tensor, **tensors: Tensor) -> Tensor:
-
-#         diffs = torch.abs(t_batch - t_hat_batch)
-
-#         mask = diffs > self.delta
-
-#         squared_loss = 0.5 * diffs ** 2
-#         linear_loss = self.delta * (diffs - 0.5 * self.delta)
-
-#         loss_batch = torch.where(mask, linear_loss, squared_loss).sum(dim = -1)
-
-#         return loss_batch
     
 
     
