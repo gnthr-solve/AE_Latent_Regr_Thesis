@@ -47,19 +47,50 @@ X_col_map_max = map_loader(Path(f'data/alignment_info/X_max{tensor_one_infix}_co
 
 
 
+"""
+Data Helper Tools - Load Tensor segments
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def load_tensor_segment(tensor_path: Path, indices: list[int]) -> Tensor:
 
-def remove_columns_and_update_mapping(tensor: Tensor, mapping: dict[int, str], keys_to_remove: list[str]):
+    tensor = torch.load(tensor_path, weights_only = True)
+    tensor_segment = tensor[indices]
 
-    keys_to_keep = [key for key in mapping.values() if key not in keys_to_remove]
-    indices_to_keep = [int(k) for k, v in mapping.items() if v in keys_to_keep]
-
-    new_tensor = tensor[:, indices_to_keep]
-    new_mapping = {i: v for i, v in enumerate(keys_to_keep)}
-
-    return new_tensor, new_mapping
+    return tensor_segment
 
 
 
+"""
+Data Helper Tools - tensor to df
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def X_tensor_to_df(X_data: Tensor, alignment, metadata: pd.DataFrame) -> pd.DataFrame:
+
+    index_map = alignment.index_map
+    col_map = alignment.X_col_map
+
+    indices = X_data[:, 0].tolist()
+    df_dict = {'WAFER_ID': [index_map[int(idx)] for idx in indices]}
+    df_dict.update({col_map[i]: X_data[:, i].tolist() for i in range(1, X_data.shape[1])})
+
+    df = pd.DataFrame(df_dict)
+    df = df.merge(metadata, on = 'WAFER_ID')
+
+    return df
+    
+
+def retrieve_metadata(indices, metadata_df: pd.DataFrame) -> pd.DataFrame:
+
+    contained_ids = [int(idx) for idx in indices]
+    mask = metadata_df['mapping_idx'].isin(contained_ids)
+
+    return metadata_df[mask]
+
+
+"""
+Data Helper Tools - Dataset Builder
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class DatasetBuilder:
 
     def __init__(
@@ -81,8 +112,8 @@ class DatasetBuilder:
 
         self.metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
 
-        self.X_data: torch.Tensor = torch.load(f = tensor_dir / f'X_data_{kind}_tensor.pt')
-        self.y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt')
+        self.X_data: torch.Tensor = torch.load(f = tensor_dir / f'X_data_{kind}_tensor.pt', weights_only = True)
+        self.y_data: torch.Tensor = torch.load(f = tensor_dir / 'y_data_tensor.pt', weights_only = True)
 
         
     def exclude_columns_and_update_mapping(self):
@@ -121,3 +152,20 @@ class DatasetBuilder:
         dataset = TensorDataset(self.X_data, self.y_data, self.metadata_df, alignment = alignment)
 
         return dataset
+    
+
+
+
+"""
+Data Helper Tools - Storage
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def remove_columns_and_update_mapping(tensor: Tensor, mapping: dict[int, str], keys_to_remove: list[str]):
+
+    keys_to_keep = [key for key in mapping.values() if key not in keys_to_remove]
+    indices_to_keep = [int(k) for k, v in mapping.items() if v in keys_to_keep]
+
+    new_tensor = tensor[:, indices_to_keep]
+    new_mapping = {i: v for i, v in enumerate(keys_to_keep)}
+
+    return new_tensor, new_mapping

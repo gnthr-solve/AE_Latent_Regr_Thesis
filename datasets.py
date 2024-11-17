@@ -114,7 +114,7 @@ class TensorDataset(Dataset):
 
     def __getitem__(self, ndx):
         """
-        Retrieves a data sample and its associated metadata.
+        Retrieves a data sample.
 
         Args:
             ndx (int): Index of the sample to retrieve.

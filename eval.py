@@ -51,7 +51,7 @@ def eval_BVAE_iso(dataset: Dataset, subsets: dict[str, Subset], model, eval_loss
 
         Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
 
-        alpha_l, beta_l = infrm_dist_params.unbind(dim = -1)
+        mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
         alpha_r, beta_r = genm_dist_params.unbind(dim = -1)
 
         X_test_hat = alpha_r / (alpha_r + beta_r)
