@@ -19,7 +19,7 @@ DataSets - Alignment
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 @dataclass(slots=True)
-class Alignment:
+class AlignmentPrev:
 
     index_map: dict[int, str] = field(default_factory = {})
 
@@ -38,10 +38,10 @@ class Alignment:
 
 
 """
-DataSets - AlignmentPrime
+DataSets - Alignment
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class AlignmentPrime:
+class Alignment:
 
     def __init__(self, index_map: dict[int, str], X_col_map: dict[int, str], y_col_map: dict[int, str]):
 
@@ -82,4 +82,8 @@ y_col_map = map_loader(Path(f'data/alignment_info/y{tensor_one_infix}_col_map.js
 
 X_col_map_key = map_loader(Path(f'data/alignment_info/X_key{tensor_one_infix}_col_map.json'))
 X_col_map_max = map_loader(Path(f'data/alignment_info/X_max{tensor_one_infix}_col_map.json'))
+
+# Create Alignments
+alignment_key = Alignment(index_map = index_map, X_col_map = X_col_map_key, y_col_map = y_col_map)
+alignment_max = Alignment(index_map = index_map, X_col_map = X_col_map_max, y_col_map = y_col_map)
 

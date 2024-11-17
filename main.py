@@ -1430,8 +1430,8 @@ def VAE_joint_epoch_procedure():
 def train_baseline():
 
     ###--- Meta ---###
-    epochs = 4
-    batch_size = 50
+    epochs = 10
+    batch_size = 30
 
 
     ###--- Dataset ---###
@@ -1442,7 +1442,7 @@ def train_baseline():
     dataset_builder = DatasetBuilder(
         kind = 'key',
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        #exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     )
     
     dataset = dataset_builder.build_dataset()
@@ -1465,8 +1465,15 @@ def train_baseline():
 
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)
+    dataset_size = len(regr_train_ds)
 
-    loss_obs = LossTermObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
+    loss_obs = LossTermObserver(
+        n_epochs = epochs,
+        dataset_size= dataset_size,
+        batch_size= batch_size,
+        name = 'Regr Loss',
+        aggregated = True,
+    )
 
 
     ###--- Losses ---###
@@ -1522,15 +1529,18 @@ def train_baseline():
     ###--- Test Loss ---###
     regr_test_ds = subsets['test_labeled']
 
-    X_test_l = dataset.X_data[regr_test_ds.indices]
-    y_test_l = dataset.y_data[regr_test_ds.indices]
+    test_indices = regr_test_ds.indices
+    X_test_l = dataset.X_data[test_indices]
+    y_test_l = dataset.y_data[test_indices]
 
     X_test_l = X_test_l[:, 1:]
     y_test_l = y_test_l[:, 1:]
 
-    y_test_l_hat = regressor(X_test_l)
+    with torch.no_grad():
+        y_test_l_hat = regressor(X_test_l)
 
-    loss_regr = regr_loss_test(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+        loss_regr = regr_loss_test(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+
     print(
         f"Regression Baseline:\n"
         f"---------------------------------------------------------------\n"
@@ -1538,7 +1548,43 @@ def train_baseline():
         f"Avg. Loss on labelled testing subset: {loss_regr}\n"
     )
 
+    ###--- Experiment ---###
+    import matplotlib.pyplot as plt
 
+    #print(f'Regr weight shape: {regressor.regr_map.weight.shape}')
+    weights_1, weights_2 = regressor.regr_map.weight.detach().unbind(dim = 0)
+    bias_1, bias_2 = regressor.regr_map.bias.detach().unbind(dim = 0)
+
+    col_indices = np.arange(1, dataset.X_dim)
+    X_col_labels = dataset.alignm.retrieve_col_labels(indices = col_indices)
+    y_col_labels = dataset.alignm.retrieve_col_labels(indices = [1,2], from_X = False)
+
+    weight_df_1 = pd.DataFrame({'Feature': X_col_labels, 'Weight': weights_1.numpy()})
+    weight_df_2 = pd.DataFrame({'Feature': X_col_labels, 'Weight': weights_2.numpy()})
+
+    for label, weight_df, bias in zip(y_col_labels, [weight_df_1, weight_df_2], [bias_1, bias_2]):
+
+        weight_df['Absolute Weight'] = weight_df['Weight'].abs()
+        weight_df = weight_df.sort_values(by = 'Absolute Weight', ascending = False)
+        print(
+            f'{label}:\n'
+            f'-------------------------------------\n'
+            f'weights:\n{weight_df}\n'
+            f'bias:\n{bias}\n'
+            f'-------------------------------------\n'
+        )
+
+        n_top_features = 20
+        top_features_df = weight_df.head(n_top_features)
+
+        # Plot the feature importance for the top 20 features
+        plt.figure(figsize=(14, 6))
+        plt.tight_layout()
+        plt.barh(top_features_df['Feature'], top_features_df['Weight'], color='steelblue')
+        plt.xlabel('Coefficient Value')
+        plt.title(f'Top {n_top_features} Feature Weights in Linear Model for {label}')
+        plt.gca().invert_yaxis()  # Most important features on top
+        plt.show()
 
 
 """
@@ -1557,7 +1603,7 @@ if __name__=="__main__":
     ###--- VAE in isolation ---###
     #train_VAE_iso()
     #VAE_iso_training_procedure()
-    VAE_latent_visualisation()
+    #VAE_latent_visualisation()
 
     ###--- Compositions ---###
     #train_joint_seq_AE()
@@ -1568,6 +1614,6 @@ if __name__=="__main__":
     #VAE_joint_epoch_procedure()
 
     ###--- Baseline ---###
-    #train_baseline()
+    train_baseline()
 
     pass
