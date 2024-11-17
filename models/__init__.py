@@ -1,6 +1,8 @@
 
 from .encoders import *
 from .decoders import *
+from .var_encoders import *
+from .var_decoders import *
 
 from .regressors import *
 

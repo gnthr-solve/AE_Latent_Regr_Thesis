@@ -9,7 +9,7 @@ import json
 from itertools import product
 from pathlib import Path
 
-from .info import file_metadata_cols, process_metadata_cols, identifier_col, y_col_rename_map
+from data_utils.info import file_metadata_cols, process_metadata_cols, identifier_col, y_col_rename_map
 
 """
 Preprocessing - I. Preprocessing Raw DataFrames to Organised pytorch Tensors

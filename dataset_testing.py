@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, Subset, DataLoader, random_split
 from itertools import product
 from pathlib import Path
 
-from datasets import DataFrameDataset, TensorDataset, SplitSubsetFactory
+from data_utils import DataFrameDataset, TensorDataset, SplitSubsetFactory
 
 """
 Test Functions

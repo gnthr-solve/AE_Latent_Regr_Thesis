@@ -10,16 +10,16 @@ from torch.optim.lr_scheduler import ExponentialLR
 from pathlib import Path
 from tqdm import tqdm
 
-from models.encoders import (
+from data_utils import DatasetBuilder, SplitSubsetFactory, retrieve_metadata
+
+from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
+
+from models import (
     LinearEncoder,
-)
-
-from models.decoders import (
     LinearDecoder,
+    VarEncoder,
+    VarDecoder,
 )
-
-from models.var_encoders import VarEncoder
-from models.var_decoders import VarDecoder
 
 from models.regressors import LinearRegr, ProductRegr
 from models import AE, GaussVAE, EnRegrComposite
@@ -43,13 +43,9 @@ from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver
 
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
-    
-from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
-from datasets import SplitSubsetFactory
 
-from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_characteristics, simple_timer
-from helper_tools import plot_latent_with_reconstruction_error
-from helper_tools import DatasetBuilder
+from helper_tools import simple_timer
+from helper_tools.plotting import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_latent_with_attribute
 
 """
 Main Functions - Training
@@ -343,7 +339,7 @@ def VAE_latent_visualisation():
     from helper_tools import plot_latent_with_reconstruction_error
 
     ###--- Meta ---###
-    epochs = 5
+    epochs = 3
     batch_size = 50
     latent_dim = 3
 
@@ -445,8 +441,12 @@ def VAE_latent_visualisation():
 
 
     ###--- Test Loss ---###
-    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    indices = test_dataset.indices
+    X_test = dataset.X_data[indices]
     X_test = X_test[:, 1:]
+
+    test_ds_metadata = retrieve_metadata(indices, dataset.metadata_df)
+    test_ds_metadata['START_TIME'] = pd.to_datetime(test_ds_metadata['START_TIME'], format='%m/%d/%Y %H:%M:%S').view('int64') // 10**9
 
     with torch.no_grad():
 
@@ -468,6 +468,11 @@ def VAE_latent_visualisation():
     plot_latent_with_reconstruction_error(
         latent_tensor = mu_l,
         loss_tensor = loss_reconst_test,
+        title = title
+    )
+    plot_latent_with_attribute(
+        latent_tensor = mu_l,
+        color_attr = test_ds_metadata['START_TIME'],
         title = title
     )
 
@@ -1551,8 +1556,8 @@ if __name__=="__main__":
     
     ###--- VAE in isolation ---###
     #train_VAE_iso()
-    VAE_iso_training_procedure()
-    #VAE_latent_visualisation()
+    #VAE_iso_training_procedure()
+    VAE_latent_visualisation()
 
     ###--- Compositions ---###
     #train_joint_seq_AE()

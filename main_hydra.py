@@ -16,18 +16,18 @@ from omegaconf import DictConfig
 from pathlib import Path
 from tqdm import tqdm
 
-from models.encoders import (
+from data_utils import DatasetBuilder, SplitSubsetFactory
+
+from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
+
+from models import (
     LinearEncoder,
-)
-
-from models.decoders import (
     LinearDecoder,
+    VarEncoder,
+    VarDecoder,
 )
 
-from models.var_encoders import VarEncoder
-from models.var_decoders import VarDecoder
-
-from models.regressors import LinearRegr
+from models.regressors import LinearRegr, ProductRegr
 from models import AE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
@@ -38,24 +38,20 @@ from loss import (
     RelativeLpNorm,
     Huber,
     RelativeHuber,
-    HuberOwn,
 )
 
 from loss.decorators import Weigh, Observe
 from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_ll import GaussianDiagLL
+from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
 
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
 
-from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser, RobustScalingNormaliser
-from datasets import SplitSubsetFactory
+from helper_tools import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_training_characteristics, simple_timer
 
-from helper_tools import plot_loss_tensor, get_valid_batch_size, plot_training_characteristics, simple_timer
-from helper_tools import DatasetBuilder
 
 
 
@@ -334,7 +330,7 @@ def train_joint_epoch_procedure(cfg: DictConfig):
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
 
-    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
@@ -446,7 +442,7 @@ def train_baseline(cfg: DictConfig):
 
 
     ###--- Losses ---###
-    regr_loss_term = RegrAdapter(HuberOwn(delta = 1))
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
