@@ -9,7 +9,7 @@ import json
 from itertools import product
 from pathlib import Path
 
-from data_utils.info import file_metadata_cols, process_metadata_cols, identifier_col, y_col_rename_map
+from data_utils.info import file_metadata_cols, process_metadata_cols, y_col_rename_map, identifier_col, time_col
 
 """
 Preprocessing - I. Preprocessing Raw DataFrames to Organised pytorch Tensors
@@ -31,7 +31,7 @@ Preprocessing - I. Preprocessing Raw DataFrames to Organised pytorch Tensors
     6. Convert to Tensors and Export
 """
 
-def preprocess_raw():
+def preprocess_raw(kind: str):
     """
     Reads:
         apc_dataset.csv (corresponding to X data and metadata)
@@ -53,7 +53,7 @@ def preprocess_raw():
 
     ###--- Paths and Settings ---###
     tensor_one_mapping = True
-    kind = 'max'
+    #kind = 'max'
     data_dir = Path("./data")
     alignment_info_dir = data_dir / "alignment_info"
     tensor_dir = data_dir / "tensors"
@@ -80,6 +80,8 @@ def preprocess_raw():
 
     y_data_df = raw_y_data_df.rename(columns = y_col_rename_map)
     
+    # convert time to pd
+    X_data_df.loc[:, time_col] = pd.to_datetime(X_data_df[time_col], format='%m/%d/%Y %H:%M:%S')
 
     ###--- 2. Extract Column/Parameter Names for X, y ---###
     X_data_cols = X_data_df.drop(columns = [identifier_col] + process_metadata_cols).columns.tolist()
@@ -117,7 +119,7 @@ def preprocess_raw():
     isna_any_mask = data_df[X_data_cols].isna().any(axis = 1)
     data_df = data_df[~isna_any_mask]
 
-    data_df.sort_values(by = identifier_col, inplace = True)
+    data_df.sort_values(by = time_col, inplace = True)
 
     data_df.reset_index(inplace = True, drop = True)
 

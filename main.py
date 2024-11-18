@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import ExponentialLR
 from pathlib import Path
 from tqdm import tqdm
 
-from data_utils import DatasetBuilder, SplitSubsetFactory, retrieve_metadata
+from data_utils import DatasetBuilder, SplitSubsetFactory, retrieve_metadata, time_col
 
 from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
@@ -443,10 +443,14 @@ def VAE_latent_visualisation():
     ###--- Test Loss ---###
     indices = test_dataset.indices
     X_test = dataset.X_data[indices]
+    mapping_idxs = X_test[:, 0].tolist()
     X_test = X_test[:, 1:]
 
-    test_ds_metadata = retrieve_metadata(indices, dataset.metadata_df)
-    test_ds_metadata['START_TIME'] = pd.to_datetime(test_ds_metadata['START_TIME'], format='%m/%d/%Y %H:%M:%S').view('int64') // 10**9
+    test_ds_metadata = retrieve_metadata(mapping_idxs, dataset.metadata_df)
+    print(test_ds_metadata[time_col].dtype)
+    test_ds_metadata.loc[:, time_col] = pd.to_datetime(test_ds_metadata[time_col]).astype('int64') // 10**9
+    print(test_ds_metadata[time_col].dtype)
+    
 
     with torch.no_grad():
 
@@ -472,7 +476,7 @@ def VAE_latent_visualisation():
     )
     plot_latent_with_attribute(
         latent_tensor = mu_l,
-        color_attr = test_ds_metadata['START_TIME'],
+        color_attr = test_ds_metadata[time_col],
         title = title
     )
 
@@ -1430,7 +1434,7 @@ def VAE_joint_epoch_procedure():
 def train_baseline():
 
     ###--- Meta ---###
-    epochs = 10
+    epochs = 2
     batch_size = 30
 
 
@@ -1603,7 +1607,7 @@ if __name__=="__main__":
     ###--- VAE in isolation ---###
     #train_VAE_iso()
     #VAE_iso_training_procedure()
-    #VAE_latent_visualisation()
+    VAE_latent_visualisation()
 
     ###--- Compositions ---###
     #train_joint_seq_AE()
@@ -1614,6 +1618,6 @@ if __name__=="__main__":
     #VAE_joint_epoch_procedure()
 
     ###--- Baseline ---###
-    train_baseline()
+    #train_baseline()
 
     pass
