@@ -26,15 +26,15 @@ from models import AE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
-    Loss,
     CompositeLossTerm,
+    CompositeLossTermObs,
     LpNorm,
     RelativeLpNorm,
     Huber,
     RelativeHuber,
 )
 
-from loss.decorators import Weigh, Observe
+from loss.decorators import Loss, Weigh, Observe
 from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
@@ -119,7 +119,7 @@ def AE_iso_training_procedure():
     test_reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
 
     loss_terms = {'Reconstruction': reconstr_term}
-    reconstr_loss = Loss(CompositeLossTerm(observer=loss_observer, **loss_terms))
+    reconstr_loss = Loss(CompositeLossTermObs(observer=loss_observer, **loss_terms))
 
     test_reconstr_loss = test_reconstr_term
 
@@ -243,7 +243,7 @@ def VAE_iso_training_procedure():
     #kld_term = GaussianMCKLDiv()
 
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    loss = Loss(CompositeLossTerm(observer = loss_observer, **loss_terms))
+    loss = Loss(CompositeLossTermObs(observer = loss_observer, **loss_terms))
 
     test_reconstr_loss = Loss(AEAdapter(RelativeLpNorm(p = 2)))
 
@@ -337,6 +337,7 @@ def VAE_iso_training_procedure():
 def VAE_latent_visualisation():
     
     from helper_tools import plot_latent_with_reconstruction_error
+    from loss.loss_builder import WeightedCompositeLossBuilder
 
     ###--- Meta ---###
     epochs = 3
@@ -403,7 +404,7 @@ def VAE_latent_visualisation():
 
     #--- Composition ---#
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    loss = Loss(CompositeLossTerm(observer = loss_observer, **loss_terms))
+    loss = Loss(CompositeLossTermObs(observer = loss_observer, **loss_terms))
 
     test_reconstr_loss = AEAdapter(RelativeLpNorm(p = 2))
 
@@ -718,7 +719,7 @@ def train_joint_seq_VAE():
     #kld_term = GaussianMCKLDiv()
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    vae_loss_term = CompositeLossTerm(**vae_loss_terms)
+    vae_loss_term = CompositeLossTermObs(**vae_loss_terms)
 
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
@@ -940,7 +941,7 @@ def train_joint_epoch_wise_VAE_recon():
     kld_term = GaussianMCKLDiv()
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    vae_elbo_term = CompositeLossTerm(**vae_loss_terms)
+    vae_elbo_term = CompositeLossTermObs(**vae_loss_terms)
 
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
@@ -956,7 +957,7 @@ def train_joint_epoch_wise_VAE_recon():
 
     ###--- Losses ---###
     vae_loss = Loss(vae_elbo_term)
-    ete_loss = Loss(CompositeLossTerm(observer= loss_observer, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTermObs(observer= loss_observer, **ete_loss_terms))
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1180,7 +1181,7 @@ def AE_joint_epoch_procedure():
         'Regression Term': Weigh(regr_loss_term, weight = 0.9),
     }
 
-    ete_loss = Loss(CompositeLossTerm(observer = loss_observer, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
     #reconstr_loss = Loss(Observe(observer = ae_loss_obs, loss_term = reconstr_loss_term))
     reconstr_loss = Loss(loss_term = reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
@@ -1330,7 +1331,7 @@ def VAE_joint_epoch_procedure():
     #kld_term = GaussianMCKLDiv()
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    vae_loss_term = CompositeLossTerm(**vae_loss_terms)
+    vae_loss_term = CompositeLossTermObs(**vae_loss_terms)
 
     #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
@@ -1348,7 +1349,7 @@ def VAE_joint_epoch_procedure():
     ###--- Losses ---###
     #--- For Training ---#
     vae_loss = Loss(vae_loss_term)
-    ete_loss = Loss(CompositeLossTerm(observer = loss_observer, **ete_loss_terms))
+    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
 
     #--- For Testing ---#
     reconstr_loss = Loss(reconstr_loss_term)

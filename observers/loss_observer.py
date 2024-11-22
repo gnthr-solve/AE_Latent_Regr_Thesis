@@ -111,13 +111,11 @@ class LossTermObserver(LossComponentObserver):
             self.truncate_observations()
             raise AbortTrainingError
 
-        loss = loss_batch.detach()
-
         if self.aggregated:
-            self.inscribe(loss.mean())
+            self.inscribe(loss_batch.mean())
 
         else:
-            self.inscribe(loss)
+            self.inscribe(loss_batch)
 
         self.update_indices()
 
@@ -173,11 +171,9 @@ class CompositeLossTermObserver(LossComponentObserver):
     def __call__(self, loss_batches: dict[str, Tensor], **kwargs):
 
         for name, loss_batch in loss_batches.items():
-            
-            loss_batch_detached = loss_batch.detach()
 
             try:
-                self.loss_obs[name](loss_batch_detached)
+                self.loss_obs[name](loss_batch)
 
             except AbortTrainingError:
                 self.truncate_observations(name)
@@ -185,10 +181,10 @@ class CompositeLossTermObserver(LossComponentObserver):
 
 
             if self.aggregated:
-                self.inscribe(loss_batch_detached.mean())
+                self.inscribe(loss_batch.mean())
 
             else:
-                self.inscribe(loss_batch_detached)
+                self.inscribe(loss_batch)
         
         self.update_indices()
 

@@ -23,29 +23,37 @@ class LossTerm(ABC):
 
 
 """
-Loss
--------------------------------------------------------------------------------------------------------------------------------------------
-Loss converts a single or composite LossTerm into an actual loss function, 
-by aggregating the loss term values of a batch to a single scalar value.
-"""
-class Loss:
-
-    def __init__(self, loss_term: LossTerm):
-
-        self.loss_term = loss_term
-
-    
-    def __call__(self, **tensors: Tensor) -> Tensor:
-        
-        return self.loss_term(**tensors).mean()
-
-
-
-"""
-CompositeLoss
+CompositeLossTerm
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 class CompositeLossTerm(LossTerm):
+
+    def __init__(self, **loss_terms: LossTerm):
+
+        self.loss_terms = loss_terms
+        
+
+    def __call__(self, **tensors: Tensor) -> Tensor:
+
+        loss_batches = {
+            name: loss_term(**tensors)
+            for name, loss_term in self.loss_terms.items()
+        }
+
+        #print(tuple(loss_batches.values()))
+        stacked_losses = torch.stack(tuple(loss_batches.values()))
+        batch_losses = torch.sum(stacked_losses, dim=0)
+
+        return batch_losses
+
+
+
+
+"""
+CompositeLossTermObs
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class CompositeLossTermObs(LossTerm):
 
     def __init__(self, observer = None, **loss_terms: LossTerm):
 
@@ -75,7 +83,8 @@ class CompositeLossTerm(LossTerm):
         losses = {name: loss_batch.detach() for name, loss_batch in loss_batches.items()}
 
         self.observer(losses)
-        
+
+
 
 
 """

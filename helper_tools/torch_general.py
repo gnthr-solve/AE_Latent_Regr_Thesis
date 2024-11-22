@@ -98,18 +98,27 @@ def tensor_list_to_numpy_array(tensor_list: list[torch.Tensor]) -> np.ndarray:
 Torch GHTs - Initialise weights
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def initialize_weights(model: Module):
+def initialize_linear_weights(layer: nn.Linear, nonlinearity: str = 'relu'):
 
-    for m in model.modules():
+    w = layer.weight
+    b = layer.bias
+
+    if nonlinearity == 'ReLU':
+        nn.init.kaiming_uniform_(w, nonlinearity = 'relu')
         
-        if isinstance(m, nn.Linear):
+    elif nonlinearity == 'LeakyReLU':
+        nn.init.kaiming_uniform_(w, nonlinearity = 'leaky_relu')
 
-            #nn.init.xavier_uniform_(m.weight)
-            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
-            
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
+    else:
+        nn.init.xavier_uniform_(w)
+
+    if b is not None:
+        nn.init.constant_(b, 0)
 
 
 
+def weights_init(module: Module, activation: str):
 
+    if isinstance(module, nn.Linear):
+
+        initialize_linear_weights(module, nonlinearity = activation)

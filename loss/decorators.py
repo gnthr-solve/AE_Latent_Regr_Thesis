@@ -13,6 +13,25 @@ from .loss_classes import LossTerm
 
 
 """
+Loss
+-------------------------------------------------------------------------------------------------------------------------------------------
+Loss converts a single or composite LossTerm into an actual loss function, 
+by aggregating the loss term values of a batch to a single scalar value.
+"""
+class Loss(LossTerm):
+
+    def __init__(self, loss_term: LossTerm):
+
+        self.loss_term = loss_term
+
+    
+    def __call__(self, **tensors: Tensor) -> Tensor:
+        
+        return self.loss_term(**tensors).mean()
+
+
+
+"""
 Decorators - Weighted LossTerm
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
