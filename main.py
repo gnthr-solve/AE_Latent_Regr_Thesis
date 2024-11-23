@@ -337,7 +337,6 @@ def VAE_iso_training_procedure():
 def VAE_latent_visualisation():
     
     from helper_tools import plot_latent_with_reconstruction_error
-    from loss.loss_builder import WeightedCompositeLossBuilder
 
     ###--- Meta ---###
     epochs = 3
@@ -1264,9 +1263,9 @@ def AE_joint_epoch_procedure():
 
 
 
+
 def VAE_joint_epoch_procedure():
 
-    from loss.loss_builder import CompositeLossBuilder
     ###--- Meta ---###
     epochs = 2
     batch_size = 25
@@ -1313,44 +1312,46 @@ def VAE_joint_epoch_procedure():
     regressor = LinearRegr(latent_dim = latent_dim)
 
 
-    ###--- Loss Terms ---###
-    beta = 1
-    dataset_size_ae = len(ae_train_ds)
+    ###--- Observation Test Setup ---###
     dataset_size_ete = len(regr_train_ds)
 
-    loss_builder = CompositeLossBuilder(
-        clt_name = 'ELBO Loss', 
-        observer_kwargs = {'n_epochs': epochs, 'dataset_size': dataset_size_ae, 'batch_size': batch_size, 'aggregated': True},
+    loss_observer = CompositeLossTermObserver(
+        n_epochs = epochs,
+        dataset_size= dataset_size_ete,
+        batch_size= batch_size,
+        members = ['Reconstruction Term', 'Regression Term'],
+        name = 'ETE Loss',
+        aggregated = True,
     )
 
-    ll_term = GaussianDiagLL()
+    ###--- Loss Terms ---###
+    ll_term = Weigh(GaussianDiagLL(), weight = -1)
 
     kld_term = GaussianAnaKLDiv()
     #kld_term = GaussianMCKLDiv()
 
+    vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
+    vae_loss_term = CompositeLossTermObs(**vae_loss_terms)
+
+    #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
+    reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
+
     regr_loss_term = RegrAdapter(Huber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
-    #vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    loss_builder.add_term(name = 'Log-Likelihood', loss_term = ll_term, weight = -1, observe = True)
-    loss_builder.add_term(name = 'KL-Divergence', loss_term = kld_term, weight = beta, observe = True)
-
-    vae_loss_term = loss_builder.build(observe = True)
-
-    loss_builder.observer_kwargs.update(dataset_size = dataset_size_ete)
-    loss_builder.recurse(new_parent_name = 'ETE Loss', weight = 0.2, observe = True)
-
-    loss_builder.add_term(name = 'Regression Term', loss_term = regr_loss_term, weight = 0.8, observe = True)
+    ete_loss_terms = {
+        'Reconstruction Term': Weigh(vae_loss_term, weight=0.2), 
+        'Regression Term': Weigh(regr_loss_term, weight = 0.8),
+    }
 
 
     ###--- Losses ---###
     #--- For Training ---#
     vae_loss = Loss(vae_loss_term)
-    ete_loss = Loss(loss_builder.build(observe = True))
+    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
 
     #--- For Testing ---#
-    #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
-    reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
-
     reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -1383,7 +1384,7 @@ def VAE_joint_epoch_procedure():
 
 
     ###--- Plot Observations ---###
-    #loss_observer.plot_agg_results()
+    loss_observer.plot_agg_results()
 
 
     ###--- Test Loss ---###
@@ -1427,6 +1428,7 @@ def VAE_joint_epoch_procedure():
         f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
         f"Avg. Loss on labelled testing subset: {loss_regr}\n"
     )
+
 
 
 
