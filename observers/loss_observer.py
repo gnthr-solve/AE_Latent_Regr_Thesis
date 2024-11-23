@@ -238,6 +238,73 @@ class CompositeLossTermObserver(LossComponentObserver):
 
 
 
+"""
+ComposedLossTermObserver
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class ComposedLossTermObserver(LossComponentObserver):
+
+    def __init__(
+            self, 
+            n_epochs: int, 
+            dataset_size: int, 
+            batch_size: int, 
+            loss_obs: dict[str, LossComponentObserver],
+            name: str = None, 
+            aggregated: bool = False
+        ):
+        
+        super().__init__(n_epochs, dataset_size, batch_size, name, aggregated)
+        self.loss_obs = loss_obs
+
+
+    @property
+    def losses(self):
+
+        obs_losses = tuple(obs.losses for obs in self.loss_obs.values())
+        stacked_obs_losses = torch.stack(obs_losses)
+
+        return torch.sum(stacked_obs_losses, dim=0)
+
+
+    def plot_agg_results(self):
+
+        title: str = "Loss Development",
+
+        mosaic_layout_children = [
+            [f'loss_{name}', f'loss_{name}']
+            for name in self.loss_obs.keys()
+        ]
+
+        mosaic_layout = [[f'loss_{self.name}', f'loss_{self.name}'], *mosaic_layout_children]
+
+        fig = plt.figure(figsize=(14, 7), layout = 'constrained')  
+        axs = fig.subplot_mosaic(mosaic_layout)
+
+        losses = {self.name: self.losses, **{name: loss_ob.losses for name, loss_ob in self.loss_obs.items()}}
+        for name, loss_tensor in losses.items():
+            
+            ax: Axes = axs[f'loss_{name}']
+            loss_values = loss_tensor.flatten(start_dim = 0, end_dim = 1)
+            
+            iterations = len(loss_values)
+
+            ax.plot(range(iterations), loss_values)
+
+            for epoch in range(1, self.n_epochs):
+                ax.axvline(x = epoch * self.n_iterations, color = 'r', linestyle = '--')
+
+            ax.set_title(name)
+            ax.set_xlabel('Iteration')
+            ax.set_ylabel('Loss Value')
+
+        fig.suptitle(title)
+
+        plt.show()
+
+
+
+
 # """
 # Detailed Loss Observer
 # -------------------------------------------------------------------------------------------------------------------------------------------

@@ -28,7 +28,7 @@ CompositeLossTerm
 """
 class CompositeLossTerm(LossTerm):
 
-    def __init__(self, **loss_terms: LossTerm):
+    def __init__(self, loss_terms: dict[str, LossTerm] = {}):
 
         self.loss_terms = loss_terms
         
@@ -46,6 +46,10 @@ class CompositeLossTerm(LossTerm):
 
         return batch_losses
 
+
+    def add_term(self, name: str, loss_term: LossTerm):
+
+        self.loss_terms[name] = loss_term
 
 
 
