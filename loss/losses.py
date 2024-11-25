@@ -25,3 +25,23 @@ class VAELoss:
 
     def __call__(self, **tensors: Tensor):
         return self.loss(**tensors)
+
+
+
+
+class RSME:
+
+    def __init__(self, use_kind: str):
+
+        if use_kind == 'Regr':
+            self.loss_term = RegrAdapter(LpNorm(2))
+
+        elif use_kind == 'Reconstr':
+            self.loss_term = AEAdapter(LpNorm(2))
+
+
+    def __call__(self, **tensors: Tensor):
+
+        sq_deviation = self.loss_term(**tensors)**2
+        
+        return torch.sqrt(sq_deviation.mean())
