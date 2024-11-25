@@ -1267,7 +1267,7 @@ def AE_joint_epoch_procedure():
 def VAE_joint_epoch_procedure():
 
     ###--- Meta ---###
-    epochs = 2
+    epochs = 5
     batch_size = 25
     latent_dim = 10
 
@@ -1303,9 +1303,9 @@ def VAE_joint_epoch_procedure():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3)
 
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 8)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3)
 
     vae_model = GaussVAE(encoder = encoder, decoder = decoder)
 
@@ -1341,8 +1341,8 @@ def VAE_joint_epoch_procedure():
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
     ete_loss_terms = {
-        'Reconstruction Term': Weigh(vae_loss_term, weight=0.2), 
-        'Regression Term': Weigh(regr_loss_term, weight = 0.8),
+        'Reconstruction Term': Weigh(vae_loss_term, weight=0.05), 
+        'Regression Term': Weigh(regr_loss_term, weight = 0.95),
     }
 
 
@@ -1609,7 +1609,7 @@ if __name__=="__main__":
     ###--- VAE in isolation ---###
     #train_VAE_iso()
     #VAE_iso_training_procedure()
-    VAE_latent_visualisation()
+    #VAE_latent_visualisation()
 
     ###--- Compositions ---###
     #train_joint_seq_AE()
@@ -1617,7 +1617,7 @@ if __name__=="__main__":
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
     #AE_joint_epoch_procedure()
-    #VAE_joint_epoch_procedure()
+    VAE_joint_epoch_procedure()
 
     ###--- Baseline ---###
     #train_baseline()

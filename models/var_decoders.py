@@ -14,7 +14,7 @@ are vectors of the same dimension as the input/output space (e.g. mean and diago
 """
 class VarDecoder(nn.Module):
 
-    def __init__(self, output_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4):
+    def __init__(self, output_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, activation = 'ReLU'):
         super().__init__()
 
         self.output_dim = output_dim
@@ -34,8 +34,18 @@ class VarDecoder(nn.Module):
         
         self.layers.append(nn.Linear(in_features = n_f(n_layers - 1), out_features = dist_dim))
 
-        self.activation = nn.ReLU()
-        #self.activation = nn.PReLU()
+        ###--- Activation ---###
+        if activation == 'ReLU':
+            self.activation = nn.ReLU()
+
+        elif activation == 'PReLU':
+            self.activation = nn.PReLU()
+
+        elif activation == 'LeakyReLU':
+            self.activation = nn.LeakyReLU()
+        
+        elif activation == 'Softplus':
+            self.activation = nn.Softplus()
 
 
     def forward(self, x: Tensor) -> Tensor:

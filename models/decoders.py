@@ -44,6 +44,9 @@ class LinearDecoder(nn.Module):
         elif activation == 'LeakyReLU':
             self.activation = nn.LeakyReLU()
 
+        elif activation == 'Softplus':
+            self.activation = nn.Softplus()
+
 
     def forward(self, x: Tensor) -> Tensor:
 

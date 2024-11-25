@@ -45,7 +45,7 @@ are vectors of the same dimension as the latent space (e.g. mean and diagonal va
 """
 class VarEncoder(nn.Module):
     
-    def __init__(self, input_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4):
+    def __init__(self, input_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, activation = 'ReLU'):
         super().__init__()
 
         self.latent_dim = latent_dim
@@ -67,8 +67,18 @@ class VarEncoder(nn.Module):
 
             self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True))
         
-        self.activation = nn.ReLU()
-        #self.activation = nn.PReLU()
+        ###--- Activation ---###
+        if activation == 'ReLU':
+            self.activation = nn.ReLU()
+
+        elif activation == 'PReLU':
+            self.activation = nn.PReLU()
+
+        elif activation == 'LeakyReLU':
+            self.activation = nn.LeakyReLU()
+
+        elif activation == 'Softplus':
+            self.activation = nn.Softplus()
 
 
     def forward(self, x: Tensor) -> Tensor:
