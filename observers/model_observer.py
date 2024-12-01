@@ -14,7 +14,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from .training_observer import IterObserver
-from helper_tools import plot_training_losses, plot_param_norms
+from helper_tools import plot_training_losses, plot_param_norms, AbortTrainingError
 
 
 """
@@ -63,11 +63,11 @@ class ModelObserver(IterObserver):
                 
                 if torch.isnan(param.data).any():
                     print(f"{name} contains NaN values")
-                    raise StopIteration
+                    raise AbortTrainingError
                 
                 if torch.isinf(param.data).any():
                     print(f"{name} contains Inf values")
-                    raise StopIteration
+                    raise AbortTrainingError
         
     
     def plot_child_param_development(self, child_name: str, functional = torch.max):

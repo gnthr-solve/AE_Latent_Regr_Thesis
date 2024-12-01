@@ -6,6 +6,7 @@ Regressor Classes - Imports
 
 import torch
 import numpy as np
+import math
 
 from torch import Tensor
 from torch import nn
@@ -29,6 +30,69 @@ class LinearRegr(nn.Module):
         y_hat = self.regr_map(z)
 
         return y_hat
+
+
+
+
+"""
+Regressor Classes - Deep Neural Network
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class DNNRegr(nn.Module):
+    def __init__(
+            self, 
+            input_dim: int, 
+            output_dim: int = 2, 
+            n_layers: int = 4, 
+            dropout_rate: float = 0.05, 
+            activation: str = 'ReLU'
+            ):
+        super().__init__()
+        
+        # Find nearest power of 2 greater than or equal to input_dim
+        start_power = math.ceil(math.log2(input_dim))
+        end_power = max(math.ceil(math.log2(output_dim)), start_power - n_layers)
+        
+        # Generate layer dimensions using powers of 2
+        hidden_dims = [2**p for p in range(start_power, end_power - 1, -1)]
+        
+        # Ensure first layer matches input_dim exactly
+        hidden_dims[0] = input_dim
+        
+        if activation == 'ReLU':
+            self.activation = nn.ReLU()
+
+        elif activation == 'PReLU':
+            self.activation = nn.PReLU()
+
+        elif activation == 'LeakyReLU':
+            self.activation = nn.LeakyReLU()
+
+        elif activation == 'Softplus':
+            self.activation = nn.Softplus()
+        
+        layers = []
+        for i in range(len(hidden_dims) - 1):
+
+            layers.extend([
+                nn.Linear(hidden_dims[i], hidden_dims[i + 1]),
+                nn.BatchNorm1d(hidden_dims[i + 1]),
+                self.activation,
+                nn.Dropout(dropout_rate)
+            ])
+        
+        # final output layer
+        layers.extend([
+            nn.Linear(hidden_dims[-1], output_dim)
+        ])
+        
+        self.network = nn.Sequential(*layers)
+        
+
+    def forward(self, x: Tensor) -> Tensor:
+
+        return self.network(x)
+
 
 
 

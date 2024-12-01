@@ -83,3 +83,24 @@ class GaussianMCKLDiv(MonteCarloKLDiv):
 
         return kld_batch
 
+
+
+"""
+Alternative Monte Carlo KL Divergence - GaussianMCKLDiv
+-------------------------------------------------------------------------------------------------------------------------------------------
+Analogous, but intended to be more numerically stable
+"""
+MAX_LOGVAR = 10
+class GaussianMCKLDiv(MonteCarloKLDiv):
+
+    def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
+
+        mu, logvar = infrm_dist_params.unbind(dim=-1)
+        var = torch.exp(logvar.clamp(max=MAX_LOGVAR))
+        
+        # Use log-sum-exp trick for numerical stability
+        log_ratio = -0.5 * (
+            (Z_batch - mu).pow(2) / var + logvar - Z_batch.pow(2)
+        )
+
+        return torch.logsumexp(log_ratio, dim=-1)

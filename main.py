@@ -21,7 +21,7 @@ from models import (
     VarDecoder,
 )
 
-from models.regressors import LinearRegr, ProductRegr
+from models.regressors import LinearRegr, ProductRegr, DNNRegr
 from models import AE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
@@ -60,8 +60,8 @@ def AE_iso_training_procedure():
 
 
     ###--- Dataset ---###
-    #normaliser = MinMaxNormaliser()
-    normaliser = ZScoreNormaliser()
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
     #normaliser = None
 
     dataset_builder = DatasetBuilder(
@@ -91,8 +91,8 @@ def AE_iso_training_procedure():
     # model = AE(encoder = encoder, decoder = decoder)
 
     #--- Models NaiveVAE ---#
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5, activation='PReLU')
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5, activation='PReLU')
 
     #model = NaiveVAE_LogVar(encoder = encoder, decoder = decoder, input_dim = input_dim)
     #model = NaiveVAE_LogSigma(encoder = encoder, decoder = decoder)
@@ -169,7 +169,7 @@ def AE_iso_training_procedure():
     )
 
     if latent_dim == 3:
-        title = f'AE Normalised (epochs = {epochs})'
+        title = f'NVAE Normalised MinMax (epochs = {epochs})'
         plot_latent_with_reconstruction_error(
             latent_tensor = Z_batch_hat,
             loss_tensor = loss_reconst,
@@ -340,7 +340,7 @@ def VAE_latent_visualisation():
 
     ###--- Meta ---###
     epochs = 3
-    batch_size = 50
+    batch_size = 20
     latent_dim = 3
 
 
@@ -396,7 +396,7 @@ def VAE_latent_visualisation():
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
 
     #--- Beta VAE Loss ---#
-    beta = 0.01
+    beta = 10
     kld_term = GaussianAnaKLDiv()
     #kld_term = GaussianMCKLDiv()
     kld_term = Weigh(kld_term, weight = beta)
@@ -1094,9 +1094,9 @@ def train_joint_epoch_wise_VAE_recon():
 def AE_joint_epoch_procedure():
 
     ###--- Meta ---###
-    epochs = 2
+    epochs = 5
     batch_size = 25
-    latent_dim = 10
+    latent_dim = 3
 
 
     ###--- Dataset ---###
@@ -1131,16 +1131,16 @@ def AE_joint_epoch_procedure():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
-    decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    # encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
-    # decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4, activation='PReLU')
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4, activation='PReLU')
 
-    # #model = NaiveVAE(encoder = encoder, decoder = decoder)
-    # model = NaiveVAESigma(encoder = encoder, decoder = decoder)
+    #model = NaiveVAE(encoder = encoder, decoder = decoder)
+    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
     
-    ae_model = AE(encoder = encoder, decoder = decoder)
+    #ae_model = AE(encoder = encoder, decoder = decoder)
     regressor = LinearRegr(latent_dim = latent_dim)
     #regressor = ProductRegr(latent_dim = latent_dim)
 
@@ -1168,16 +1168,16 @@ def AE_joint_epoch_procedure():
 
 
     ###--- Losses ---###
-    #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
-    reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
+    reconstr_loss_term = AEAdapter(LpNorm(p = 2))
+    #reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
 
     regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
     ete_loss_terms = {
-        'Reconstruction Term': Weigh(reconstr_loss_term, weight=0.1), 
-        'Regression Term': Weigh(regr_loss_term, weight = 0.9),
+        'Reconstruction Term': Weigh(reconstr_loss_term, weight=0.05), 
+        'Regression Term': Weigh(regr_loss_term, weight = 0.95),
     }
 
     ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
@@ -1254,10 +1254,16 @@ def AE_joint_epoch_procedure():
     )
 
     if latent_dim == 3:
-        title = f'AE Normalised (epochs = {epochs})'
+        title = f'NVAE Normalised (epochs = {epochs})'
         plot_latent_with_reconstruction_error(
             latent_tensor = Z_batch_ul,
             loss_tensor = loss_reconst,
+            title = title
+        )
+        title = f'NVAE Normalised Regr(epochs = {epochs})'
+        plot_latent_with_reconstruction_error(
+            latent_tensor = Z_batch_l,
+            loss_tensor = loss_regr,
             title = title
         )
 
@@ -1432,11 +1438,10 @@ def VAE_joint_epoch_procedure():
 
 
 
-
-def train_baseline():
+def train_linear_regr():
 
     ###--- Meta ---###
-    epochs = 2
+    epochs = 10
     batch_size = 30
 
 
@@ -1448,7 +1453,7 @@ def train_baseline():
     dataset_builder = DatasetBuilder(
         kind = 'key',
         normaliser = normaliser,
-        #exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     )
     
     dataset = dataset_builder.build_dataset()
@@ -1466,9 +1471,10 @@ def train_baseline():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
+    # Linear Regression
     regressor = LinearRegr(latent_dim = input_dim)
 
-
+    
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)
     dataset_size = len(regr_train_ds)
@@ -1593,6 +1599,133 @@ def train_baseline():
         plt.show()
 
 
+
+
+def train_deep_regr():
+
+    ###--- Meta ---###
+    epochs = 10
+    batch_size = 30
+
+
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
+
+    dataset_builder = DatasetBuilder(
+        kind = 'key',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+
+    ###--- DataLoader ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.8)
+    subsets = subset_factory.create_splits()
+
+    regr_train_ds = subsets['train_labeled']
+
+    dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
+
+    ###--- Models ---###
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+
+    # Deep Regression
+    regressor = DNNRegr(input_dim = input_dim, n_layers = 4, activation = 'PReLU')
+
+    ###--- Observation Test Setup ---###
+    n_iterations_regr = len(dataloader_regr)
+    dataset_size = len(regr_train_ds)
+
+    loss_obs = LossTermObserver(
+        n_epochs = epochs,
+        dataset_size= dataset_size,
+        batch_size= batch_size,
+        name = 'Regr Loss',
+        aggregated = True,
+    )
+
+
+    ###--- Losses ---###
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+
+    regr_loss = Loss(Observe(observer = loss_obs, loss_term = regr_loss_term))
+    regr_loss_test = Loss(regr_loss_term)
+
+    ###--- Optimizer & Scheduler ---###
+    optimiser = Adam([
+        {'params': regressor.parameters(), 'lr': 1e-2},
+    ])
+
+    scheduler = ExponentialLR(optimiser, gamma = 0.9)
+
+
+    ###--- Training Loop Joint---###
+    pbar = tqdm(range(epochs))
+
+    for epoch in pbar:
+        
+        ###--- Training Loop End-To-End ---###
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
+            
+            X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            y_hat_batch = regressor(X_batch)
+
+            loss_regr = regr_loss(
+                y_batch = y_batch,
+                y_hat_batch = y_hat_batch,
+            )
+
+            #--- Backward Pass ---#
+            loss_regr.backward()
+
+            optimiser.step()
+
+
+        scheduler.step()
+
+    
+    ###--- Plot Observations ---###
+    plot_loss_tensor(observed_losses = loss_obs.losses)
+
+
+    ###--- Test Loss ---###
+    regr_test_ds = subsets['test_labeled']
+
+    test_indices = regr_test_ds.indices
+    X_test_l = dataset.X_data[test_indices]
+    y_test_l = dataset.y_data[test_indices]
+
+    X_test_l = X_test_l[:, 1:]
+    y_test_l = y_test_l[:, 1:]
+
+    with torch.no_grad():
+        y_test_l_hat = regressor(X_test_l)
+
+        loss_regr = regr_loss_test(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+
+    print(
+        f"Regression Baseline:\n"
+        f"---------------------------------------------------------------\n"
+        f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
+        f"Avg. Loss on labelled testing subset: {loss_regr}\n"
+    )
+
+    
+
+
 """
 Main Executions
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -1606,10 +1739,12 @@ if __name__=="__main__":
     ###--- AE in isolation ---###
     #AE_iso_training_procedure()
     
+
     ###--- VAE in isolation ---###
     #train_VAE_iso()
     #VAE_iso_training_procedure()
     #VAE_latent_visualisation()
+
 
     ###--- Compositions ---###
     #train_joint_seq_AE()
@@ -1617,9 +1752,11 @@ if __name__=="__main__":
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
     #AE_joint_epoch_procedure()
-    VAE_joint_epoch_procedure()
+    #VAE_joint_epoch_procedure()
+
 
     ###--- Baseline ---###
-    #train_baseline()
+    train_linear_regr()
+    train_deep_regr()
 
     pass

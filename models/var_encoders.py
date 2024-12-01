@@ -147,3 +147,19 @@ class VarEncoderExp(nn.Module):
 
 
 #VarEncoder = VarEncoderExp
+
+"""
+def forward(self, x: Tensor) -> Tensor:
+    for layer in self.layers[:-1]:
+        x = self.activation(layer(x))
+    infrm_dist_params = self.layers[-1](x)
+    infrm_dist_params = infrm_dist_params.view(-1, self.latent_dim, self.n_dist_params).squeeze()
+    # Separate mean and variance components
+    mean = infrm_dist_params[:, :, 0]
+    var = infrm_dist_params[:, :, 1]
+    # Apply Softplus to variance
+    var = torch.nn.functional.softplus(var)
+    # Recombine mean and variance
+    infrm_dist_params = torch.stack([mean, var], dim=2)
+    return infrm_dist_params
+"""
