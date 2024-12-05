@@ -4,15 +4,58 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset, Subset
 
-class Evaluator:
+from data_utils.datasets import TensorDataset
 
-    def __init__(self, dataset: Dataset, subsets: dict[str, Subset]):
+class ResultEvaluator:
+
+    def __init__(
+            self, 
+            dataset: TensorDataset, 
+            subsets: dict[str, Subset], 
+            split_kind: str = 'label',
+            composed: bool = False
+        ):
 
         self.dataset = dataset
-        self.subsets = subsets
+        self.split_kind = split_kind
+        self.composed = composed
+        self.model_results = {}
+
+        if split_kind == 'label':
+            test_dataset_l = subsets['test_labeled']
+            test_dataset_ul = subsets['test_unlabeled']
+
+            X_test_l = dataset.X_data[test_dataset_l.indices]
+            y_test_l = dataset.y_data[test_dataset_l.indices]
+
+            X_test_ul = dataset.X_data[test_dataset_ul.indices]
+
+            self.X_test_l = X_test_l[:, 1:]
+            self.y_test_l = y_test_l[:, 1:]
+
+            self.X_test_ul = X_test_ul[:, 1:]
+        
+        else:
+            test_dataset = subsets['test_unlabeled']
+            X_test_ul = dataset.X_data[test_dataset.indices]
+            self.X_test_ul = X_test_ul[:, 1:]
+
+
+    def obtain_model_returns(self, model):
+
+        pass
 
     
-    #def eval(self, model, loss):
+    def _obtain_AE_returns(self, model):
+
+        with torch.no_grad():
+
+            Z_batch_ul, X_test_ul_hat = model(self.X_test_ul)
+        
+        return Z_batch_ul, X_test_ul_hat
+
+    
+    
 
 
 

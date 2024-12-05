@@ -60,9 +60,9 @@ def AE_iso_training_procedure():
 
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
+    #normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = None
 
     dataset_builder = DatasetBuilder(
         kind = 'key',
@@ -178,6 +178,7 @@ def AE_iso_training_procedure():
 
 
 
+
 def VAE_iso_training_procedure():
     
     ###--- Meta ---###
@@ -276,60 +277,42 @@ def VAE_iso_training_procedure():
     #latent_observer.plot_dist_params_batch(lambda t: torch.max(torch.abs(t)))
     #model_observer.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
 
-    from eval import eval_GVAE_iso, eval_BVAE_iso
+    
+    ##--- Test Loss ---###
+    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    X_test = X_test[:, 1:]
 
-    eval_GVAE_iso(
-        dataset = dataset, 
-        subsets = {'test_unlabeled': test_dataset}, 
-        model = model, 
-        eval_loss = test_reconstr_loss, 
-        n_epochs = epochs, 
-        n_iterations = n_iterations
+    Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
+
+    mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
+    mu_r, logvar_r = genm_dist_params.unbind(dim = -1)
+
+    var_l = torch.exp(logvar_l)
+    var_r = torch.exp(logvar_r)
+
+    #X_test_hat = model.reparameterise(genm_dist_params)
+    X_test_hat = mu_r
+
+    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+    print(
+        f'After {epochs} epochs with {len(dataloader)} iterations each\n'
+        f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
+        f'----------------------------------------\n\n'
+        f'Inference M. mean:\n'
+        f'max:\n{mu_l.max()}\n'
+        f'min:\n{mu_l.min()}\n\n'
+        f'Inference M. Var:\n'
+        f'max:\n{var_l.max()}\n'
+        f'min:\n{var_l.min()}\n'
+        f'----------------------------------------\n\n'
+        f'Generative M. mean:\n'
+        f'max:\n{mu_r.max()}\n'
+        f'min:\n{mu_r.min()}\n\n'
+        f'Generative M. Var:\n'
+        f'max:\n{var_r.max()}\n'
+        f'min:\n{var_r.min()}\n'
+        f'----------------------------------------\n\n'
     )
-
-    # eval_BVAE_iso(
-    #     dataset = dataset, 
-    #     subsets = {'test_unlabeled': test_dataset}, 
-    #     model = model, 
-    #     eval_loss = test_reconstr_loss, 
-    #     n_epochs = epochs, 
-    #     n_iterations = n_iterations
-    # )
-    # ##--- Test Loss ---###
-    # X_test = test_dataset.dataset.X_data[test_dataset.indices]
-    # X_test = X_test[:, 1:]
-
-    # Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
-
-    # mu_l, logvar_l = infrm_dist_params.unbind(dim = -1)
-    # mu_r, logvar_r = genm_dist_params.unbind(dim = -1)
-
-    # var_l = torch.exp(logvar_l)
-    # var_r = torch.exp(logvar_r)
-
-    # #X_test_hat = model.reparameterise(genm_dist_params)
-    # X_test_hat = mu_r
-
-    # loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
-    # print(
-    #     f'After {epochs} epochs with {len(dataloader)} iterations each\n'
-    #     f'Avg. Loss on mean reconstruction in testing subset: \n{loss_reconst_test}\n'
-    #     f'----------------------------------------\n\n'
-    #     f'Inference M. mean:\n'
-    #     f'max:\n{mu_l.max()}\n'
-    #     f'min:\n{mu_l.min()}\n\n'
-    #     f'Inference M. Var:\n'
-    #     f'max:\n{var_l.max()}\n'
-    #     f'min:\n{var_l.min()}\n'
-    #     f'----------------------------------------\n\n'
-    #     f'Generative M. mean:\n'
-    #     f'max:\n{mu_r.max()}\n'
-    #     f'min:\n{mu_r.min()}\n\n'
-    #     f'Generative M. Var:\n'
-    #     f'max:\n{var_r.max()}\n'
-    #     f'min:\n{var_r.min()}\n'
-    #     f'----------------------------------------\n\n'
-    # )
 
 
 
@@ -447,9 +430,7 @@ def VAE_latent_visualisation():
     X_test = X_test[:, 1:]
 
     test_ds_metadata = retrieve_metadata(mapping_idxs, dataset.metadata_df)
-    print(test_ds_metadata[time_col].dtype)
     test_ds_metadata.loc[:, time_col] = pd.to_datetime(test_ds_metadata[time_col]).astype('int64') // 10**9
-    print(test_ds_metadata[time_col].dtype)
     
 
     with torch.no_grad():
@@ -1609,9 +1590,9 @@ def train_deep_regr():
 
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
+    #normaliser = MinMaxNormaliser()
     #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = None
 
     dataset_builder = DatasetBuilder(
         kind = 'key',
@@ -1636,7 +1617,7 @@ def train_deep_regr():
 
 
     # Deep Regression
-    regressor = DNNRegr(input_dim = input_dim, n_layers = 4, activation = 'PReLU')
+    regressor = DNNRegr(input_dim = input_dim, n_layers = 4, activation = 'Softplus')
 
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)
@@ -1756,7 +1737,7 @@ if __name__=="__main__":
 
 
     ###--- Baseline ---###
-    train_linear_regr()
+    #train_linear_regr()
     train_deep_regr()
 
     pass
