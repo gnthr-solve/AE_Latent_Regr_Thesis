@@ -5,6 +5,7 @@ import numpy as np
 import json
 
 from torch import Tensor
+from torch.utils.data import Dataset, Subset
 from itertools import product
 from pathlib import Path
 from collections import namedtuple
@@ -70,3 +71,19 @@ def remove_columns_and_update_mapping(tensor: Tensor, mapping: dict[int, str], k
     new_mapping = {i: v for i, v in enumerate(keys_to_keep)}
 
     return new_tensor, new_mapping
+
+
+
+
+"""
+Data Helper Tools - Combine labelled and unlabelled subsets for isolated AE training
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def combine_subsets(subset_l: Subset, subset_ul: Subset) -> Subset:
+    
+    combined_indices = torch.cat([
+        torch.tensor(subset_l.indices),
+        torch.tensor(subset_ul.indices)
+    ])
+
+    return Subset(subset_l.dataset, combined_indices.tolist())

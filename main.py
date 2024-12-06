@@ -73,9 +73,8 @@ def AE_iso_training_procedure():
     dataset = dataset_builder.build_dataset()
     
     ###--- DataLoader ---###
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    train_dataset = subset_factory.retrieve(kind = 'train', combine = True)
 
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
@@ -154,7 +153,8 @@ def AE_iso_training_procedure():
 
 
     ###--- Test Loss ---###
-    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    test_dataset = subset_factory.retrieve(kind = 'test', combine = True)
+    X_test = dataset.X_data[test_dataset.indices]
     X_test = X_test[:, 1:]
 
     with torch.no_grad():
@@ -203,9 +203,8 @@ def VAE_iso_training_procedure():
     
 
     ###--- DataLoader ---###
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    train_dataset = subset_factory.retrieve(kind = 'train', combine = True)
 
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
@@ -279,7 +278,8 @@ def VAE_iso_training_procedure():
 
     
     ##--- Test Loss ---###
-    X_test = test_dataset.dataset.X_data[test_dataset.indices]
+    test_dataset = subset_factory.retrieve(kind = 'test', combine = True)
+    X_test = dataset.X_data[test_dataset.indices]
     X_test = X_test[:, 1:]
 
     Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
@@ -342,9 +342,8 @@ def VAE_latent_visualisation():
     
 
     ###--- DataLoader ---###
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    train_dataset = subset_factory.retrieve(kind = 'train', combine = True)
 
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
@@ -424,6 +423,7 @@ def VAE_latent_visualisation():
 
 
     ###--- Test Loss ---###
+    test_dataset = subset_factory.retrieve(kind = 'test', combine = True)
     indices = test_dataset.indices
     X_test = dataset.X_data[indices]
     mapping_idxs = X_test[:, 0].tolist()
@@ -488,10 +488,10 @@ def train_joint_seq_AE():
     
     ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
-    subsets = subset_factory.create_splits()
+    train_subsets = subset_factory.retrieve(kind = 'train')
 
-    ae_train_ds = subsets['train_unlabeled']
-    regr_train_ds = subsets['train_labeled']
+    ae_train_ds = train_subsets['unlabelled']
+    regr_train_ds = train_subsets['labelled']
 
 
     ###--- DataLoader ---###
@@ -604,8 +604,9 @@ def train_joint_seq_AE():
 
 
     ###--- Test Loss ---###
-    ae_test_ds = subsets['test_unlabeled']
-    regr_test_ds = subsets['test_labeled']
+    test_subsets = subset_factory.retrieve(kind = 'test')
+    ae_test_ds = test_subsets['unlabelled']
+    regr_test_ds = test_subsets['labelled']
 
     X_test_ae = dataset.X_data[ae_test_ds.indices]
     X_test_regr = dataset.X_data[regr_test_ds.indices]
@@ -658,10 +659,10 @@ def train_joint_seq_VAE():
     
     ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
-    subsets = subset_factory.create_splits()
+    train_subsets = subset_factory.retrieve(kind = 'train')
 
-    ae_train_ds = subsets['train_unlabeled']
-    regr_train_ds = subsets['train_labeled']
+    ae_train_ds = train_subsets['unlabelled']
+    regr_train_ds = train_subsets['labelled']
 
 
     ###--- DataLoader ---###
@@ -803,8 +804,9 @@ def train_joint_seq_VAE():
     
 
     ###--- Test Loss ---###
-    ae_test_ds = subsets['test_unlabeled']
-    regr_test_ds = subsets['test_labeled']
+    test_subsets = subset_factory.retrieve(kind = 'test')
+    ae_test_ds = test_subsets['unlabelled']
+    regr_test_ds = test_subsets['labelled']
 
     #--- Select data ---#
     X_test_ul = dataset.X_data[ae_test_ds.indices]
@@ -1097,10 +1099,10 @@ def AE_joint_epoch_procedure():
     
     ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
-    subsets = subset_factory.create_splits()
+    train_subsets = subset_factory.retrieve(kind = 'train')
 
-    ae_train_ds = subsets['train_unlabeled']
-    regr_train_ds = subsets['train_labeled']
+    ae_train_ds = train_subsets['unlabelled']
+    regr_train_ds = train_subsets['labelled']
 
 
     ###--- DataLoader ---###
@@ -1198,8 +1200,9 @@ def AE_joint_epoch_procedure():
 
 
     ###--- Test Loss ---###
-    ae_test_ds = subsets['test_unlabeled']
-    regr_test_ds = subsets['test_labeled']
+    test_subsets = subset_factory.retrieve(kind = 'test')
+    ae_test_ds = test_subsets['unlabelled']
+    regr_test_ds = test_subsets['labelled']
 
     X_test_ul = dataset.X_data[ae_test_ds.indices]
 
@@ -1275,10 +1278,10 @@ def VAE_joint_epoch_procedure():
     
     ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
-    subsets = subset_factory.create_splits()
+    train_subsets = subset_factory.retrieve(kind = 'train')
 
-    ae_train_ds = subsets['train_unlabeled']
-    regr_train_ds = subsets['train_labeled']
+    ae_train_ds = train_subsets['unlabelled']
+    regr_train_ds = train_subsets['labelled']
 
 
     ###--- DataLoader ---###
@@ -1375,8 +1378,9 @@ def VAE_joint_epoch_procedure():
 
 
     ###--- Test Loss ---###
-    ae_test_ds = subsets['test_unlabeled']
-    regr_test_ds = subsets['test_labeled']
+    test_subsets = subset_factory.retrieve(kind = 'test')
+    ae_test_ds = test_subsets['unlabelled']
+    regr_test_ds = test_subsets['labelled']
 
     #--- Select Test-Data ---#
     X_test_ul = dataset.X_data[ae_test_ds.indices]
@@ -1440,11 +1444,11 @@ def train_linear_regr():
     dataset = dataset_builder.build_dataset()
     
 
-    ###--- DataLoader ---###
-    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.8)
-    subsets = subset_factory.create_splits()
+    ###--- Dataset Split ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    train_subsets = subset_factory.retrieve(kind = 'train')
 
-    regr_train_ds = subsets['train_labeled']
+    regr_train_ds = train_subsets['labelled']
 
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
@@ -1520,7 +1524,9 @@ def train_linear_regr():
 
 
     ###--- Test Loss ---###
-    regr_test_ds = subsets['test_labeled']
+    test_subsets = subset_factory.retrieve(kind = 'test')
+    
+    regr_test_ds = test_subsets['labelled']
 
     test_indices = regr_test_ds.indices
     X_test_l = dataset.X_data[test_indices]
@@ -1603,11 +1609,11 @@ def train_deep_regr():
     dataset = dataset_builder.build_dataset()
     
 
-    ###--- DataLoader ---###
-    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.8)
-    subsets = subset_factory.create_splits()
+    ###--- Dataset Split ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    train_subsets = subset_factory.retrieve(kind = 'train')
 
-    regr_train_ds = subsets['train_labeled']
+    regr_train_ds = train_subsets['labelled']
 
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
@@ -1683,7 +1689,8 @@ def train_deep_regr():
 
 
     ###--- Test Loss ---###
-    regr_test_ds = subsets['test_labeled']
+    test_subsets = subset_factory.retrieve(kind = 'test')
+    regr_test_ds = test_subsets['labelled']
 
     test_indices = regr_test_ds.indices
     X_test_l = dataset.X_data[test_indices]

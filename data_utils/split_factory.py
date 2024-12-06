@@ -34,8 +34,10 @@ class SplitSubsetFactory:
         self.dataset = dataset
         self.train_size = train_size
 
+        self._create_splits()
 
-    def create_splits(self) -> dict[str, Subset]:
+
+    def _create_splits(self) -> dict[str, Subset]:
 
         train_size = int(self.train_size * len(self.dataset))
         test_size = len(self.dataset) - train_size
@@ -49,14 +51,31 @@ class SplitSubsetFactory:
         labeled_indices = torch.where(~y_isnan)[0].tolist()
         
 
-        splits = {
-            'train_labeled': self._subset(list(set(train_indices).intersection(labeled_indices))),
-            'train_unlabeled': self._subset(list(set(train_indices).intersection(unlabeled_indices))),
-            'test_labeled': self._subset(list(set(test_indices).intersection(labeled_indices))),
-            'test_unlabeled': self._subset(list(set(test_indices).intersection(unlabeled_indices)))
+        self.splits = {
+            'train':{
+                'labelled': self._subset(list(set(train_indices).intersection(labeled_indices))),
+                'unlabelled': self._subset(list(set(train_indices).intersection(unlabeled_indices))),
+            },
+            'test':{
+                'labelled': self._subset(list(set(test_indices).intersection(labeled_indices))),
+                'unlabelled': self._subset(list(set(test_indices).intersection(unlabeled_indices)))
+            }
         }
 
-        return splits
+
+    def retrieve(self, kind: str, combine: bool = False) -> dict[str, Subset] | Subset:
+
+        subsets = self.splits[kind]
+
+        if combine:
+            indices = []
+
+            for subset in subsets.values():
+                indices += subset.indices
+
+            return self._subset(indices)
+        
+        return subsets
 
 
     def _subset(self, indices: list[int]) -> Subset:
