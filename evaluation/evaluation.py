@@ -24,10 +24,10 @@ if TYPE_CHECKING:
 @dataclass
 class EvaluationResults:
 
-    losses: dict[str, dict[str, torch.Tensor]] = field(default_factory = dict)
-    metrics: dict[str, float] = field(default_factory = dict)
+    losses: dict[str, Tensor] = field(default_factory = lambda: dict())
+    metrics: dict[str, float] = field(default_factory = lambda: dict())
 
-    plots: dict[str, plt.Figure] = field(default_factory = dict)
+    plots: dict[str, plt.Figure] = field(default_factory = lambda: dict())
 
 
 
@@ -70,18 +70,18 @@ class Evaluation:
             kind_dict['X_batch'] = X_data[:, 1:]
             kind_dict['y_batch'] = y_data[:, 1:]
             
-            self.test_data[kind] = kind_dict
+            test_data[kind] = kind_dict
             
             self.aligned_metadata[kind] = retrieve_metadata(mapping_idxs, self.dataset.metadata_df)
             
         self.test_data = test_data
 
 
-    def accept(self, visitor: EvaluationVisitor):
+    def accept(self, visitor: 'EvaluationVisitor'):
         visitor.visit(self)
     
 
-    def accept_sequence(self, visitors: list[EvaluationVisitor]):
+    def accept_sequence(self, visitors: list['EvaluationVisitor']):
         for visitor in visitors:
             self.accept(visitor)
 

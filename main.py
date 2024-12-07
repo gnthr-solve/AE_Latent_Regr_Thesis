@@ -22,7 +22,7 @@ from models import (
 )
 
 from models.regressors import LinearRegr, ProductRegr, DNNRegr
-from models import AE, GaussVAE, EnRegrComposite
+from models import AE, VAE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
@@ -1714,6 +1714,111 @@ def train_deep_regr():
     
 
 
+def eval_trial():
+    
+    from evaluation import Evaluation, EvalConfig, AEOutputVisitor, VAEOutputVisitor, ReconstrLossVisitor, LatentPlotVisitor
+    ###--- Meta ---###
+    epochs = 1
+    batch_size = 20
+    latent_dim = 3
+
+
+    ###--- Dataset ---###
+    normaliser = MinMaxNormaliser()
+    #normaliser = ZScoreNormaliser()
+    #normaliser = None
+
+    dataset_builder = DatasetBuilder(
+        kind = 'key',
+        normaliser = normaliser,
+        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+
+    ###--- DataLoader ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    train_dataset = subset_factory.retrieve(kind = 'train', combine = True)
+
+    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3)
+
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3)
+
+    #model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+    model = GaussVAE(encoder = encoder, decoder = decoder)
+
+    
+    ###--- Loss ---###
+    if isinstance(model, VAE):
+
+        ll_term = Weigh(GaussianDiagLL(), weight = -1)
+        kld_term = GaussianAnaKLDiv()
+        
+        loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
+
+    elif isinstance(model, AE):
+
+        reconstr_term = AEAdapter(LpNorm(p = 2))
+        loss_terms = {'Reconstruction': reconstr_term}
+
+    
+    reconstr_loss = Loss(CompositeLossTermObs(**loss_terms))
+    test_reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
+
+
+    ###--- Optimizer & Scheduler ---###
+    gamma = 0.5
+    lr = 1e-3
+    print(f"Learning rates: {[lr * gamma**epoch for epoch in range(epochs)]}")
+    optimizer = Adam(model.parameters(), lr = lr)
+    scheduler = ExponentialLR(optimizer, gamma = gamma)
+
+
+    ###--- Training Procedure ---###
+    training_procedure = AEIsoTrainingProcedure(
+        train_dataloader = dataloader,
+        ae_model = model,
+        loss = reconstr_loss,
+        optimizer = optimizer,
+        scheduler = scheduler,
+        epochs = epochs,
+    )
+    
+    training_procedure()
+    
+
+    ###--- Test Loss ---###
+    test_dataset = subset_factory.retrieve(kind = 'test', combine = True)
+    
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = {'joint': test_dataset},
+        models = {'AE_model': model},
+    )
+
+    eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso', loss_name = 'rel_L2_loss')
+    visitors = [
+        #AEOutputVisitor(),
+        VAEOutputVisitor(eval_cfg = eval_cfg),
+        ReconstrLossVisitor(test_reconstr_term, eval_cfg = eval_cfg),
+        LatentPlotVisitor(eval_cfg = eval_cfg),
+    ]
+
+    evaluation.accept_sequence(visitors = visitors)
+
+    print(evaluation.results)
+
+
+
+
 """
 Main Executions
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -1745,6 +1850,11 @@ if __name__=="__main__":
 
     ###--- Baseline ---###
     #train_linear_regr()
-    train_deep_regr()
+    #train_deep_regr()
 
+
+    ###--- Trial ---###
+    eval_trial()
+    
+    
     pass

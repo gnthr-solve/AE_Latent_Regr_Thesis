@@ -3,14 +3,18 @@ import torch
 
 from torch import Tensor
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Optional
-
 from .eval_visitor_abc import EvaluationVisitor
 
 from ..evaluation import Evaluation
 from ..model_output import ModelOutput
+
+
+class OutputVisitor(EvaluationVisitor):
+
+    def _get_data(self, eval: Evaluation) -> dict[str, Tensor]:
+        data_key = self.eval_cfg.data_key
+        return eval.test_data[data_key]
+
 
 
 """
@@ -18,22 +22,22 @@ Output Visitors - AEOutputVisitor
 -------------------------------------------------------------------------------------------------------------------------------------------
 Inscribes the output of a deterministic or NVAE autoencoder model to the evaluation object.
 """
-class AEOutputVisitor(EvaluationVisitor):
+class AEOutputVisitor(OutputVisitor):
 
     def visit(self, eval: Evaluation):
 
         ae_model = eval.models['AE_model']
 
+        data = self._get_data(eval)
+
         with torch.no_grad():
 
-            for kind, data in eval.test_data.items():
+            Z_batch, X_hat_batch = ae_model(data['X_batch'])
 
-                Z_batch, X_hat_batch = ae_model(data['X_batch'])
-
-                eval.model_outputs[f'ae_{kind}'] = ModelOutput(
-                    Z_batch = Z_batch,
-                    X_hat_batch = X_hat_batch,
-                )
+            eval.model_outputs[self.eval_cfg.output_name] = ModelOutput(
+                Z_batch = Z_batch,
+                X_hat_batch = X_hat_batch,
+            )
 
 
 
@@ -42,23 +46,26 @@ Output Visitors - VAEOutputVisitor
 -------------------------------------------------------------------------------------------------------------------------------------------
 Inscribes the output of a variational autoencoder model to the evaluation object.
 """
-class VAEOutputVisitor(EvaluationVisitor):
+class VAEOutputVisitor(OutputVisitor):
 
     def visit(self, eval: Evaluation):
 
         ae_model = eval.models['AE_model']
 
+        data = self._get_data(eval)
+
         with torch.no_grad():
 
-            for kind, data in eval.test_data.items():
+            Z_batch, infrm_dist_params, genm_dist_params = ae_model(data['X_batch'])
 
-                Z_batch, infrm_dist_params, genm_dist_params = ae_model(data['X_batch'])
+            X_hat_batch, _ = genm_dist_params.unbind(dim = -1)
 
-                eval.model_outputs[f'ae_{kind}'] = ModelOutput(
-                    Z_batch = Z_batch,
-                    infrm_dist_params = infrm_dist_params,
-                    genm_dist_params = genm_dist_params,
-                )
+            eval.model_outputs[self.eval_cfg.output_name] = ModelOutput(
+                X_hat_batch = X_hat_batch,
+                Z_batch = Z_batch,
+                infrm_dist_params = infrm_dist_params,
+                genm_dist_params = genm_dist_params,
+            )
 
 
 
@@ -67,21 +74,40 @@ Output Visitors - RegrOutputVisitor
 -------------------------------------------------------------------------------------------------------------------------------------------
 Inscribes the output of a regression model to the evaluation object.
 """
-class RegrOutputVisitor(EvaluationVisitor):
+class RegrOutputVisitor(OutputVisitor):
 
-    def visit(self, eval: Evaluation, mode: str = 'composed'):
+    def visit(self, eval: Evaluation):
 
         regressor = eval.models['regressor']
         
-        if mode == 'composed':
-            ae_output = eval.model_outputs['ae_labelled']
-            input_data = ae_output.Z_batch
+        data = self._get_data(eval = eval)
 
-        else:
-            input_data = eval.test_data['labelled']['X_batch']
+        if self.eval_cfg.mode == 'composed':
+            input_data = data['Z_batch']
+
+        elif self.eval_cfg.mode == 'iso':
+            input_data = data['X_batch']
 
         with torch.no_grad():
 
             y_hat = regressor(input_data)
 
-        eval.model_outputs['regression'] = ModelOutput(y_hat_batch = y_hat)
+        if self.eval_cfg.mode == 'composed':
+            eval.model_outputs[self.eval_cfg.output_name] = ModelOutput(**data, y_hat_batch = y_hat)
+        
+        elif self.eval_cfg.mode == 'iso':
+            eval.model_outputs[self.eval_cfg.output_name] = ModelOutput(y_hat_batch = y_hat)
+
+    
+    def _get_data(self, eval: Evaluation) -> dict[str, Tensor]:
+        
+        if self.eval_cfg.mode == 'composed':
+
+            model_output = eval.model_outputs[self.eval_cfg.output_name]
+            data = model_output.to_dict()
+
+        elif self.eval_cfg.mode == 'iso':
+
+            data = eval.test_data[self.eval_cfg.data_key]
+        
+        return data

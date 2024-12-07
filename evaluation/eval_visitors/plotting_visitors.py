@@ -14,17 +14,24 @@ import matplotlib.pyplot as plt
 
 from .eval_visitor_abc import EvaluationVisitor
 from ..evaluation import Evaluation
-from ..model_output import ModelOutput
 
 
-class LatentVisualizationVisitor(EvaluationVisitor):
+class LatentPlotVisitor(EvaluationVisitor):
+
     def visit(self, eval: Evaluation):
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-        eval.figures['latent'] = fig
-        
-        ae_output = eval.model_outputs['ae_labelled']
-        indices = eval.test_data['labelled']['indices']
-        metadata = eval.metadata_df.iloc[indices]
-        
-        self._plot_reconstruction_error(axes[0], ae_output, eval.metrics['reconstr_loss'])
-        self._plot_temporal_distribution(axes[1], ae_output, metadata['timestamp'])
+
+        model_output = eval.model_outputs[self.eval_cfg.output_name]
+        latent_tensor = model_output.Z_batch
+
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        scatter = ax.scatter(latent_tensor[:, 0], latent_tensor[:, 1], latent_tensor[:, 2])
+
+        # Set plot labels and title
+        ax.set_xlabel('$x_l$')
+        ax.set_ylabel('$y_l$')
+        ax.set_zlabel('$z_l$')
+        plt.title('Latent Space')
+
+        plt.show()
