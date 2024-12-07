@@ -2,9 +2,6 @@
 import torch
 
 from torch import Tensor
-from torch.utils.data import Dataset, Subset
-
-from data_utils.datasets import TensorDataset
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -31,7 +28,7 @@ class AEOutputVisitor(EvaluationVisitor):
 
             for kind, data in eval.test_data.items():
 
-                Z_batch, X_hat_batch = ae_model(data['X_data'])
+                Z_batch, X_hat_batch = ae_model(data['X_batch'])
 
                 eval.model_outputs[f'ae_{kind}'] = ModelOutput(
                     Z_batch = Z_batch,
@@ -55,7 +52,7 @@ class VAEOutputVisitor(EvaluationVisitor):
 
             for kind, data in eval.test_data.items():
 
-                Z_batch, infrm_dist_params, genm_dist_params = ae_model(data['X_data'])
+                Z_batch, infrm_dist_params, genm_dist_params = ae_model(data['X_batch'])
 
                 eval.model_outputs[f'ae_{kind}'] = ModelOutput(
                     Z_batch = Z_batch,
@@ -81,7 +78,7 @@ class RegrOutputVisitor(EvaluationVisitor):
             input_data = ae_output.Z_batch
 
         else:
-            input_data = eval.test_data['labelled']['X_data']
+            input_data = eval.test_data['labelled']['X_batch']
 
         with torch.no_grad():
 

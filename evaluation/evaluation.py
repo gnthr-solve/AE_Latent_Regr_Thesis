@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, Subset
 from data_utils.datasets import TensorDataset
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional, TYPE_CHECKING
 
 import matplotlib.pyplot as plt
@@ -21,6 +21,16 @@ if TYPE_CHECKING:
 
 
 
+@dataclass
+class EvaluationResults:
+
+    losses: dict[str, dict[str, torch.Tensor]] = field(default_factory = dict)
+    metrics: dict[str, float] = field(default_factory = dict)
+
+    plots: dict[str, plt.Figure] = field(default_factory = dict)
+
+
+
 class Evaluation:
     def __init__(
             self, 
@@ -28,19 +38,19 @@ class Evaluation:
             subsets: dict[str, Subset],
             models: dict[str, torch.nn.Module],
         ):
+
         self.dataset = dataset
         self.models = models
         self.metadata_df = dataset.metadata_df
+
+        self.aligned_metadata: dict[str, pd.DataFrame] = {}
         self._prepare_data(subsets)
         
         # Containers for results
         self.model_outputs: dict[str, ModelOutput] = {}
-        self.figures: dict[str, plt.Figure] = {}
-        self.metrics: dict[str, float] = {}
-
-        self.aligned_metadata: dict[str, pd.DataFrame] = {}
-
-
+        self.results: EvaluationResults = EvaluationResults()
+        
+    
     def _prepare_data(self, subsets: dict[str, Subset]) -> dict[str, Tensor]:
 
         test_data = {}
@@ -57,8 +67,8 @@ class Evaluation:
             # Store mapping indices and actual data separately
             mapping_idxs = X_data[:, 0].tolist()
             kind_dict['mapping_indices'] = mapping_idxs
-            kind_dict['X_data'] = X_data[:, 1:]
-            kind_dict['y_data'] = y_data[:, 1:]
+            kind_dict['X_batch'] = X_data[:, 1:]
+            kind_dict['y_batch'] = y_data[:, 1:]
             
             self.test_data[kind] = kind_dict
             
