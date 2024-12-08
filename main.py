@@ -48,8 +48,9 @@ from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
     AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
     ReconstrLossVisitor, RegrLossVisitor,
-    LatentPlotVisitor,
+    LatentPlotVisitor, LatentDistributionVisitor,
 )
+
 from helper_tools import simple_timer
 from helper_tools.plotting import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_latent_with_attribute
 
@@ -62,7 +63,7 @@ def AE_iso_training_procedure():
     ###--- Meta ---###
     epochs = 3
     batch_size = 50
-    latent_dim = 3
+    latent_dim = 5
 
 
     ###--- Dataset ---###
@@ -168,10 +169,12 @@ def AE_iso_training_procedure():
     )
 
     eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso', loss_name = 'rel_L2_loss')
+
+    dist_vis_visitor = LatentPlotVisitor(eval_cfg = eval_cfg) if latent_dim == 3 else LatentDistributionVisitor(eval_cfg = eval_cfg)
     visitors = [
         AEOutputVisitor(eval_cfg = eval_cfg),
         ReconstrLossVisitor(test_reconstr_term, eval_cfg = eval_cfg),
-        LatentPlotVisitor(eval_cfg = eval_cfg),
+        dist_vis_visitor,
     ]
 
     evaluation.accept_sequence(visitors = visitors)
@@ -651,9 +654,9 @@ def train_joint_seq_AE():
 def train_joint_seq_VAE():
 
     ###--- Meta ---###
-    epochs = 1
+    epochs = 3
     batch_size = 50
-    latent_dim = 10
+    latent_dim = 3
 
 
     ###--- Dataset ---###
@@ -700,7 +703,7 @@ def train_joint_seq_VAE():
     n_iterations_ae = len(dataloader_ae)
     n_iterations_regr = len(dataloader_regr)
 
-    vae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = vae_model)
+    #vae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = vae_model)
     #vae_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
 
     #regr_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
@@ -725,8 +728,6 @@ def train_joint_seq_VAE():
 
     ###--- Losses ---###
     vae_loss = Loss(vae_loss_term)
-
-    reconstr_loss = Loss(reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
 
@@ -773,7 +774,7 @@ def train_joint_seq_VAE():
             optimiser_vae.step()
 
             #--- Observer Call ---#
-            vae_model_obs(epoch = epoch, iter_idx = iter_idx, model = vae_model)
+            #vae_model_obs(epoch = epoch, iter_idx = iter_idx, model = vae_model)
             #vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_vae)
 
         scheduler_vae.step()
@@ -813,47 +814,43 @@ def train_joint_seq_VAE():
     #plot_loss_tensor(observed_losses = vae_loss_obs.losses)
     #plot_loss_tensor(observed_losses = regr_loss_obs.losses)
 
-    vae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
+    #vae_model_obs.plot_child_param_development(child_name = 'encoder', functional = lambda t: torch.max(t) - torch.min(t))
     
 
     ###--- Test Loss ---###
-    test_subsets = subset_factory.retrieve(kind = 'test')
-    ae_test_ds = test_subsets['unlabelled']
-    regr_test_ds = test_subsets['labelled']
+    test_datasets = subset_factory.retrieve(kind = 'test')
+    
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = test_datasets,
+        models = {'AE_model': vae_model,'regressor': regressor},
+    )
 
-    #--- Select data ---#
-    X_test_ul = dataset.X_data[ae_test_ds.indices]
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = 'Huber')
 
-    X_test_l = dataset.X_data[regr_test_ds.indices]
-    y_test_l = dataset.y_data[regr_test_ds.indices]
+    visitors = [
+        VAEOutputVisitor(eval_cfg = eval_cfg_reconstr),
+        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
 
-    X_test_ul = X_test_ul[:, 1:]
+        VAEOutputVisitor(eval_cfg = eval_cfg_comp),
+        RegrOutputVisitor(eval_cfg = eval_cfg_comp),
+        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
+        LatentPlotVisitor(eval_cfg = eval_cfg_comp)
+    ]
 
-    X_test_l = X_test_l[:, 1:]
-    y_test_l = y_test_l[:, 1:]
-
-    #--- Apply VAE to labelled and unlabelled data ---#
-    Z_batch_l, infrm_dist_params_l, genm_dist_params_l = vae_model(X_test_l)
-    Z_batch_ul, infrm_dist_params_ul, genm_dist_params_ul = vae_model(X_test_ul)
-
-    #--- Reconstruction (actually irrelevant here) ---#
-    mu_r, _ = genm_dist_params_ul.unbind(dim = -1)
-    X_test_ul_hat = mu_r
-
-    loss_reconst = reconstr_loss(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
-
-    #--- Reconstruction ---#
-    y_test_l_hat = regressor(Z_batch_l)
-
-    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
+    loss_regr = results.metrics[eval_cfg_comp.loss_name]
 
     print(
         f"Autoencoder:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_ae)} iterations each\n"
-        f"Avg. Loss on unlabelled testing subset: {loss_reconst}\n\n"
+        f"Avg. Loss on unlabelled testing subset: {loss_reconstr}\n\n"
         
-        f"Regression Trained End-To-End:\n"
+        f"Regression End-To-End:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
         f"Avg. Loss on labelled testing subset: {loss_regr}\n"
@@ -1392,43 +1389,39 @@ def VAE_joint_epoch_procedure():
 
 
     ###--- Test Loss ---###
-    test_subsets = subset_factory.retrieve(kind = 'test')
-    ae_test_ds = test_subsets['unlabelled']
-    regr_test_ds = test_subsets['labelled']
+    test_datasets = subset_factory.retrieve(kind = 'test')
+    
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = test_datasets,
+        models = {'AE_model': vae_model,'regressor': regressor},
+    )
 
-    #--- Select Test-Data ---#
-    X_test_ul = dataset.X_data[ae_test_ds.indices]
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = 'Huber')
 
-    X_test_l = dataset.X_data[regr_test_ds.indices]
-    y_test_l = dataset.y_data[regr_test_ds.indices]
+    visitors = [
+        VAEOutputVisitor(eval_cfg = eval_cfg_reconstr),
+        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
 
-    X_test_ul = X_test_ul[:, 1:]
+        VAEOutputVisitor(eval_cfg = eval_cfg_comp),
+        RegrOutputVisitor(eval_cfg = eval_cfg_comp),
+        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
+        LatentPlotVisitor(eval_cfg = eval_cfg_comp)
+    ]
 
-    X_test_l = X_test_l[:, 1:]
-    y_test_l = y_test_l[:, 1:]
-
-    #--- Apply VAE to labelled and unlabelled data ---#
-    Z_batch_l, infrm_dist_params_l, genm_dist_params_l = vae_model(X_test_l)
-    Z_batch_ul, infrm_dist_params_ul, genm_dist_params_ul = vae_model(X_test_ul)
-
-    #--- Reconstruction  ---#
-    mu_r, _ = genm_dist_params_ul.unbind(dim = -1)
-    X_test_ul_hat = mu_r
-
-    loss_reconst = reconstr_loss(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
-
-
-    y_test_l_hat = regressor(Z_batch_l)
-
-    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
+    loss_regr = results.metrics[eval_cfg_comp.loss_name]
 
     print(
         f"Autoencoder:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_ae)} iterations each\n"
-        f"Avg. Loss on unlabelled testing subset: {loss_reconst}\n\n"
+        f"Avg. Loss on unlabelled testing subset: {loss_reconstr}\n\n"
         
-        f"Regression Trained End-To-End:\n"
+        f"Regression End-To-End:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
         f"Avg. Loss on labelled testing subset: {loss_regr}\n"
@@ -1845,7 +1838,7 @@ if __name__=="__main__":
     print("-device:", device)
 
     ###--- AE in isolation ---###
-    #AE_iso_training_procedure()
+    AE_iso_training_procedure()
     
 
     ###--- VAE in isolation ---###
@@ -1859,7 +1852,7 @@ if __name__=="__main__":
     #train_joint_seq_VAE()
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
-    AE_joint_epoch_procedure()
+    #AE_joint_epoch_procedure()
     #VAE_joint_epoch_procedure()
 
 
