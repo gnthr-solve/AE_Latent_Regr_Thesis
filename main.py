@@ -44,6 +44,12 @@ from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
 
+from evaluation import Evaluation, EvalConfig
+from evaluation.eval_visitors import (
+    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
+    ReconstrLossVisitor, RegrLossVisitor,
+    LatentPlotVisitor,
+)
 from helper_tools import simple_timer
 from helper_tools.plotting import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_latent_with_attribute
 
@@ -154,27 +160,34 @@ def AE_iso_training_procedure():
 
     ###--- Test Loss ---###
     test_dataset = subset_factory.retrieve(kind = 'test', combine = True)
-    X_test = dataset.X_data[test_dataset.indices]
-    X_test = X_test[:, 1:]
-
-    with torch.no_grad():
-
-        Z_batch_hat, X_test_hat = model(X_test)
-
-        loss_reconst = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
-
-    print(
-        f"After {epochs} epochs with {n_iterations} iterations each\n"
-        f"Avg. Loss on testing subset: {loss_reconst.mean()}\n"
+    
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = {'joint': test_dataset},
+        models = {'AE_model': model},
     )
 
-    if latent_dim == 3:
-        title = f'NVAE Normalised MinMax (epochs = {epochs})'
-        plot_latent_with_reconstruction_error(
-            latent_tensor = Z_batch_hat,
-            loss_tensor = loss_reconst,
-            title = title
-        )
+    eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso', loss_name = 'rel_L2_loss')
+    visitors = [
+        AEOutputVisitor(eval_cfg = eval_cfg),
+        ReconstrLossVisitor(test_reconstr_term, eval_cfg = eval_cfg),
+        LatentPlotVisitor(eval_cfg = eval_cfg),
+    ]
+
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    print(
+        f"After {epochs} epochs with {n_iterations} iterations each\n"
+        f"Avg. Loss on testing subset: {results.metrics[eval_cfg.loss_name]}\n"
+    )
+
+    # if latent_dim == 3:
+    #     title = f'NVAE Normalised MinMax (epochs = {epochs})'
+    #     plot_latent_with_reconstruction_error(
+    #         latent_tensor = Z_batch_hat,
+    #         loss_tensor = loss_reconst,
+    #         title = title
+    #     )
 
 
 
@@ -1166,7 +1179,7 @@ def AE_joint_epoch_procedure():
     ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
     #reconstr_loss = Loss(Observe(observer = ae_loss_obs, loss_term = reconstr_loss_term))
     reconstr_loss = Loss(loss_term = reconstr_loss_term)
-    regr_loss = Loss(regr_loss_term)
+    
 
 
     ###--- Optimizer & Scheduler ---###
@@ -1200,56 +1213,57 @@ def AE_joint_epoch_procedure():
 
 
     ###--- Test Loss ---###
-    test_subsets = subset_factory.retrieve(kind = 'test')
-    ae_test_ds = test_subsets['unlabelled']
-    regr_test_ds = test_subsets['labelled']
+    test_datasets = subset_factory.retrieve(kind = 'test')
+    
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = test_datasets,
+        models = {'AE_model': ae_model,'regressor': regressor},
+    )
 
-    X_test_ul = dataset.X_data[ae_test_ds.indices]
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = 'Huber')
 
-    X_test_l = dataset.X_data[regr_test_ds.indices]
-    y_test_l = dataset.y_data[regr_test_ds.indices]
+    visitors = [
+        AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
+        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
 
-    X_test_ul = X_test_ul[:, 1:]
+        AEOutputVisitor(eval_cfg = eval_cfg_comp),
+        RegrOutputVisitor(eval_cfg = eval_cfg_comp),
+        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
+        LatentPlotVisitor(eval_cfg = eval_cfg_comp)
+    ]
 
-    X_test_l = X_test_l[:, 1:]
-    y_test_l = y_test_l[:, 1:]
-
-    with torch.no_grad():
-
-        Z_batch_ul, X_test_ul_hat = ae_model(X_test_ul)
-
-        loss_reconst = reconstr_loss_term(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
-
-        Z_batch_l, X_test_l_hat = ae_model(X_test_l)
-        y_test_l_hat = regressor(Z_batch_l)
-
-        loss_regr = regr_loss_term(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
+    loss_regr = results.metrics[eval_cfg_comp.loss_name]
 
     print(
         f"Autoencoder:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_ae)} iterations each\n"
-        f"Avg. Loss on unlabelled testing subset: {loss_reconst.mean()}\n\n"
+        f"Avg. Loss on unlabelled testing subset: {loss_reconstr}\n\n"
         
         f"Regression End-To-End:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
-        f"Avg. Loss on labelled testing subset: {loss_regr.mean()}\n"
+        f"Avg. Loss on labelled testing subset: {loss_regr}\n"
     )
 
-    if latent_dim == 3:
-        title = f'NVAE Normalised (epochs = {epochs})'
-        plot_latent_with_reconstruction_error(
-            latent_tensor = Z_batch_ul,
-            loss_tensor = loss_reconst,
-            title = title
-        )
-        title = f'NVAE Normalised Regr(epochs = {epochs})'
-        plot_latent_with_reconstruction_error(
-            latent_tensor = Z_batch_l,
-            loss_tensor = loss_regr,
-            title = title
-        )
+    # if latent_dim == 3:
+    #     title = f'NVAE Normalised (epochs = {epochs})'
+    #     plot_latent_with_reconstruction_error(
+    #         latent_tensor = Z_batch_ul,
+    #         loss_tensor = loss_reconst,
+    #         title = title
+    #     )
+    #     title = f'NVAE Normalised Regr(epochs = {epochs})'
+    #     plot_latent_with_reconstruction_error(
+    #         latent_tensor = Z_batch_l,
+    #         loss_tensor = loss_regr,
+    #         title = title
+    #     )
 
 
 
@@ -1591,7 +1605,7 @@ def train_linear_regr():
 def train_deep_regr():
 
     ###--- Meta ---###
-    epochs = 10
+    epochs = 5
     batch_size = 30
 
 
@@ -1623,7 +1637,7 @@ def train_deep_regr():
 
 
     # Deep Regression
-    regressor = DNNRegr(input_dim = input_dim, n_layers = 4, activation = 'Softplus')
+    regressor = DNNRegr(input_dim = input_dim, n_layers = 5, activation = 'Softplus')
 
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)
@@ -1644,7 +1658,7 @@ def train_deep_regr():
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
     regr_loss = Loss(Observe(observer = loss_obs, loss_term = regr_loss_term))
-    regr_loss_test = Loss(regr_loss_term)
+    
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
@@ -1689,21 +1703,23 @@ def train_deep_regr():
 
 
     ###--- Test Loss ---###
-    test_subsets = subset_factory.retrieve(kind = 'test')
-    regr_test_ds = test_subsets['labelled']
+    test_datasets = subset_factory.retrieve(kind = 'test')
+    
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = test_datasets,
+        models = {'regressor': regressor},
+    )
 
-    test_indices = regr_test_ds.indices
-    X_test_l = dataset.X_data[test_indices]
-    y_test_l = dataset.y_data[test_indices]
+    eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso', loss_name = 'Huber')
+    visitors = [
+        RegrOutputVisitor(eval_cfg = eval_cfg),
+        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg),
+    ]
 
-    X_test_l = X_test_l[:, 1:]
-    y_test_l = y_test_l[:, 1:]
-
-    with torch.no_grad():
-        y_test_l_hat = regressor(X_test_l)
-
-        loss_regr = regr_loss_test(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
-
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    loss_regr = results.metrics[eval_cfg.loss_name]
     print(
         f"Regression Baseline:\n"
         f"---------------------------------------------------------------\n"
@@ -1716,8 +1732,7 @@ def train_deep_regr():
 
 def eval_trial():
     
-    from evaluation import Evaluation, EvalConfig, AEOutputVisitor, VAEOutputVisitor, ReconstrLossVisitor, LatentPlotVisitor
-    ###--- Meta ---###
+   ###--- Meta ---###
     epochs = 1
     batch_size = 20
     latent_dim = 3
@@ -1844,7 +1859,7 @@ if __name__=="__main__":
     #train_joint_seq_VAE()
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
-    #AE_joint_epoch_procedure()
+    AE_joint_epoch_procedure()
     #VAE_joint_epoch_procedure()
 
 
@@ -1854,7 +1869,7 @@ if __name__=="__main__":
 
 
     ###--- Trial ---###
-    eval_trial()
+    #eval_trial()
     
     
     pass

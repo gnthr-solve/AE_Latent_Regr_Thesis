@@ -23,10 +23,10 @@ class LossVisitor(EvaluationVisitor):
 
     def _get_data(self, eval: Evaluation) -> dict[str, Tensor]:
 
-        data_key = self.eval_cfg.data_key
+        data_key = self.data_key
         data = eval.test_data[data_key]
 
-        model_output = eval.model_outputs[self.eval_cfg.output_name]
+        model_output = eval.model_outputs[self.output_name]
 
         return {**data, **model_output.to_dict()}
     
@@ -56,8 +56,8 @@ class ReconstrLossVisitor(LossVisitor):
 
             loss_batch = self.loss_term(X_batch = X_batch, X_hat_batch = X_hat_batch)
 
-            eval_results.losses[self.eval_cfg.loss_name] = loss_batch
-            eval_results.metrics[self.eval_cfg.loss_name] = loss_batch.mean().item()
+            eval_results.losses[self.loss_name] = loss_batch
+            eval_results.metrics[self.loss_name] = loss_batch.mean().item()
 
 
 
@@ -87,8 +87,8 @@ class RegrLossVisitor(LossVisitor):
 
             loss_batch = self.loss_term(y_batch = y_batch, y_hat_batch = y_hat_batch)
 
-            eval_results.losses[self.eval_cfg.loss_name] = loss_batch
-            eval_results.metrics[self.eval_cfg.loss_name] = loss_batch.mean().item()
+            eval_results.losses[self.loss_name] = loss_batch
+            eval_results.metrics[self.loss_name] = loss_batch.mean().item()
 
 
 
@@ -115,7 +115,7 @@ class LossTermVisitor(LossVisitor):
 
             loss_batch = self.loss_term(**tensors)
 
-            eval_results.losses[self.eval_cfg.loss_name] = loss_batch
-            eval_results.metrics[self.eval_cfg.loss_name] = loss_batch.mean().item()
+            eval_results.losses[self.loss_name] = loss_batch
+            eval_results.metrics[self.loss_name] = loss_batch.mean().item()
 
 

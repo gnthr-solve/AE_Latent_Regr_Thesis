@@ -20,7 +20,7 @@ class LatentPlotVisitor(EvaluationVisitor):
 
     def visit(self, eval: Evaluation):
 
-        model_output = eval.model_outputs[self.eval_cfg.output_name]
+        model_output = eval.model_outputs[self.output_name]
         latent_tensor = model_output.Z_batch
 
         fig = plt.figure(figsize=(10, 8))

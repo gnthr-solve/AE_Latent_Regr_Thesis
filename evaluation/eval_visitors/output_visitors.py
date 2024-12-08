@@ -12,7 +12,7 @@ from ..model_output import ModelOutput
 class OutputVisitor(EvaluationVisitor):
 
     def _get_data(self, eval: Evaluation) -> dict[str, Tensor]:
-        data_key = self.eval_cfg.data_key
+        data_key = self.data_key
         return eval.test_data[data_key]
 
 
@@ -34,7 +34,7 @@ class AEOutputVisitor(OutputVisitor):
 
             Z_batch, X_hat_batch = ae_model(data['X_batch'])
 
-            eval.model_outputs[self.eval_cfg.output_name] = ModelOutput(
+            eval.model_outputs[self.output_name] = ModelOutput(
                 Z_batch = Z_batch,
                 X_hat_batch = X_hat_batch,
             )
@@ -60,7 +60,7 @@ class VAEOutputVisitor(OutputVisitor):
 
             X_hat_batch, _ = genm_dist_params.unbind(dim = -1)
 
-            eval.model_outputs[self.eval_cfg.output_name] = ModelOutput(
+            eval.model_outputs[self.output_name] = ModelOutput(
                 X_hat_batch = X_hat_batch,
                 Z_batch = Z_batch,
                 infrm_dist_params = infrm_dist_params,
@@ -82,32 +82,32 @@ class RegrOutputVisitor(OutputVisitor):
         
         data = self._get_data(eval = eval)
 
-        if self.eval_cfg.mode == 'composed':
+        if self.mode == 'composed':
             input_data = data['Z_batch']
 
-        elif self.eval_cfg.mode == 'iso':
+        elif self.mode == 'iso':
             input_data = data['X_batch']
 
         with torch.no_grad():
 
             y_hat = regressor(input_data)
 
-        if self.eval_cfg.mode == 'composed':
-            eval.model_outputs[self.eval_cfg.output_name] = ModelOutput(**data, y_hat_batch = y_hat)
+        if self.mode == 'composed':
+            eval.model_outputs[self.output_name] = ModelOutput(**data, y_hat_batch = y_hat)
         
-        elif self.eval_cfg.mode == 'iso':
-            eval.model_outputs[self.eval_cfg.output_name] = ModelOutput(y_hat_batch = y_hat)
+        elif self.mode == 'iso':
+            eval.model_outputs[self.output_name] = ModelOutput(y_hat_batch = y_hat)
 
     
     def _get_data(self, eval: Evaluation) -> dict[str, Tensor]:
         
-        if self.eval_cfg.mode == 'composed':
+        if self.mode == 'composed':
 
-            model_output = eval.model_outputs[self.eval_cfg.output_name]
+            model_output = eval.model_outputs[self.output_name]
             data = model_output.to_dict()
 
-        elif self.eval_cfg.mode == 'iso':
+        elif self.mode == 'iso':
 
-            data = eval.test_data[self.eval_cfg.data_key]
+            data = eval.test_data[self.data_key]
         
         return data

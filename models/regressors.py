@@ -54,8 +54,9 @@ class DNNRegr(nn.Module):
         end_power = max(math.ceil(math.log2(output_dim)), start_power - n_layers)
         
         # Generate layer dimensions using powers of 2
-        #hidden_dims = [2**p for p in range(start_power, end_power - 1, -1)]
-        hidden_dims = [500, 500, 500, 2]
+        hidden_dims = [2**p for p in range(start_power, end_power - 1, -1)]
+        #hidden_dims = [500, 500, 500, 2]
+        
         # Ensure first layer matches input_dim exactly
         hidden_dims[0] = input_dim
         
