@@ -1,0 +1,65 @@
+
+defaults:
+    - _self_
+    - override hydra/job_logging: stdout
+
+
+hyper_params:
+  - epochs
+  - latent_dim
+  - batch_size
+  - n_layers
+  - encoder_lr
+  - decoder_lr
+  - regr_lr
+  - scheduler_gamma
+  - ete_regr_weight
+
+
+hydra:
+    mode: MULTIRUN
+    
+    sweep:
+        dir: results/multirun
+        subdir: ${hydra.job.name}
+    
+    output_subdir: null
+
+    job:
+        name: "joint_nvae_regr_key_norm"
+
+
+    callbacks:
+
+        save_results: 
+            _target_: helper_tools.SaveResultsTable
+            tracked_results: 
+              - loss_reconstr
+              - loss_regr
+
+        save_best_ae_model:
+            _target_: helper_tools.BestModelCallback
+            tracked_loss: loss_reconstr
+            tracked_model: nvae
+
+        save_best_regr_model:
+            _target_: helper_tools.BestModelCallback
+            tracked_loss: loss_regr
+            tracked_model: regressor
+
+    sweeper:
+        params:
+          +epochs: 5, 6, 7, 8
+          +batch_size: 25
+          +latent_dim: 3, 5, 10
+
+          +n_layers: 3, 4, 5, 6, 7
+
+          +encoder_lr: 5e-3, 1e-3
+          +decoder_lr: 5e-3, 1e-3
+          +regr_lr: 1e-2, 5e-3
+          +scheduler_gamma: 0.9
+          
+          +ete_regr_weight: 0.8, 0.85, 0.9, 0.95
+
+          

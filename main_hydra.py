@@ -54,8 +54,6 @@ from training.procedure_joint import JointEpochTrainingProcedure
 from helper_tools import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_training_characteristics, simple_timer
 
 
-
-
 @hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="ae_iso_cfg_test")
 def train_AE_iso_hydra(cfg: DictConfig):
 
@@ -416,6 +414,125 @@ def train_joint_epoch_procedure(cfg: DictConfig):
 
 
 
+@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="joint_nvae_regr_cfg_sweep")
+def joint_epoch_shared_layer(cfg: DictConfig):
+
+    ###--- Meta ---###
+    epochs = cfg.epochs
+    batch_size = cfg.batch_size
+    latent_dim = cfg.latent_dim
+    
+    n_layers = cfg.n_layers
+
+    encoder_lr = cfg.encoder_lr
+    decoder_lr = cfg.decoder_lr
+    regr_lr = cfg.regr_lr
+    scheduler_gamma = cfg.scheduler_gamma
+
+    ete_regr_weight = cfg.ete_regr_weight
+    
+    
+    train_subsets = subset_factory.retrieve(kind = 'train')
+
+    ae_train_ds = train_subsets['unlabelled']
+    regr_train_ds = train_subsets['labelled']
+
+
+    ###--- DataLoader ---###
+    dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
+    dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    input_dim = dataset.X_dim - 1
+
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers)
+
+    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+    
+    regressor = LinearRegr(latent_dim = latent_dim)
+
+
+    ###--- Losses ---###
+    #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
+    reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
+
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+
+    ete_loss_terms = {
+        'Reconstruction Term': Weigh(reconstr_loss_term, weight= 1 - ete_regr_weight), 
+        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
+    }
+
+    
+    ete_loss = Loss(CompositeLossTerm(**ete_loss_terms))
+    reconstr_loss = Loss(loss_term = reconstr_loss_term)
+    regr_loss = Loss(regr_loss_term)
+
+
+    ###--- Optimizer & Scheduler ---###
+    optimiser = Adam([
+        {'params': encoder.parameters(), 'lr': encoder_lr},
+        {'params': decoder.parameters(), 'lr': decoder_lr},
+        {'params': regressor.parameters(), 'lr': regr_lr},
+    ])
+
+    scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
+
+
+    ###--- Training Procedure ---###
+    training_procedure = JointEpochTrainingProcedure(
+        ae_train_dataloader = dataloader_ae,
+        regr_train_dataloader = dataloader_regr,
+        ae_model = ae_model,
+        regr_model = regressor,
+        ae_loss = reconstr_loss,
+        ete_loss = ete_loss, 
+        optimizer = optimiser,
+        scheduler = scheduler,
+        epochs = epochs,
+    )
+
+    training_procedure()
+
+
+    ###--- Test Loss ---###
+    test_datasets = subset_factory.retrieve(kind = 'test')
+    ae_test_ds = test_datasets['unlabeled']
+    regr_test_ds = test_datasets['labeled']
+
+    X_test_ul = dataset.X_data[ae_test_ds.indices]
+
+    X_test_l = dataset.X_data[regr_test_ds.indices]
+    y_test_l = dataset.y_data[regr_test_ds.indices]
+
+    X_test_ul = X_test_ul[:, 1:]
+
+    X_test_l = X_test_l[:, 1:]
+    y_test_l = y_test_l[:, 1:]
+
+    Z_test_ul, X_test_ul_hat = ae_model(X_test_ul)
+
+    loss_reconst = reconstr_loss(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
+
+    Z_test_l, X_test_l_hat = ae_model(X_test_l)
+    y_test_l_hat = regressor(Z_test_l)
+
+    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+    
+    return {
+        'loss_reconstr': loss_reconst.item(),
+        'loss_regr': loss_regr.item(),
+        'nvae': ae_model,
+        'regressor': regressor,
+    }
+
+
+
+
 @hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="baseline_regr_cfg_sweep")
 def train_baseline(cfg: DictConfig):
 
@@ -534,7 +651,7 @@ if __name__=="__main__":
     )
     
     dataset = dataset_builder.build_dataset()
-
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
 
 
     ###--- Setup and calculate results ---###

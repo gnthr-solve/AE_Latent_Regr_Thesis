@@ -1,0 +1,44 @@
+
+defaults:
+  - _self_
+  - override hydra/job_logging: stdout
+
+hyper_params:
+  - epochs
+  - latent_dim
+  - batch_size
+  - n_layers
+  - encoder_lr
+  - decoder_lr
+  - regr_lr
+  - scheduler_gamma
+  - ete_regr_weight
+
+hydra:
+  mode: MULTIRUN
+  
+  sweep:
+    dir: results/multirun
+    subdir: ${hydra.job.name}
+  
+  output_subdir: null
+
+  job:
+    name: "joint_nvae_regr_optuna"
+
+  
+
+  sweeper:
+    _target_: hydra_plugins.hydra_optuna_sweeper.OptunaSweeper
+    direction: minimize
+    n_trials: 100
+    params:
+      epochs: interval(5, 8)
+      batch_size: choice(25, 50)
+      latent_dim: choice(3, 5, 10)
+      n_layers: choice(3, 4, 5, 6, 7)
+      encoder_lr: loguniform(1e-4, 1e-2)
+      decoder_lr: loguniform(1e-4, 1e-2)
+      regr_lr: loguniform(1e-4, 1e-2)
+      scheduler_gamma: uniform(0.8, 0.99)
+      ete_regr_weight: uniform(0.8, 0.95)
