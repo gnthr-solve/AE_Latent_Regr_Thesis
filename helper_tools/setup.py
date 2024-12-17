@@ -1,15 +1,51 @@
 
 import torch
 import torch.nn as nn
+import importlib
+
 
 from torch.nn import Module
 from torch import Tensor
 
 from models import VAE, AE, VarEncoder, VarDecoder, LinearEncoder, LinearDecoder
+from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser
 from abc import ABC, abstractmethod
+from typing import Any, Optional
 
 from .torch_general import weights_init
 
+def retrieve_class(module_name, class_name):
+    return importlib.import_module(module_name).__dict__[class_name]
+
+
+"""
+Retrieve Normalisers
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def create_normaliser(kind: str, epsilon: Optional[float] = None):
+
+    if kind == "min_max_eps":
+        return MinMaxEpsNormaliser(epsilon=epsilon)
+    
+    elif kind == "min_max":
+        return MinMaxNormaliser()
+    
+    elif kind == "z_score":
+        return ZScoreNormaliser()
+    
+    else:
+        return None
+    
+
+
+
+
+
+"""
+Model Factory Experiment
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+"""
 class ModelFactory(ABC):
 
     @abstractmethod

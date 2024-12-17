@@ -1,0 +1,29 @@
+
+
+defaults:
+  - data_build: default
+  - override hydra/job_logging: stdout
+  - _self_
+
+data_build:
+  normaliser_kind: min_max
+  normaliser_eps: Null
+
+
+# Model parameters
+latent_dim: 3
+n_layers_e: 4
+n_layers_d: 4
+activation_e: 'PReLU'
+activation_d: 'PReLU'
+
+# hyperparameters
+epochs: 3
+batch_size: 32
+#encoder_lr: 1e-3
+#decoder_lr: 1e-3
+#regr_lr: 1e-3
+lr: 1e-3
+gamma: 0.9
+#ete_regr_weight: 0.8
+

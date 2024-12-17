@@ -1,0 +1,10 @@
+
+defaults:
+  - normaliser
+  - dataset
+
+dataset_kind: key
+normaliser_kind: Null
+normaliser_eps: 1e-3
+exclude_columns: ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp"]
+train_size: 0.9

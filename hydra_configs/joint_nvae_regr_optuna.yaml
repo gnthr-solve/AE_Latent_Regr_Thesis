@@ -1,37 +1,59 @@
 
 defaults:
-  - _self_
+  - override hydra/sweeper: optuna
   - override hydra/job_logging: stdout
+  - _self_
 
-hyper_params:
-  - epochs
-  - latent_dim
-  - batch_size
-  - n_layers
-  - encoder_lr
-  - decoder_lr
-  - regr_lr
-  - scheduler_gamma
-  - ete_regr_weight
+# Default values
+epochs: 1
+batch_size: 25
+latent_dim: 3
+n_layers: 3
+encoder_lr: 0.001
+decoder_lr: 0.001
+regr_lr: 0.001
+scheduler_gamma: 0.9
+ete_regr_weight: 0.9
 
 hydra:
-  mode: MULTIRUN
+  # mode: MULTIRUN
   
-  sweep:
-    dir: results/multirun
-    subdir: ${hydra.job.name}
+  # sweep:
+  #   dir: results/multirun
+  #   subdir: ${hydra.job.name}
   
-  output_subdir: null
+  # output_subdir: null
 
-  job:
-    name: "joint_nvae_regr_optuna"
-
-  
+  # job:
+  #   name: "joint_nvae_regr_optuna"
 
   sweeper:
-    _target_: hydra_plugins.hydra_optuna_sweeper.OptunaSweeper
-    direction: minimize
-    n_trials: 100
+    _target_: hydra_plugins.hydra_optuna_sweeper.optuna_sweeper.OptunaSweeper
+
+    # storage URL to persist optimization results
+    # for example, you can use SQLite if you set 'sqlite:///example.db'
+    storage: null
+
+    # name of the study to persist optimization results
+    study_name: null
+
+    # number of parallel workers
+    n_jobs: 1
+
+    # 'minimize' or 'maximize' the objective
+    direction: [minimize, minimize]
+
+    # total number of runs that will be executed
+    n_trials: 25
+
+    # choose Optuna hyperparameter sampler
+    # docs: https://optuna.readthedocs.io/en/stable/reference/samplers.html
+    sampler:
+      _target_: optuna.samplers.TPESampler
+      seed: 12345
+      n_startup_trials: 10 # number of random sampling runs before optimization starts
+
+    
     params:
       epochs: interval(5, 8)
       batch_size: choice(25, 50)

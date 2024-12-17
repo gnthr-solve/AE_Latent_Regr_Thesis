@@ -1,0 +1,25 @@
+encoder:
+  _target_: models.var_encoders.VarEncoder
+  input_dim: ${input_dim} 
+  latent_dim: ${latent_dim}
+  n_dist_params: 2
+  n_layers: ${n_layers_e}
+  activation: ${activation_e}
+
+decoder:
+  _target_: models.var_decodes.VarDecoder
+  output_dim: ${input_dim}
+  latent_dim: ${latent_dim}
+  n_dist_params: 2
+  n_layers: ${n_layers_d}
+  activation: ${activation_d}
+
+nvae_s:
+  _target_: models.naive_vae.NaiveVAE_Sigma
+  encoder: ${encoder}
+  decoder: ${decoder}
+
+gvae:
+  _target_: models.vae.GaussVAE
+  encoder: ${encoder}
+  decoder: ${decoder}

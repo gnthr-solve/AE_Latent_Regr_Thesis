@@ -1,4 +1,5 @@
 
+import hydra.errors
 import torch
 import pandas as pd
 import numpy as np
@@ -10,7 +11,7 @@ from torch.optim.lr_scheduler import ExponentialLR
 
 from hydra import initialize, compose
 from hydra.utils import instantiate
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
 from pathlib import Path
@@ -53,6 +54,8 @@ from training.procedure_joint import JointEpochTrainingProcedure
 
 from helper_tools import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_training_characteristics, simple_timer
 
+import os
+os.environ["HYDRA_FULL_ERROR"] = "1"
 
 @hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="ae_iso_cfg_test")
 def train_AE_iso_hydra(cfg: DictConfig):
@@ -264,16 +267,16 @@ def train_VAE_iso_hydra(cfg: DictConfig):
 
 
 
-@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="joint_ae_regr_cfg_sweep")
-def train_joint_epoch_procedure(cfg: DictConfig):
-
+@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="joint_nvae_regr_optuna")
+def train_joint_epoch_procedure_optuna(cfg: DictConfig):
+    print(OmegaConf.to_yaml(cfg))
     ###--- Meta ---###
     epochs = cfg.epochs
     batch_size = cfg.batch_size
     latent_dim = cfg.latent_dim
     
-    n_layers_e = cfg.n_layers_e
-    n_layers_d = cfg.n_layers_d
+    n_layers = cfg.n_layers
+    
 
     encoder_lr = cfg.encoder_lr
     decoder_lr = cfg.decoder_lr
@@ -284,11 +287,10 @@ def train_joint_epoch_procedure(cfg: DictConfig):
     
     
     ###--- Dataset Split ---###
-    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
-    subsets = subset_factory.create_splits()
+    train_dataset = subset_factory.retrieve(kind = 'train', combine = False)
 
-    ae_train_ds = subsets['train_unlabeled']
-    regr_train_ds = subsets['train_labeled']
+    ae_train_ds = train_dataset['unlabelled']
+    regr_train_ds = train_dataset['labelled']
 
 
     ###--- DataLoader ---###
@@ -299,30 +301,12 @@ def train_joint_epoch_procedure(cfg: DictConfig):
     ###--- Models ---###
     input_dim = dataset.X_dim - 1
 
-    encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e)
-    decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers)
 
-    # encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e)
-    # decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d)
-
-    # #model = NaiveVAE_LogVar(encoder = encoder, decoder = decoder)
-    # model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
     
-    ae_model = AE(encoder = encoder, decoder = decoder)
     regressor = LinearRegr(latent_dim = latent_dim)
-
-
-    ###--- Observation Test Setup ---###
-    # n_iterations_ae = len(dataloader_ae)
-    # n_iterations_regr = len(dataloader_regr)
-
-    # ae_loss_obs = LossTermObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
-    
-    # loss_observer = CompositeLossTermObserver(
-    #     n_epochs = epochs, 
-    #     n_iterations = len(dataloader_regr),
-    #     members = ['Reconstruction Term', 'Regression Term'],
-    # )
 
 
     ###--- Losses ---###
@@ -339,7 +323,7 @@ def train_joint_epoch_procedure(cfg: DictConfig):
     }
 
     
-    ete_loss = Loss(CompositeLossTerm(**ete_loss_terms))
+    ete_loss = Loss(CompositeLossTerm(ete_loss_terms))
     reconstr_loss = Loss(loss_term = reconstr_loss_term)
     regr_loss = Loss(regr_loss_term)
 
@@ -369,14 +353,13 @@ def train_joint_epoch_procedure(cfg: DictConfig):
 
     training_procedure()
 
-    ###--- Plot Observations ---###
-    #plot_loss_tensor(observed_losses = ae_loss_obs.losses)
-    #loss_observer.plot_results()
-
 
     ###--- Test Loss ---###
-    ae_test_ds = subsets['test_unlabeled']
-    regr_test_ds = subsets['test_labeled']
+    test_dataset = subset_factory.retrieve(kind = 'test', combine = False)
+
+    ae_test_ds = test_dataset['unlabelled']
+    regr_test_ds = test_dataset['labelled']
+
 
     X_test_ul = dataset.X_data[ae_test_ds.indices]
 
@@ -388,28 +371,15 @@ def train_joint_epoch_procedure(cfg: DictConfig):
     X_test_l = X_test_l[:, 1:]
     y_test_l = y_test_l[:, 1:]
 
-    X_test_ul_hat = decoder(encoder((X_test_ul)))
+    Z_batch_ul, X_test_ul_hat  = ae_model(X_test_ul)
+    Z_batch_l, X_test_l_hat  = ae_model(X_test_l)
+    y_test_l_hat = regressor(Z_batch_l)
 
     loss_reconst = reconstr_loss(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
 
-    y_test_l_hat = regressor(encoder(X_test_l))
-
     loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
     
-    return {
-        # 'epochs': epochs,
-        # 'batch_size': batch_size,
-        # 'latent_dim': latent_dim,
-        # 'n_layers_e': n_layers_e,
-        # 'n_layers_d': n_layers_d,
-        # 'encoder_lr': encoder_lr,
-        # 'decoder_lr': decoder_lr,
-        # 'regr_lr': regr_lr,
-        # 'scheduler_gamma': scheduler_gamma,
-        # 'ete_regr_weight': ete_regr_weight,
-        'loss_reconst': loss_reconst.item(),
-        'loss_regr': loss_regr.item(),
-    }
+    return loss_reconst.item(), loss_regr.item()
 
 
 
@@ -652,11 +622,12 @@ if __name__=="__main__":
     
     dataset = dataset_builder.build_dataset()
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
-
+    
 
     ###--- Setup and calculate results ---###
     #train_AE_iso_hydra()
-    train_VAE_iso_hydra()
+    #train_VAE_iso_hydra()
+    train_joint_epoch_procedure_optuna()
     #train_joint_epoch_procedure()
     #train_baseline()
 

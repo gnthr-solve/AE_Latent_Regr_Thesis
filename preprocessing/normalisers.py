@@ -7,13 +7,27 @@ import json
 from torch import Tensor
 from itertools import product
 from pathlib import Path
+from abc import ABC, abstractmethod
 
+"""
+Normalisers - ABC
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class Normaliser(ABC):
+
+    @abstractmethod
+    def normalise(self, tensor: Tensor) -> Tensor:
+        pass
+
+    @abstractmethod
+    def invert(self, normalised_tensor: Tensor) -> Tensor:
+        pass
 
 """
 Normalisers - Min-Max
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class MinMaxNormaliser:
+class MinMaxNormaliser(Normaliser):
 
     def __init__(self):
 
@@ -58,7 +72,7 @@ class MinMaxNormaliser:
 Normalisers - Min-Max Epsilon
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class MinMaxEpsNormaliser:
+class MinMaxEpsNormaliser(Normaliser):
 
     def __init__(self, epsilon: float = 1e-6):
 
@@ -105,7 +119,7 @@ class MinMaxEpsNormaliser:
 Normalisers - Z-Score
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class ZScoreNormaliser:
+class ZScoreNormaliser(Normaliser):
 
     def __init__(self):
         self.mean = None
@@ -150,7 +164,7 @@ class ZScoreNormaliser:
 Normalisation - Robust Scaling
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class RobustScalingNormaliser:
+class RobustScalingNormaliser(Normaliser):
 
     def __init__(self):
         self.median = None

@@ -14,6 +14,34 @@ from dataclasses import dataclass, field
 from .datasets import TensorDataset
 from .alignment import Alignment
 
+from preprocessing.normalisers import Normaliser
+
+from .dataset_builder import DatasetBuilder
+from .split_factory import SplitSubsetFactory
+
+"""
+Data Helper Tools - Load Tensor segments
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def setup_dataset_build(
+        kind: str, normaliser: Normaliser| None, exclude_columns: list[str], 
+        train_size: float,
+    ) -> tuple[TensorDataset, SplitSubsetFactory]:
+
+    dataset_builder = DatasetBuilder(
+        kind = kind,
+        normaliser = normaliser,
+        exclude_columns = exclude_columns
+    )
+    
+    dataset = dataset_builder.build_dataset()
+   
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = train_size)
+
+    return dataset, subset_factory
+
+
+
 """
 Data Helper Tools - Load Tensor segments
 -------------------------------------------------------------------------------------------------------------------------------------------
