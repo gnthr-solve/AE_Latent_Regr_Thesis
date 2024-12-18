@@ -56,6 +56,7 @@ from evaluation.eval_visitors import (
 )
 
 from helper_tools.setup import create_normaliser
+from helper_tools.ray_optim import custom_trial_dir_name
 
 os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
 
@@ -173,12 +174,13 @@ if __name__=="__main__":
     ###--- Dataset ---###
     dataset_kind = 'key'
     normaliser_kind = 'min_max'
+    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
 
     normaliser = create_normaliser(normaliser_kind)
     dataset_builder = DatasetBuilder(
-        kind='key',
-        normaliser=normaliser,
-        exclude_columns=["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        kind = dataset_kind,
+        normaliser = normaliser,
+        exclude_columns = exclude_columns,
     )
     
     dataset = dataset_builder.build_dataset()
@@ -194,7 +196,7 @@ if __name__=="__main__":
         'epochs': tune.randint(lower=2, upper = 200),
         'batch_size': tune.randint(lower=20, upper = 200),
         'n_layers': tune.randint(lower=2, upper = 15),
-        'regr_lr': tune.loguniform(1e-4, 1e-2),
+        'regr_lr': tune.loguniform(1e-4, 1e-1),
         'scheduler_gamma': tune.uniform(0.5, 1),
         'activation': tune.choice(['ReLU', 'LeakyReLU', 'PReLU', 'Softplus']),
     }
@@ -218,6 +220,7 @@ if __name__=="__main__":
             metric = optim_metric,
             mode = "min",
             num_samples = num_samples,
+            trial_dirname_creator = custom_trial_dir_name,
         ),
         run_config = train.RunConfig(
             name = experiment_name,
@@ -227,7 +230,7 @@ if __name__=="__main__":
     )
     
     results = tuner.fit()
-    print("Best config is:", results.get_best_result())#.config)
+    print("Best config is:", results.get_best_result().config)
 
     results_df = results.get_dataframe()
     results_df.to_csv(f'./results/{experiment_name}.csv', index = False)

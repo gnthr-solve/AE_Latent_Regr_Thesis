@@ -77,6 +77,7 @@ def AE_iso_training_procedure():
     model_kind = 'stochastic'
     model_type = 'NVAE'
 
+
     ###--- Dataset ---###
     #normaliser = MinMaxNormaliser()
     normaliser = MinMaxEpsNormaliser(epsilon=1e-3)
@@ -821,7 +822,21 @@ def AE_joint_epoch_procedure():
     ###--- Meta ---###
     epochs = 5
     batch_size = 25
-    latent_dim = 3
+    latent_dim = 10
+
+    n_layers_e = 5
+    n_layers_d = 5
+    activation = 'Softplus'
+
+    encoder_lr = 1e-3
+    decoder_lr = 1e-3
+    regr_lr = 1e-2
+    scheduler_gamma = 0.9
+
+    ete_regr_weight = 0.95
+
+    dataset_kind = 'key'
+    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
 
 
     ###--- Dataset ---###
@@ -831,9 +846,9 @@ def AE_joint_epoch_procedure():
     #normaliser = None
     
     dataset_builder = DatasetBuilder(
-        kind = 'key',
+        kind = dataset_kind,
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        exclude_columns = exclude_columns
     )
     
     dataset = dataset_builder.build_dataset()
@@ -859,8 +874,8 @@ def AE_joint_epoch_procedure():
     # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
     # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4, activation='PReLU')
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 4, activation='PReLU')
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
 
     #model = NaiveVAE(encoder = encoder, decoder = decoder)
     ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
@@ -901,8 +916,8 @@ def AE_joint_epoch_procedure():
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
     ete_loss_terms = {
-        'Reconstruction Term': Weigh(reconstr_loss_term, weight=0.05), 
-        'Regression Term': Weigh(regr_loss_term, weight = 0.95),
+        'Reconstruction Term': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
+        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
     }
 
     ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
@@ -913,12 +928,12 @@ def AE_joint_epoch_procedure():
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
-        {'params': encoder.parameters(), 'lr': 1e-3},
-        {'params': decoder.parameters(), 'lr': 1e-3},
-        {'params': regressor.parameters(), 'lr': 1e-2},
+        {'params': encoder.parameters(), 'lr': encoder_lr},
+        {'params': decoder.parameters(), 'lr': decoder_lr},
+        {'params': regressor.parameters(), 'lr': regr_lr},
     ])
 
-    scheduler = ExponentialLR(optimiser, gamma = 0.5)
+    scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
     ###--- Training Procedure ---###
@@ -1004,6 +1019,20 @@ def VAE_joint_epoch_procedure():
     batch_size = 25
     latent_dim = 10
 
+    n_layers_e = 5
+    n_layers_d = 5
+    activation = 'Softplus'
+
+    encoder_lr = 1e-3
+    decoder_lr = 1e-3
+    regr_lr = 1e-2
+    scheduler_gamma = 0.9
+
+    ete_regr_weight = 0.95
+
+    dataset_kind = 'key'
+    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+
 
     ###--- Dataset ---###
     normaliser = MinMaxNormaliser()
@@ -1011,9 +1040,9 @@ def VAE_joint_epoch_procedure():
     #normaliser = None
     
     dataset_builder = DatasetBuilder(
-        kind = 'key',
+        kind = dataset_kind,
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        exclude_columns = exclude_columns
     )
     
     dataset = dataset_builder.build_dataset()
@@ -1036,9 +1065,9 @@ def VAE_joint_epoch_procedure():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3, activation = 'Softplus')
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
 
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 3, activation = 'Softplus')
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
 
     vae_model = GaussVAE(encoder = encoder, decoder = decoder)
 
@@ -1074,8 +1103,8 @@ def VAE_joint_epoch_procedure():
     #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
     ete_loss_terms = {
-        'Reconstruction Term': Weigh(vae_loss_term, weight=0.05), 
-        'Regression Term': Weigh(regr_loss_term, weight = 0.95),
+        'Reconstruction Term': Weigh(vae_loss_term, weight = 1 - ete_regr_weight), 
+        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
     }
 
 
@@ -1092,12 +1121,12 @@ def VAE_joint_epoch_procedure():
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
-        {'params': encoder.parameters(), 'lr': 1e-3},
-        {'params': decoder.parameters(), 'lr': 1e-3},
-        {'params': regressor.parameters(), 'lr': 1e-2},
+        {'params': encoder.parameters(), 'lr': encoder_lr},
+        {'params': decoder.parameters(), 'lr': decoder_lr},
+        {'params': regressor.parameters(), 'lr': regr_lr},
     ])
 
-    scheduler = ExponentialLR(optimiser, gamma = 0.5)
+    scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
     ###--- Training Procedure ---###
@@ -1165,9 +1194,16 @@ def VAE_joint_epoch_procedure():
 def train_linear_regr():
 
     ###--- Meta ---###
-    epochs = 10
-    batch_size = 30
+    epochs = 100
+    batch_size = 20
 
+    regr_lr = 1e-2
+    scheduler_gamma = 0.99
+
+    dataset_kind = 'key'
+    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+
+    observe_loss_dev = False
 
     ###--- Dataset ---###
     normaliser = MinMaxNormaliser()
@@ -1175,9 +1211,9 @@ def train_linear_regr():
     #normaliser = None
 
     dataset_builder = DatasetBuilder(
-        kind = 'key',
+        kind = dataset_kind,
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        exclude_columns = exclude_columns
     )
     
     dataset = dataset_builder.build_dataset()
@@ -1203,29 +1239,37 @@ def train_linear_regr():
     n_iterations_regr = len(dataloader_regr)
     dataset_size = len(regr_train_ds)
 
-    loss_obs = LossTermObserver(
-        n_epochs = epochs,
-        dataset_size= dataset_size,
-        batch_size= batch_size,
-        name = 'Regr Loss',
-        aggregated = True,
-    )
+    
 
 
     ###--- Losses ---###
-    regr_loss_term = RegrAdapter(Huber(delta = 1))
+    #regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+    regr_loss_term = RegrAdapter(LpNorm(p = 2))
 
-    regr_loss = Loss(Observe(observer = loss_obs, loss_term = regr_loss_term))
+    if observe_loss_dev:
+
+        loss_obs = LossTermObserver(
+            n_epochs = epochs,
+            dataset_size= dataset_size,
+            batch_size= batch_size,
+            name = 'Regr Loss',
+            aggregated = True,
+        )
+
+        regr_loss = Loss(Observe(observer = loss_obs, loss_term = regr_loss_term))
+    
+    else:
+        regr_loss = Loss(loss_term = regr_loss_term)
+
     regr_loss_test = Loss(regr_loss_term)
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
-        {'params': regressor.parameters(), 'lr': 1e-2},
+        {'params': regressor.parameters(), 'lr': regr_lr},
     ])
 
-    scheduler = ExponentialLR(optimiser, gamma = 0.9)
+    scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
     ###--- Training Loop Joint---###
@@ -1259,7 +1303,8 @@ def train_linear_regr():
 
     
     ###--- Plot Observations ---###
-    plot_loss_tensor(observed_losses = loss_obs.losses)
+    if observe_loss_dev:
+        plot_loss_tensor(observed_losses = loss_obs.losses)
 
 
     ###--- Test Loss ---###
@@ -1333,6 +1378,14 @@ def train_deep_regr():
     epochs = 5
     batch_size = 30
 
+    n_layers = 5
+    activation = 'Softplus'
+
+    regr_lr = 1e-2
+    scheduler_gamma = 0.9
+
+    dataset_kind = 'key'
+    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
 
     ###--- Dataset ---###
     #normaliser = MinMaxNormaliser()
@@ -1340,9 +1393,9 @@ def train_deep_regr():
     normaliser = None
 
     dataset_builder = DatasetBuilder(
-        kind = 'key',
+        kind = dataset_kind,
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        exclude_columns = exclude_columns
     )
     
     dataset = dataset_builder.build_dataset()
@@ -1362,7 +1415,7 @@ def train_deep_regr():
 
 
     # Deep Regression
-    regressor = DNNRegr(input_dim = input_dim, n_layers = 5, activation = 'Softplus')
+    regressor = DNNRegr(input_dim = input_dim, n_layers = n_layers, activation = activation)
 
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)
@@ -1387,10 +1440,10 @@ def train_deep_regr():
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
-        {'params': regressor.parameters(), 'lr': 1e-2},
+        {'params': regressor.parameters(), 'lr': regr_lr},
     ])
 
-    scheduler = ExponentialLR(optimiser, gamma = 0.9)
+    scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
     ###--- Training Loop Joint---###
@@ -1466,7 +1519,7 @@ if __name__=="__main__":
     print("-device:", device)
 
     ###--- AE in isolation ---###
-    AE_iso_training_procedure()
+    #AE_iso_training_procedure()
     
 
     ###--- VAE in isolation ---###
@@ -1485,12 +1538,8 @@ if __name__=="__main__":
 
 
     ###--- Baseline ---###
-    #train_linear_regr()
+    train_linear_regr()
     #train_deep_regr()
 
-
-    ###--- Trial ---###
-    #eval_trial()
-    
     
     pass
