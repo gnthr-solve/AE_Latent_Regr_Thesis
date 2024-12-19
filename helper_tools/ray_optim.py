@@ -19,14 +19,14 @@ Saves the results of all previous trials as a pandas dataframe.
 """
 class PeriodicSaveCallback(Callback):
 
-    def __init__(self, save_frequency, experiment_name, tracked_metrics: list[str]):
+    def __init__(self, save_frequency, experiment_name, tracked_metrics: list[str], results_dir):
         self.experiment_name = experiment_name
         self.tracked_metrics = tracked_metrics
         
         self.save_frequency = save_frequency
         self.trial_counter = 0
         
-        self.results_dir = Path(f'./results/{experiment_name}/')
+        self.results_dir = results_dir
         os.makedirs(self.results_dir, exist_ok=True)
 
 
@@ -65,7 +65,7 @@ Deletes model checkpoints from previous trials at a determined frequency.
 """
 class GlobalBestModelSaver(Callback):
 
-    def __init__(self, tracked_metric, mode, cleanup_frequency, experiment_name):
+    def __init__(self, tracked_metric, mode, cleanup_frequency, experiment_name, results_dir):
         self.experiment_name = experiment_name
         
         self.tracked_metric = tracked_metric
@@ -76,7 +76,7 @@ class GlobalBestModelSaver(Callback):
         self.global_best_metric = None
         self.global_best_checkpoint_paths = []
         
-        self.results_dir = f'./results/{experiment_name}/'
+        self.results_dir = results_dir
         os.makedirs(self.results_dir, exist_ok=True)
     
 
