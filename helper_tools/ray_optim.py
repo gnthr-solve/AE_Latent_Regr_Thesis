@@ -12,8 +12,11 @@ from ray.tune.experiment import Trial
 from pathlib import Path
 
 
-
-
+"""
+Ray Callbacks - PeriodicSaveCallback
+-------------------------------------------------------------------------------------------------------------------------------------------
+Saves the results of all previous trials as a pandas dataframe.
+"""
 class PeriodicSaveCallback(Callback):
 
     def __init__(self, save_frequency, experiment_name, tracked_metrics: list[str]):
@@ -54,6 +57,12 @@ class PeriodicSaveCallback(Callback):
 
 
 
+"""
+Ray Callbacks - GlobalBestModelSaver
+-------------------------------------------------------------------------------------------------------------------------------------------
+Transfers the currently best models from the checkpoint directory to the results directory.
+Deletes model checkpoints from previous trials at a determined frequency.
+"""
 class GlobalBestModelSaver(Callback):
 
     def __init__(self, tracked_metric, mode, cleanup_frequency, experiment_name):
@@ -65,7 +74,7 @@ class GlobalBestModelSaver(Callback):
         self.trial_counter = 0
         
         self.global_best_metric = None
-        self.global_best_checkpoint_path = None
+        self.global_best_checkpoint_paths = []
         
         self.results_dir = f'./results/{experiment_name}/'
         os.makedirs(self.results_dir, exist_ok=True)
@@ -93,26 +102,32 @@ class GlobalBestModelSaver(Callback):
                 # Update the global best metric
                 self.global_best_metric = trial_metric
 
-                # Delete the previous global best model checkpoint if it exists
-                if self.global_best_checkpoint_path and os.path.exists(self.global_best_checkpoint_path):
-                    os.remove(self.global_best_checkpoint_path)
+                # Delete the previous global best model checkpoints if they exist
+                for path in self.global_best_checkpoint_paths:
+                    if os.path.exists(path):
+                        os.remove(path)
 
-                # Save the new global best model checkpoint
+                self.global_best_checkpoint_paths = []
+
+                # Save the new global best model checkpoints
                 checkpoint = trial.checkpoint
                 if checkpoint:
+
                     with checkpoint.as_directory() as checkpoint_dir:
-                        # Copy the model file to the results directory
-                        model_file_name = 'model.pt'
 
-                        src_model_path = os.path.join(checkpoint_dir, model_file_name)
-                        dest_model_path = os.path.join(self.results_dir, f'best_model.pt')
+                        model_files = glob.glob(os.path.join(checkpoint_dir, "*.pt"))
 
-                        shutil.copyfile(src_model_path, dest_model_path)
+                        for src_model_path in model_files:
+                            model_file_name = os.path.basename(src_model_path)
+                            dest_model_path = os.path.join(self.results_dir, model_file_name)
 
-                        self.global_best_checkpoint_path = dest_model_path
+                            shutil.copyfile(src_model_path, dest_model_path)
 
-                        print(f"New global best model with {self.tracked_metric}: {self.global_best_metric} saved to {dest_model_path}")
-        
+                            self.global_best_checkpoint_paths.append(dest_model_path)
+                            print(f"Saved {model_file_name} to {dest_model_path}")
+
+                print(f"New global best model with {self.tracked_metric}: {self.global_best_metric}")
+
         # Periodically clean up old checkpoints
         if self.trial_counter % self.cleanup_frequency == 0:
             self._cleanup_checkpoints(trials, exclude_trial=trial)
@@ -143,5 +158,12 @@ class GlobalBestModelSaver(Callback):
 
 
 
-def custom_trial_dir_name(trial):
+
+"""
+Ray Trial-Name Creator
+-------------------------------------------------------------------------------------------------------------------------------------------
+Creates a shorter name for the trials and their directories to avoid an exception on windows where the path is too long,
+due to too many search parameters (name usually is concatenation of key:value and date).
+"""
+def custom_trial_dir_name(trial: Trial):
     return f'trial_{trial.trial_id}'

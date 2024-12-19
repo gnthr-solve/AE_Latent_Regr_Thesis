@@ -56,6 +56,7 @@ from helper_tools.setup import create_normaliser
 from helper_tools.ray_optim import custom_trial_dir_name, PeriodicSaveCallback, GlobalBestModelSaver
 
 os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
+os.environ["TUNE_WARN_EXCESSIVE_EXPERIMENT_CHECKPOINT_SYNC_THRESHOLD_S"] = "0"
 
 """
 Main Functions - Training
@@ -72,10 +73,7 @@ def deep_regr_procedure(config, dataset):
 
     regr_lr = config['regr_lr']
     scheduler_gamma = config['scheduler_gamma']
-    
-    n_interim_checkpoints = 2
-    epoch_modulo = epochs // n_interim_checkpoints
-    checkpoint_condition = lambda epoch: (epoch > 0) and ((epoch % epoch_modulo == 0) or (epoch == epochs))
+
 
     ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
@@ -108,6 +106,12 @@ def deep_regr_procedure(config, dataset):
     scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
+    ###--- Checkpoint condition ---###
+    n_interim_checkpoints = 2
+    epoch_modulo = epochs // n_interim_checkpoints
+    checkpoint_condition = lambda epoch: (epoch % epoch_modulo == 0) or (epoch == epochs)
+
+
     ###--- Training Loop Joint---###
     for epoch in range(epochs):
         
@@ -133,16 +137,15 @@ def deep_regr_procedure(config, dataset):
             optimiser.step()
 
         #--- Model Checkpoints & Report ---#
-        if checkpoint_condition(epoch):
-            print(f'Checkpoint created at epoch {epoch}/{epochs}')
+        if checkpoint_condition(epoch + 1):
+            print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 checkpoint = None
-                context = train.get_context()
+                #context = train.get_context()
                 
                 torch.save(
                     regressor.state_dict(),
-                    #os.path.join(temp_checkpoint_dir, f"{context.get_experiment_name()}_model.pt"),
-                    os.path.join(temp_checkpoint_dir, f"model.pt"),
+                    os.path.join(temp_checkpoint_dir, f"regressor.pt"),
                 )
                 checkpoint = Checkpoint.from_directory(temp_checkpoint_dir)
 
