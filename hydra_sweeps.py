@@ -52,7 +52,12 @@ from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
 
-from helper_tools import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_training_characteristics, simple_timer
+from evaluation import Evaluation, EvalConfig
+from evaluation.eval_visitors import (
+    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
+    ReconstrLossVisitor, RegrLossVisitor,
+    LatentPlotVisitor, LatentDistributionVisitor,
+)
 
 import os
 os.environ["HYDRA_FULL_ERROR"] = "1"
@@ -73,11 +78,10 @@ def train_AE_iso_hydra(cfg: DictConfig):
 
 
     ###--- DataLoader ---###
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-
-    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+    train_dataset = subset_factory.retrieve(kind='train', combine=True)
+    test_dataset = subset_factory.retrieve(kind='test', combine=True)
+    
+    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
 
     ###--- Models AE ---###
@@ -143,15 +147,23 @@ def train_AE_iso_hydra(cfg: DictConfig):
 
 
     ###--- Test Loss ---###
-    X_test = test_dataset.dataset.X_data[test_dataset.indices]
-    X_test = X_test[:, 1:]
-    Z_batch_hat, X_test_hat = model(X_test)
-
-    loss_reconst = reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+    evaluation = Evaluation(
+        dataset=dataset,
+        subsets={'test': test_dataset},
+        models={'AE_model': model},
+    )
+    eval_cfg = EvalConfig(data_key='test', output_name='ae_iso', mode='iso', loss_name='rel_L2_loss')
+    visitors = [
+        AEOutputVisitor(eval_cfg=eval_cfg),
+        ReconstrLossVisitor(reconstr_term, eval_cfg=eval_cfg),
+    ]
+    evaluation.accept_sequence(visitors=visitors)
+    results = evaluation.results
+    loss_reconstr = results.metrics[eval_cfg.loss_name]
 
     return {
-        'reconstr_loss': loss_reconst.item(),
-        'ae': model,
+        eval_cfg.loss_name: loss_reconstr,
+        'ae_model': model,
     }
     
 
@@ -171,13 +183,11 @@ def train_VAE_iso_hydra(cfg: DictConfig):
 
     learning_rate = cfg.learning_rate
     scheduler_gamma = cfg.scheduler_gamma
-
+    beta = cfg.beta
     
     ###--- DataLoader ---###
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-
+    train_dataset = subset_factory.retrieve(kind='train', combine=True)
+    test_dataset = subset_factory.retrieve(kind='test', combine=True)
     dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 
 
@@ -208,6 +218,7 @@ def train_VAE_iso_hydra(cfg: DictConfig):
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
 
     kld_term = GaussianAnaKLDiv()
+    kld_term = Weigh(GaussianAnaKLDiv(), weight=beta)
     #kld_term = GaussianMCKLDiv()
 
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
@@ -248,138 +259,25 @@ def train_VAE_iso_hydra(cfg: DictConfig):
 
 
     ###--- Test Loss ---###
-    X_test = test_dataset.dataset.X_data[test_dataset.indices]
-    X_test = X_test[:, 1:]
-
-    Z_batch, infrm_dist_params, genm_dist_params = model(X_test)
-
-    mu_r, _ = genm_dist_params.unbind(dim = -1)
-
-    X_test_hat = mu_r
-
-    loss_reconst_test = test_reconstr_loss(X_batch = X_test, X_hat_batch = X_test_hat)
+    evaluation = Evaluation(
+        dataset=dataset,
+        subsets={'test': test_dataset},
+        models={'AE_model': model},
+    )
+    eval_cfg = EvalConfig(data_key='test', output_name='vae_iso', mode='iso', loss_name='rel_L2_loss')
+    reconstr_term = AEAdapter(RelativeLpNorm(p=2))
+    visitors = [
+        VAEOutputVisitor(eval_cfg=eval_cfg),
+        ReconstrLossVisitor(reconstr_term, eval_cfg=eval_cfg),
+    ]
+    evaluation.accept_sequence(visitors=visitors)
+    results = evaluation.results
+    loss_reconstr = results.metrics[eval_cfg.loss_name]
 
     return {
-        'reconstr_loss': loss_reconst_test.item(),
-        'vae': model,
+        eval_cfg.loss_name: loss_reconstr,
+        'vae_model': model,
     }
-
-
-
-
-@hydra.main(version_base="1.2", config_path="./hydra_configs", config_name="joint_nvae_regr_optuna")
-def train_joint_epoch_procedure_optuna(cfg: DictConfig):
-    print(OmegaConf.to_yaml(cfg))
-    ###--- Meta ---###
-    epochs = cfg.epochs
-    batch_size = cfg.batch_size
-    latent_dim = cfg.latent_dim
-    
-    n_layers = cfg.n_layers
-    
-
-    encoder_lr = cfg.encoder_lr
-    decoder_lr = cfg.decoder_lr
-    regr_lr = cfg.regr_lr
-    scheduler_gamma = cfg.scheduler_gamma
-
-    ete_regr_weight = cfg.ete_regr_weight
-    
-    
-    ###--- Dataset Split ---###
-    train_dataset = subset_factory.retrieve(kind = 'train', combine = False)
-
-    ae_train_ds = train_dataset['unlabelled']
-    regr_train_ds = train_dataset['labelled']
-
-
-    ###--- DataLoader ---###
-    dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
-    dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
-
-
-    ###--- Models ---###
-    input_dim = dataset.X_dim - 1
-
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers)
-
-    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
-    
-    regressor = LinearRegr(latent_dim = latent_dim)
-
-
-    ###--- Losses ---###
-    #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
-    reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
-
-    regr_loss_term = RegrAdapter(Huber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
-
-    ete_loss_terms = {
-        'Reconstruction Term': Weigh(reconstr_loss_term, weight= 1 - ete_regr_weight), 
-        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
-    }
-
-    
-    ete_loss = Loss(CompositeLossTerm(ete_loss_terms))
-    reconstr_loss = Loss(loss_term = reconstr_loss_term)
-    regr_loss = Loss(regr_loss_term)
-
-
-    ###--- Optimizer & Scheduler ---###
-    optimiser = Adam([
-        {'params': encoder.parameters(), 'lr': encoder_lr},
-        {'params': decoder.parameters(), 'lr': decoder_lr},
-        {'params': regressor.parameters(), 'lr': regr_lr},
-    ])
-
-    scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
-
-
-    ###--- Training Procedure ---###
-    training_procedure = JointEpochTrainingProcedure(
-        ae_train_dataloader = dataloader_ae,
-        regr_train_dataloader = dataloader_regr,
-        ae_model = ae_model,
-        regr_model = regressor,
-        ae_loss = reconstr_loss,
-        ete_loss = ete_loss, 
-        optimizer = optimiser,
-        scheduler = scheduler,
-        epochs = epochs,
-    )
-
-    training_procedure()
-
-
-    ###--- Test Loss ---###
-    test_dataset = subset_factory.retrieve(kind = 'test', combine = False)
-
-    ae_test_ds = test_dataset['unlabelled']
-    regr_test_ds = test_dataset['labelled']
-
-
-    X_test_ul = dataset.X_data[ae_test_ds.indices]
-
-    X_test_l = dataset.X_data[regr_test_ds.indices]
-    y_test_l = dataset.y_data[regr_test_ds.indices]
-
-    X_test_ul = X_test_ul[:, 1:]
-
-    X_test_l = X_test_l[:, 1:]
-    y_test_l = y_test_l[:, 1:]
-
-    Z_batch_ul, X_test_ul_hat  = ae_model(X_test_ul)
-    Z_batch_l, X_test_l_hat  = ae_model(X_test_l)
-    y_test_l_hat = regressor(Z_batch_l)
-
-    loss_reconst = reconstr_loss(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
-
-    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
-    
-    return loss_reconst.item(), loss_regr.item()
 
 
 
@@ -403,6 +301,7 @@ def joint_epoch_shared_layer(cfg: DictConfig):
     
     
     train_subsets = subset_factory.retrieve(kind = 'train')
+    test_subsets = subset_factory.retrieve(kind='test')
 
     ae_train_ds = train_subsets['unlabelled']
     regr_train_ds = train_subsets['labelled']
@@ -440,8 +339,7 @@ def joint_epoch_shared_layer(cfg: DictConfig):
     
     ete_loss = Loss(CompositeLossTerm(**ete_loss_terms))
     reconstr_loss = Loss(loss_term = reconstr_loss_term)
-    regr_loss = Loss(regr_loss_term)
-
+    
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
@@ -470,33 +368,30 @@ def joint_epoch_shared_layer(cfg: DictConfig):
 
 
     ###--- Test Loss ---###
-    test_datasets = subset_factory.retrieve(kind = 'test')
-    ae_test_ds = test_datasets['unlabeled']
-    regr_test_ds = test_datasets['labeled']
+    evaluation = Evaluation(
+        dataset=dataset,
+        subsets=test_subsets,
+        models={'AE_model': ae_model, 'regressor': regressor},
+    )
 
-    X_test_ul = dataset.X_data[ae_test_ds.indices]
+    eval_cfg_reconstr = EvalConfig(data_key='unlabelled', output_name='vae_iso', mode='iso', loss_name='rel_L2_loss')
+    eval_cfg_regr = EvalConfig(data_key='labelled', output_name='vae_regr', mode='composed', loss_name='Huber_loss')
 
-    X_test_l = dataset.X_data[regr_test_ds.indices]
-    y_test_l = dataset.y_data[regr_test_ds.indices]
+    visitors = [
+        AEOutputVisitor(eval_cfg=eval_cfg_reconstr),
+        ReconstrLossVisitor(reconstr_loss_term, eval_cfg=eval_cfg_reconstr),
+        AEOutputVisitor(eval_cfg=eval_cfg_regr),
+        ReconstrLossVisitor(regr_loss_term, eval_cfg=eval_cfg_regr),
+    ]
+    evaluation.accept_sequence(visitors=visitors)
+    results = evaluation.results
+    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
+    loss_regr = results.metrics[eval_cfg_regr.loss_name]
 
-    X_test_ul = X_test_ul[:, 1:]
-
-    X_test_l = X_test_l[:, 1:]
-    y_test_l = y_test_l[:, 1:]
-
-    Z_test_ul, X_test_ul_hat = ae_model(X_test_ul)
-
-    loss_reconst = reconstr_loss(X_batch = X_test_ul, X_hat_batch = X_test_ul_hat)
-
-    Z_test_l, X_test_l_hat = ae_model(X_test_l)
-    y_test_l_hat = regressor(Z_test_l)
-
-    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
-    
     return {
-        'loss_reconstr': loss_reconst.item(),
-        'loss_regr': loss_regr.item(),
-        'nvae': ae_model,
+        eval_cfg_reconstr.loss_name: loss_reconstr,
+        eval_cfg_regr.loss_name: loss_regr,
+        'vae_model': ae_model,
         'regressor': regressor,
     }
 
@@ -515,10 +410,10 @@ def train_baseline(cfg: DictConfig):
 
 
     ###--- DataLoader ---###
-    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.8)
-    subsets = subset_factory.create_splits()
+    train_subsets = subset_factory.retrieve(kind = 'train')
+    test_subsets = subset_factory.retrieve(kind='test')
 
-    regr_train_ds = subsets['train_labeled']
+    regr_train_ds = train_subsets['labelled']
 
     dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
@@ -576,17 +471,21 @@ def train_baseline(cfg: DictConfig):
 
 
     ###--- Test Loss ---###
-    regr_test_ds = subsets['test_labeled']
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = test_subsets,
+        models = {'regressor': regressor},
+    )
 
-    X_test_l = dataset.X_data[regr_test_ds.indices]
-    y_test_l = dataset.y_data[regr_test_ds.indices]
+    eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso', loss_name = 'Huber')
+    visitors = [
+        RegrOutputVisitor(eval_cfg = eval_cfg),
+        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg),
+    ]
 
-    X_test_l = X_test_l[:, 1:]
-    y_test_l = y_test_l[:, 1:]
-
-    y_test_l_hat = regressor(X_test_l)
-
-    loss_regr = regr_loss(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    loss_regr = results.metrics[eval_cfg.loss_name]
     
     return {
         'loss_regr': loss_regr.item(),
@@ -627,8 +526,7 @@ if __name__=="__main__":
     ###--- Setup and calculate results ---###
     #train_AE_iso_hydra()
     #train_VAE_iso_hydra()
-    train_joint_epoch_procedure_optuna()
-    #train_joint_epoch_procedure()
+    joint_epoch_shared_layer()
     #train_baseline()
 
     
