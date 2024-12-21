@@ -6,19 +6,15 @@ import ray
 import logging
 
 from ray import train, tune
-from ray.tune.search.bayesopt import BayesOptSearch
-from ray.tune.search.hyperopt import HyperOptSearch
-from ray.tune.search.optuna import OptunaSearch
-from ray.tune.search import ConcurrencyLimiter
-from ray.train import Checkpoint, CheckpointConfig
+from ray.train import Checkpoint
 
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 
 from pathlib import Path
 
-from data_utils import DatasetBuilder, SplitSubsetFactory
+from data_utils import TensorDataset, SplitSubsetFactory
 
 from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
 
@@ -52,20 +48,16 @@ from evaluation.eval_visitors import (
     ReconstrLossVisitor, RegrLossVisitor,
 )
 
-from helper_tools.setup import create_normaliser
-from helper_tools.ray_optim import custom_trial_dir_name, PeriodicSaveCallback, GlobalBestModelSaver
-
-os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
-os.environ["TUNE_WARN_EXCESSIVE_EXPERIMENT_CHECKPOINT_SYNC_THRESHOLD_S"] = "0"
+from .config import ExperimentConfig
 
 """
 Main Functions - Training
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def deep_regr_procedure(config, dataset):
+def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
 
-    #report_loss_name = 'Huber'
-    report_loss_name = 'L2_norm'
+    ###--- Experiment Meta ---###
+    optim_loss = exp_cfg.optim_loss
 
     ###--- Meta ---###
     epochs = config['epochs']
@@ -152,9 +144,9 @@ def deep_regr_procedure(config, dataset):
                 )
                 checkpoint = Checkpoint.from_directory(temp_checkpoint_dir)
 
-                train.report({report_loss_name: loss_regr.item()}, checkpoint=checkpoint)
+                train.report({optim_loss: loss_regr.item()}, checkpoint=checkpoint)
         else:
-            train.report({report_loss_name: loss_regr.item()})
+            train.report({optim_loss: loss_regr.item()})
 
         #--- Scheduler Step ---#
         scheduler.step()
@@ -169,7 +161,7 @@ def deep_regr_procedure(config, dataset):
         models = {'regressor': regressor},
     )
 
-    eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso', loss_name = report_loss_name)
+    eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso', loss_name = optim_loss)
     visitors = [
         RegrOutputVisitor(eval_cfg = eval_cfg),
         RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg),
@@ -179,116 +171,5 @@ def deep_regr_procedure(config, dataset):
     results = evaluation.results
     loss_regr = results.metrics[eval_cfg.loss_name]
     
-    train.report({eval_cfg.loss_name :loss_regr})
+    train.report({optim_loss :loss_regr})
     
-
-
-
-
-"""
-Optimise
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-
-
-if __name__=="__main__":
-
-    ray.init()  # Initialize Ray
-
-    ###--- Experiment Meta ---###
-    experiment_name = 'deep_regr'
-    #optim_metric = 'Huber'
-    optim_metric = 'L2_norm'
-    optim_mode = 'min'
-    num_samples = 20
-
-    storage_path = Path.cwd().parent / 'ray_results'
-
-    #--- Dataset Meta ---#
-    dataset_kind = 'key'
-    normaliser_kind = 'min_max'
-    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
-
-    #--- Results Directory ---#
-    dir_name = f'{experiment_name}_{dataset_kind}_{normaliser_kind}' if normaliser_kind is not 'None' else f'{experiment_name}_{dataset_kind}'
-    results_dir = Path(f'./results/{dir_name}/')
-    os.makedirs(results_dir, exist_ok=True)
-
-
-    ###--- Dataset Setup ---###
-    normaliser = create_normaliser(normaliser_kind)
-    dataset_builder = DatasetBuilder(
-        kind = dataset_kind,
-        normaliser = normaliser,
-        exclude_columns = exclude_columns,
-    )
-    
-    dataset = dataset_builder.build_dataset()
-    
-
-    ###--- Run Config ---###
-    save_results_callback = PeriodicSaveCallback(
-        save_frequency = 5, 
-        experiment_name = experiment_name, 
-        tracked_metrics=[optim_metric],
-        results_dir=results_dir,
-    )
-
-    global_best_model_callback = GlobalBestModelSaver(
-        tracked_metric = optim_metric,   
-        mode = optim_mode,              
-        cleanup_frequency = 10,       
-        experiment_name = experiment_name,
-        results_dir = results_dir,
-    )
-
-    checkpoint_cfg = CheckpointConfig(
-        num_to_keep = 1, 
-        checkpoint_score_attribute = optim_metric, 
-        checkpoint_score_order = optim_mode
-    )
-
-
-    ###--- Searchspace ---###
-    search_space = {
-        'epochs': tune.randint(lower=2, upper = 20),
-        'batch_size': tune.randint(lower=20, upper = 200),
-        'n_layers': tune.randint(lower=2, upper = 15),
-        'regr_lr': tune.loguniform(1e-4, 1e-1),
-        'scheduler_gamma': tune.uniform(0.5, 1),
-        'activation': tune.choice(['ReLU', 'LeakyReLU', 'PReLU', 'Softplus']),
-    }
-
-    
-    ###--- Tune Config ---###
-    #search_alg = BayesOptSearch()
-    #search_alg = HyperOptSearch()
-    search_alg = OptunaSearch()
-
-    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=2)
-
-    
-    ###--- Setup and Run Optimisation ---###
-    tuner = tune.Tuner(
-        tune.with_parameters(deep_regr_procedure, dataset = dataset),
-        tune_config=tune.TuneConfig(
-            search_alg = search_alg,
-            metric = optim_metric,
-            mode = optim_mode,
-            num_samples = num_samples,
-            trial_dirname_creator = custom_trial_dir_name,
-        ),
-        run_config = train.RunConfig(
-            name = experiment_name,
-            storage_path = storage_path,
-            checkpoint_config = checkpoint_cfg,
-            callbacks = [save_results_callback, global_best_model_callback],
-        ),
-        param_space=search_space,
-    )
-    
-    results = tuner.fit()
-    print("Best config is:", results.get_best_result().config)
-    
-    results_df = results.get_dataframe()
-    results_df.to_csv(results_dir / f'final_results.csv', index = False)

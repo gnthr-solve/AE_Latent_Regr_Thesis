@@ -1,6 +1,6 @@
 
 import os
-import sys
+import tempfile
 import torch
 import ray
 import logging
@@ -10,6 +10,7 @@ from ray.tune.search.bayesopt import BayesOptSearch
 from ray.tune.search.hyperopt import HyperOptSearch
 from ray.tune.search.optuna import OptunaSearch
 from ray.tune.search import ConcurrencyLimiter
+from ray.train import Checkpoint, CheckpointConfig
 
 from torch.utils.data import DataLoader, random_split
 from torch.optim import Adam
@@ -56,16 +57,19 @@ from evaluation.eval_visitors import (
 )
 
 from helper_tools.setup import create_normaliser
-from helper_tools.ray_optim import custom_trial_dir_name
+from helper_tools.ray_optim import custom_trial_dir_name, PeriodicSaveCallback, GlobalBestModelSaver
 
 os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
+os.environ["TUNE_WARN_EXCESSIVE_EXPERIMENT_CHECKPOINT_SYNC_THRESHOLD_S"] = "0"
 
 """
 Main Functions - Training
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 
-def linear_regr_procedure(config, dataset):
+def linear_regr(config, dataset):
+
+    report_loss_name = 'L2_norm'
 
     ###--- Meta ---###
     epochs = config['epochs']
@@ -106,6 +110,12 @@ def linear_regr_procedure(config, dataset):
     scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
+    ###--- Checkpoint condition ---###
+    n_interim_checkpoints = 2
+    epoch_modulo = epochs // n_interim_checkpoints
+    checkpoint_condition = lambda epoch: (epoch % epoch_modulo == 0) or (epoch == epochs)
+
+
     ###--- Training Loop Joint---###
     for epoch in range(epochs):
         
@@ -129,7 +139,23 @@ def linear_regr_procedure(config, dataset):
             loss_regr.backward()
 
             optimiser.step()
+        
+        #--- Model Checkpoints & Report ---#
+        if checkpoint_condition(epoch + 1):
+            print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
+            with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+                checkpoint = None
+                #context = train.get_context()
+                
+                torch.save(
+                    regressor.state_dict(),
+                    os.path.join(temp_checkpoint_dir, f"regressor.pt"),
+                )
+                checkpoint = Checkpoint.from_directory(temp_checkpoint_dir)
 
+                train.report({report_loss_name: loss_regr.item()}, checkpoint=checkpoint)
+        else:
+            train.report({report_loss_name: loss_regr.item()})
 
         scheduler.step()
 
@@ -151,7 +177,7 @@ def linear_regr_procedure(config, dataset):
 
         loss_regr = regr_loss_test(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
 
-    train.report({'Huber' :loss_regr})
+    train.report({report_loss_name :loss_regr})
 
     
 
@@ -167,11 +193,27 @@ if __name__=="__main__":
 
     ray.init()  # Initialize Ray
 
-    ###--- Dataset ---###
+     ###--- Experiment Meta ---###
+    experiment_name = 'linear_regression'
+    #optim_metric = 'Huber'
+    optim_metric = 'L2_norm'
+    optim_mode = 'min'
+    num_samples = 20
+
+    storage_path = Path.cwd().parent / 'ray_results'
+
+    #--- Dataset Meta ---#
     dataset_kind = 'key'
     normaliser_kind = 'min_max'
     exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
 
+    #--- Results Directory ---#
+    dir_name = f'{experiment_name}_{dataset_kind}_{normaliser_kind}' if normaliser_kind is not 'None' else f'{experiment_name}_{dataset_kind}'
+    results_dir = Path(f'./results/{dir_name}/')
+    os.makedirs(results_dir, exist_ok=True)
+
+
+    ###--- Dataset Setup ---###
     normaliser = create_normaliser(normaliser_kind)
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
@@ -183,22 +225,38 @@ if __name__=="__main__":
 
 
     ###--- Run Config ---###
-    experiment_name = 'linear_regression_procedure'
-    storage_path = Path.cwd().parent / 'ray_results'
+    save_results_callback = PeriodicSaveCallback(
+        save_frequency = 5, 
+        experiment_name = experiment_name, 
+        tracked_metrics=[optim_metric],
+        results_dir=results_dir,
+    )
+
+    global_best_model_callback = GlobalBestModelSaver(
+        tracked_metric = optim_metric,   
+        mode = optim_mode,              
+        cleanup_frequency = 10,       
+        experiment_name = experiment_name,
+        results_dir = results_dir,
+    )
+
+    checkpoint_cfg = CheckpointConfig(
+        num_to_keep = 1, 
+        checkpoint_score_attribute = optim_metric, 
+        checkpoint_score_order = optim_mode
+    )
 
 
     ###--- Searchspace ---###
     search_space = {
         'epochs': tune.randint(lower=2, upper = 200),
         'batch_size': tune.randint(lower=20, upper = 200),
-        'regr_lr': tune.loguniform(1e-4, 1e-2),
+        'regr_lr': tune.loguniform(1e-4, 1e-1),
         'scheduler_gamma': tune.uniform(0.5, 1),
     }
 
     
     ###--- Tune Config ---###
-    optim_metric = 'Huber'
-    num_samples = 1000
     #search_alg = BayesOptSearch()
     #search_alg = HyperOptSearch()
     search_alg = OptunaSearch()
@@ -208,23 +266,25 @@ if __name__=="__main__":
 
     ###--- Setup and Run Optimisation ---###
     tuner = tune.Tuner(
-        tune.with_parameters(linear_regr_procedure, dataset = dataset),
+        tune.with_parameters(linear_regr, dataset = dataset),
         tune_config=tune.TuneConfig(
             search_alg = search_alg,
             metric = optim_metric,
-            mode = "min",
+            mode = optim_mode,
             num_samples = num_samples,
             trial_dirname_creator = custom_trial_dir_name,
         ),
         run_config = train.RunConfig(
             name = experiment_name,
             storage_path = storage_path,
+            checkpoint_config = checkpoint_cfg,
+            callbacks = [save_results_callback, global_best_model_callback],
         ),
         param_space=search_space,
     )
     
     results = tuner.fit()
     print("Best config is:", results.get_best_result().config)
-
+    
     results_df = results.get_dataframe()
-    results_df.to_csv(f'./results/{experiment_name}.csv', index = False)
+    results_df.to_csv(results_dir / f'final_results.csv', index = False)
