@@ -16,8 +16,6 @@ from pathlib import Path
 
 from data_utils import TensorDataset, SplitSubsetFactory
 
-from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
-
 from models import (
     LinearEncoder,
     LinearDecoder,
@@ -31,6 +29,7 @@ from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
     CompositeLossTerm,
+    CompositeLossTermObs,
     LpNorm,
     RelativeLpNorm,
     Huber,
@@ -48,13 +47,14 @@ from evaluation.eval_visitors import (
     ReconstrLossVisitor, RegrLossVisitor,
 )
 
-from .config import ExperimentConfig
+from ..config import ExperimentConfig
 
 """
 Main Functions - Training
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
+
+def linear_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
 
     ###--- Experiment Meta ---###
     optim_loss = exp_cfg.optim_loss
@@ -63,12 +63,9 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     epochs = config['epochs']
     batch_size = config['batch_size']
     
-    n_layers = config['n_layers']
-    activation = config['activation']
-
     regr_lr = config['regr_lr']
     scheduler_gamma = config['scheduler_gamma']
-
+    
 
     ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
@@ -81,17 +78,17 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     ###--- Models ---###
     input_dim = dataset.X_dim - 1
 
-    # Deep Regression
-    regressor = DNNRegr(input_dim = input_dim, n_layers = n_layers, activation = activation)
+    # Linear Regression
+    regressor = LinearRegr(latent_dim = input_dim)
 
 
     ###--- Losses ---###
-    #regr_loss_term = RegrAdapter(Huber(delta = 1))
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
-    regr_loss_term = RegrAdapter(LpNorm(p = 2))
+    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
     regr_loss = Loss(loss_term = regr_loss_term)
-    
+    regr_loss_test = Loss(regr_loss_term)
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
@@ -130,7 +127,7 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
             loss_regr.backward()
 
             optimiser.step()
-
+        
         #--- Model Checkpoints & Report ---#
         if checkpoint_condition(epoch + 1):
             print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
@@ -148,28 +145,25 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
         else:
             train.report({optim_loss: loss_regr.item()})
 
-        #--- Scheduler Step ---#
         scheduler.step()
 
-
+    
     ###--- Test Loss ---###
-    test_datasets = subset_factory.retrieve(kind = 'test')
+    test_subsets = subset_factory.retrieve(kind = 'test')
     
-    evaluation = Evaluation(
-        dataset = dataset,
-        subsets = test_datasets,
-        models = {'regressor': regressor},
-    )
+    regr_test_ds = test_subsets['labelled']
 
-    eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso', loss_name = optim_loss)
-    visitors = [
-        RegrOutputVisitor(eval_cfg = eval_cfg),
-        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg),
-    ]
+    test_indices = regr_test_ds.indices
+    X_test_l = dataset.X_data[test_indices]
+    y_test_l = dataset.y_data[test_indices]
 
-    evaluation.accept_sequence(visitors = visitors)
-    results = evaluation.results
-    loss_regr = results.metrics[eval_cfg.loss_name]
-    
-    train.report({optim_loss :loss_regr})
-    
+    X_test_l = X_test_l[:, 1:]
+    y_test_l = y_test_l[:, 1:]
+
+    with torch.no_grad():
+        y_test_l_hat = regressor(X_test_l)
+
+        loss_regr = regr_loss_test(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
+
+    train.report({optim_loss :loss_regr.item()})
+

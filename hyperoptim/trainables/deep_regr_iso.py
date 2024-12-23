@@ -1,3 +1,4 @@
+
 import os
 import tempfile
 import torch
@@ -15,6 +16,8 @@ from pathlib import Path
 
 from data_utils import TensorDataset, SplitSubsetFactory
 
+from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
+
 from models import (
     LinearEncoder,
     LinearDecoder,
@@ -28,7 +31,6 @@ from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
     CompositeLossTerm,
-    CompositeLossTermObs,
     LpNorm,
     RelativeLpNorm,
     Huber,
@@ -46,60 +48,56 @@ from evaluation.eval_visitors import (
     ReconstrLossVisitor, RegrLossVisitor,
 )
 
-from .config import ExperimentConfig
+from ..config import ExperimentConfig
 
 """
 Main Functions - Training
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
+def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
 
-def VAE_iso(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
-    
     ###--- Experiment Meta ---###
     optim_loss = exp_cfg.optim_loss
 
     ###--- Meta ---###
     epochs = config['epochs']
     batch_size = config['batch_size']
-    latent_dim = config['latent_dim']
     
-    n_layers_e = config['n_layers_e']
-    n_layers_d = config['n_layers_d']
+    n_layers = config['n_layers']
     activation = config['activation']
-    beta = config['beta']
 
-    ae_lr = config['ae_lr']
+    regr_lr = config['regr_lr']
     scheduler_gamma = config['scheduler_gamma']
 
-    
-    ###--- DataLoader ---###
+
+    ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
-    train_dataset = subset_factory.retrieve(kind = 'train', combine = True)
+    train_subsets = subset_factory.retrieve(kind = 'train')
 
-    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+    regr_train_ds = train_subsets['labelled']
 
+    dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
 
-    ###--- Model ---###
+    ###--- Models ---###
     input_dim = dataset.X_dim - 1
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
-
-    ae_model = GaussVAE(encoder = encoder, decoder = decoder)
+    # Deep Regression
+    regressor = DNNRegr(input_dim = input_dim, n_layers = n_layers, activation = activation)
 
 
-    ###--- Loss ---###
-    ll_term = Weigh(GaussianDiagLL(), weight = -1)
-    kld_term = Weigh(GaussianAnaKLDiv(), weight = beta)
+    ###--- Losses ---###
+    #regr_loss_term = RegrAdapter(Huber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
+    regr_loss_term = RegrAdapter(LpNorm(p = 2))
+
+    regr_loss = Loss(loss_term = regr_loss_term)
     
-    loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-
-    ae_loss = Loss(CompositeLossTerm(loss_terms))
-    eval_ae_loss = AEAdapter(RelativeLpNorm(p = 2))
-
 
     ###--- Optimizer & Scheduler ---###
-    optimiser = Adam(ae_model.parameters(), lr = ae_lr)
+    optimiser = Adam([
+        {'params': regressor.parameters(), 'lr': regr_lr},
+    ])
+
     scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
@@ -109,70 +107,69 @@ def VAE_iso(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     checkpoint_condition = lambda epoch: (epoch % epoch_modulo == 0) or (epoch == epochs)
 
 
-    ###--- Training Procedure ---###
+    ###--- Training Loop Joint---###
     for epoch in range(epochs):
         
-        ###--- Training Loop AE---###
-        for iter_idx, (X_batch, _) in enumerate(dataloader):
+        ###--- Training Loop End-To-End ---###
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
             X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
 
             #--- Forward Pass ---#
             optimiser.zero_grad()
             
-            Z_batch, infrm_dist_params, genm_dist_params = ae_model(X_batch)
+            y_hat_batch = regressor(X_batch)
 
-            loss_ae = ae_loss(
-                X_batch = X_batch,
-                Z_batch = Z_batch,
-                genm_dist_params = genm_dist_params,
-                infrm_dist_params = infrm_dist_params,
+            loss_regr = regr_loss(
+                y_batch = y_batch,
+                y_hat_batch = y_hat_batch,
             )
 
             #--- Backward Pass ---#
-            loss_ae.backward()
+            loss_regr.backward()
+
             optimiser.step()
 
         #--- Model Checkpoints & Report ---#
         if checkpoint_condition(epoch + 1):
             print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
-            with tempfile.TemporaryDirectory() as tmp_dir:
+            with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 checkpoint = None
                 #context = train.get_context()
                 
-                torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
+                torch.save(
+                    regressor.state_dict(),
+                    os.path.join(temp_checkpoint_dir, f"regressor.pt"),
+                )
+                checkpoint = Checkpoint.from_directory(temp_checkpoint_dir)
 
-
-                checkpoint = Checkpoint.from_directory(tmp_dir)
-
-                #NOTE: This reporting needs to be adjusted because the ETE loss is not the same as the regression loss
-                train.report({optim_loss: loss_ae.item()}, checkpoint=checkpoint)
+                train.report({optim_loss: loss_regr.item()}, checkpoint=checkpoint)
         else:
-            train.report({optim_loss: loss_ae.item()})
+            train.report({optim_loss: loss_regr.item()})
 
+        #--- Scheduler Step ---#
         scheduler.step()
 
 
     ###--- Test Loss ---###
-    test_dataset = subset_factory.retrieve(kind = 'test', combine = True)
+    test_datasets = subset_factory.retrieve(kind = 'test')
     
     evaluation = Evaluation(
         dataset = dataset,
-        subsets = {'joint': test_dataset},
-        models = {'AE_model': ae_model},
+        subsets = test_datasets,
+        models = {'regressor': regressor},
     )
 
-    eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso', loss_name = optim_loss)
-
-    ae_output_visitor = VAEOutputVisitor(eval_cfg = eval_cfg)
-    
+    eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso', loss_name = optim_loss)
     visitors = [
-        ae_output_visitor,
-        ReconstrLossVisitor(eval_ae_loss, eval_cfg = eval_cfg),
+        RegrOutputVisitor(eval_cfg = eval_cfg),
+        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg),
     ]
 
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
-
-    train.report({eval_cfg.loss_name: results.metrics[eval_cfg.loss_name]})
-
+    loss_regr = results.metrics[eval_cfg.loss_name]
+    
+    train.report({optim_loss :loss_regr})
+    

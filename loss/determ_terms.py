@@ -98,6 +98,38 @@ class RelativeHuber(LossTerm):
 
 
 """
+Loss Functions - KMeansLoss
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class KMeansLoss(LossTerm):
+
+    def __init__(self, n_clusters: int, latent_dim: int, alpha: float = 0.9):
+        self.n_clusters = n_clusters
+        self.latent_dim = latent_dim
+        self.alpha = alpha
+        self.cluster_centers = torch.randn(n_clusters, latent_dim)
+
+
+    def __call__(self, Z_batch: Tensor, **tensors: Tensor) -> Tensor:
+
+        distances = torch.cdist(Z_batch, self.cluster_centers)
+        min_distances, min_indices = distances.min(dim=1)
+
+        # Update cluster centers using a running average
+        for i in range(self.n_clusters):
+
+            mask = (min_indices == i).float().unsqueeze(1)
+
+            if mask.sum() > 0:
+                new_center = (mask * Z_batch).sum(dim=0) / mask.sum()
+                self.cluster_centers[i] = self.alpha * self.cluster_centers[i] + (1 - self.alpha) * new_center
+
+        return min_distances
+    
+
+
+
+"""
 Loss Functions - HuberLossOwn
 -------------------------------------------------------------------------------------------------------------------------------------------
 Own implementation of the Huber loss function. 

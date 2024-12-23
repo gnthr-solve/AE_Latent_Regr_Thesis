@@ -7,32 +7,44 @@ from ray import train, tune
 
 from pathlib import Path
 
-from loss import (
-    CompositeLossTerm,
-    LpNorm,
-    RelativeLpNorm,
-    Huber,
-    RelativeHuber,
-)
+from hyperoptim import run_experiment
+from hyperoptim.experiment_cfgs import linear_regr_iso_cfg, deep_regr_cfg, vae_iso_cfg, ae_linear_joint_epoch_cfg
 
-from loss.decorators import Loss, Weigh, Observe
-from loss.adapters import AEAdapter, RegrAdapter
-from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 # os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
 # os.environ["TUNE_WARN_EXCESSIVE_EXPERIMENT_CHECKPOINT_SYNC_THRESHOLD_S"] = "0"
 
 
 """
-Optimise
+Run Optimisation experiments
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-
-
 if __name__=="__main__":
 
-    from hyperoptim import run_experiment
-    from hyperoptim.experiment_cfgs import deep_regr_cfg
+    ###--- Workers, Save and Cleanup ---###
+    save_frequency = 5
+    cleanup_frequency = 10
+    max_concurrent = 4
 
-    run_experiment(exp_cfg = deep_regr_cfg, max_concurrent = 2)
+
+    ###--- Experiments to Run ---###
+    experiment_cfgs = [
+        linear_regr_iso_cfg, 
+        deep_regr_cfg, 
+        vae_iso_cfg, 
+        ae_linear_joint_epoch_cfg,
+    ]
+
+
+    ###--- Run Experiments ---###
+    for exp_cfg in experiment_cfgs:
+
+        run_experiment(
+            exp_cfg = exp_cfg, 
+            save_frequency = save_frequency, 
+            cleanup_frequency = cleanup_frequency, 
+            max_concurrent = max_concurrent
+        )
+
+    
+    #run_experiment(exp_cfg = ae_linear_joint_epoch_cfg, save_frequency = 20, cleanup_frequency = 20, max_concurrent = 2)

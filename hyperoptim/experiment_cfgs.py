@@ -2,10 +2,12 @@
 from ray import train, tune
 
 from .config import ExperimentConfig, DatasetConfig
-from .deep_regr_iso import deep_regr
-from .joint_ae_linear import AE_linear_joint_epoch
-from .linear_regr_iso import linear_regr
-from .vae_iso import VAE_iso
+from .trainables import (
+    linear_regr,
+    deep_regr,
+    VAE_iso,
+    AE_linear_joint_epoch,
+)
 
 """
 Concrete Configs - Data
@@ -27,7 +29,7 @@ deep_regr_cfg = ExperimentConfig(
     optim_mode = 'min',
     num_samples = 20,
     search_space = {
-        'epochs': tune.randint(lower=2, upper = 20),
+        'epochs': tune.randint(lower=2, upper = 10),
         'batch_size': tune.randint(lower=20, upper = 200),
         'n_layers': tune.randint(lower=2, upper = 15),
         'regr_lr': tune.loguniform(1e-4, 1e-1),
@@ -50,7 +52,7 @@ ae_linear_joint_epoch_cfg = ExperimentConfig(
     optim_mode = 'min',
     num_samples = 20,
     search_space = {
-        'epochs': tune.randint(lower=2, upper = 20),
+        'epochs': tune.randint(lower=2, upper = 10),
         'batch_size': tune.randint(lower=20, upper = 200),
         'latent_dim': tune.choice([2, 3, 4, 5, 6, 7, 8, 9, 10]),
         'n_layers': tune.choice([3, 4, 5, 6, 7, 8, 9, 10]),
@@ -78,7 +80,7 @@ linear_regr_iso_cfg = ExperimentConfig(
     optim_mode = 'min',
     num_samples = 20,
     search_space = {
-        'epochs': tune.randint(lower=2, upper = 200),
+        'epochs': tune.randint(lower=2, upper = 10),
         'batch_size': tune.randint(lower=20, upper = 200),
         'regr_lr': tune.loguniform(1e-4, 1e-1),
         'scheduler_gamma': tune.uniform(0.5, 1),
@@ -99,7 +101,7 @@ vae_iso_cfg = ExperimentConfig(
     optim_mode = 'min',
     num_samples = 20,
     search_space = {
-        'epochs': tune.randint(lower=2, upper = 200),
+        'epochs': tune.randint(lower=2, upper = 10),
         'batch_size': tune.randint(lower=20, upper = 200),
         'latent_dim': tune.choice([2, 3, 4, 5, 6, 7, 8, 9, 10]),
         'n_layers_e': tune.choice([3, 4, 5, 6, 7, 8]),

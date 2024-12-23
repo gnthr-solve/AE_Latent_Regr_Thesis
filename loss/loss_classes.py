@@ -40,7 +40,6 @@ class CompositeLossTerm(LossTerm):
             for name, loss_term in self.loss_terms.items()
         }
 
-        #print(tuple(loss_batches.values()))
         stacked_losses = torch.stack(tuple(loss_batches.values()))
         batch_losses = torch.sum(stacked_losses, dim=0)
 
@@ -88,7 +87,10 @@ class CompositeLossTermObs(LossTerm):
 
         self.observer(losses)
 
+        for loss_term in self.loss_terms.values():
 
+            if isinstance(loss_term, CompositeLossTermObs):
+                loss_term.notify_observer(loss_batches)
 
 
 """
@@ -166,3 +168,26 @@ class CompositeLossTermPrint(LossTerm):
             f'{loss_str}\n'
         )
 
+
+
+
+class CompositeLossTermMemory(LossTerm):
+
+    def __init__(self, loss_terms: dict[str, LossTerm] = {}):
+        self.loss_terms = loss_terms
+        self.loss_values = {}
+
+    def __call__(self, **tensors: Tensor) -> Tensor:
+        self.loss_values = {
+            name: loss_term(**tensors)
+            for name, loss_term in self.loss_terms.items()
+        }
+        stacked_losses = torch.stack(tuple(self.loss_values.values()))
+        batch_losses = torch.sum(stacked_losses, dim=0)
+        return batch_losses
+
+    def add_term(self, name: str, loss_term: LossTerm):
+        self.loss_terms[name] = loss_term
+
+    def get_individual_losses(self) -> dict[str, Tensor]:
+        return self.loss_values

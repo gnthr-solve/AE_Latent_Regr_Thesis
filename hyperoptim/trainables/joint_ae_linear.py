@@ -47,7 +47,7 @@ from evaluation.eval_visitors import (
     ReconstrLossVisitor, RegrLossVisitor,
 )
 
-from .config import ExperimentConfig
+from ..config import ExperimentConfig
 
 """
 Main Functions - Training
