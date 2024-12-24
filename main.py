@@ -21,7 +21,7 @@ from models import (
     VarDecoder,
 )
 
-from models.regressors import LinearRegr, ProductRegr, DNNRegr
+from models.regressors import LinearRegr, ProductRegr, FunnelDNNRegr
 from models import AE, VAE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
@@ -1415,7 +1415,7 @@ def train_deep_regr():
 
 
     # Deep Regression
-    regressor = DNNRegr(input_dim = input_dim, n_layers = n_layers, activation = activation)
+    regressor = FunnelDNNRegr(input_dim = input_dim, n_layers = n_layers, activation = activation)
 
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)

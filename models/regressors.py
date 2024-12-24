@@ -11,6 +11,7 @@ import math
 from torch import Tensor
 from torch import nn
 
+from .layer_blocks import LinearFunnel, ExponentialFunnel
     
 
 """
@@ -38,28 +39,30 @@ class LinearRegr(nn.Module):
 Regressor Classes - Deep Neural Network
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class DNNRegr(nn.Module):
+class FunnelDNNRegr(nn.Module):
     def __init__(
             self, 
             input_dim: int, 
             output_dim: int = 2, 
-            n_layers: int = 4, 
             dropout_rate: float = 0.05, 
             activation: str = 'ReLU'
             ):
         super().__init__()
         
+        ###--- Layer Nodes ---###
         # Find nearest power of 2 greater than or equal to input_dim
         start_power = math.ceil(math.log2(input_dim))
-        end_power = max(math.ceil(math.log2(output_dim)), start_power - n_layers)
+        #end_power = max(math.ceil(math.log2(output_dim)), start_power - n_layers)
+        end_power = math.ceil(math.log2(output_dim)) + 1
         
         # Generate layer dimensions using powers of 2
         hidden_dims = [2**p for p in range(start_power, end_power - 1, -1)]
-        #hidden_dims = [500, 500, 500, 2]
         
         # Ensure first layer matches input_dim exactly
         hidden_dims[0] = input_dim
         
+
+        ###--- Activation ---###
         if activation == 'ReLU':
             self.activation = nn.ReLU()
 
@@ -72,9 +75,11 @@ class DNNRegr(nn.Module):
         elif activation == 'Softplus':
             self.activation = nn.Softplus()
         
+
+        ###--- Create Layers ---###
         layers = []
         for i in range(len(hidden_dims) - 1):
-
+            
             layers.extend([
                 nn.Linear(hidden_dims[i], hidden_dims[i + 1]),
                 nn.BatchNorm1d(hidden_dims[i + 1]),
@@ -92,6 +97,77 @@ class DNNRegr(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
 
+        return self.network(x)
+
+
+
+
+class DNNRegr(nn.Module):
+    def __init__(
+            self, 
+            input_dim: int, 
+            output_dim: int = 2, 
+            n_fixed_layers: int = 3, 
+            fixed_layer_size: int = 300,
+            n_funnel_layers: int = 3,
+            dropout_rate: float = 0.05, 
+            activation: str = 'ReLU'
+        ):
+        super().__init__()
+        
+        if activation == 'ReLU':
+            self.activation = nn.ReLU()
+
+        elif activation == 'PReLU':
+            self.activation = nn.PReLU()
+
+        elif activation == 'LeakyReLU':
+            self.activation = nn.LeakyReLU()
+
+        elif activation == 'Softplus':
+            self.activation = nn.Softplus()
+
+        else:
+            raise ValueError(f"Unsupported activation: {activation}")
+        
+
+        ###--- Fixed Hidden layers ---###
+        layers = []
+        
+        prev_dim = input_dim
+        for _ in range(n_fixed_layers):
+            layers.extend([
+                nn.Linear(prev_dim, fixed_layer_size),
+                nn.BatchNorm1d(fixed_layer_size),
+                self.activation,
+                nn.Dropout(dropout_rate)
+            ])
+            prev_dim = fixed_layer_size
+        
+        
+        ###--- Set up funnel ---###
+        if n_funnel_layers is None:
+            # if number of layers is None the funnel is exponential with self determined n_layers
+            funnel = ExponentialFunnel(
+                input_dim = prev_dim,
+                output_dim = output_dim,
+                dropout_rate = dropout_rate,
+                activation = activation,
+            )
+
+        else:
+            funnel = LinearFunnel(
+                input_dim = prev_dim,
+                output_dim = output_dim,
+                n_layers = n_funnel_layers,
+                dropout_rate = dropout_rate,
+                activation = activation,
+            )
+
+        self.network = nn.Sequential(*layers, funnel)
+
+
+    def forward(self, x: Tensor) -> Tensor:
         return self.network(x)
 
 

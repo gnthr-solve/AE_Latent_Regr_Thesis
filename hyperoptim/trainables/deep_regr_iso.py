@@ -25,7 +25,7 @@ from models import (
     VarDecoder,
 )
 
-from models.regressors import LinearRegr, ProductRegr, DNNRegr
+from models.regressors import LinearRegr, ProductRegr, FunnelDNNRegr
 from models import AE, VAE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
@@ -82,7 +82,7 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     input_dim = dataset.X_dim - 1
 
     # Deep Regression
-    regressor = DNNRegr(input_dim = input_dim, n_layers = n_layers, activation = activation)
+    regressor = FunnelDNNRegr(input_dim = input_dim, n_layers = n_layers, activation = activation)
 
 
     ###--- Losses ---###

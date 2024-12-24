@@ -12,53 +12,43 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 
 from .alignment import Alignment
-
+from .info import identifier_col
 
 """
 DataSets - DataFrameDataset
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 
-class DataFrameDataset(Dataset):
+class TimeSeriesDataset(Dataset):
 
-    def __init__(self, joint_data_df: pd.DataFrame, alignment: Alignment):
+    def __init__(self, alignment: Alignment):
 
-        self.alignm = alignment
-        self.data_df = joint_data_df
+        self.alignment = alignment
 
-        X_data_df = self.data_df[self.alignm.X_cols]
-        y_data_df = self.data_df[self.alignm.y_cols]
+        data_dir = Path.cwd().parent / 'data/timeseries_dataset'
+        self.ts_dir = data_dir / 'timeseries'
 
-        self.metadata_df = self.data_df.drop(columns = self.alignm.X_cols + self.alignm.y_cols)
-
-        self.X_data = torch.tensor(X_data_df.values, dtype=torch.float32)  
-        self.y_data = torch.tensor(y_data_df.values, dtype=torch.float32)
-
-        self.X_dim = self.X_data.shape[1:]
-        self.y_dim = self.y_data.shape[1:]
+        self.metadata_df = pd.read_csv(data_dir / 'metadata.csv', low_memory = False)
+        # Arrange metadata_df rows to match index_map order
+        index_order = [self.alignment.index_map[i] for i in sorted(self.alignment.index_map.keys())]
+        self.metadata_df.set_index(identifier_col, inplace=True)
+        self.metadata_df = self.metadata_df.loc[index_order].reset_index()
 
 
     def __len__(self):
         """
         Returns the total number of samples in the dataset.
         """
-        return len(self.data_df)
+        return len(self.metadata_df)
 
 
     def __getitem__(self, ndx):
-        """
-        Retrieves a data sample and its associated metadata.
+        
+        ndx_id = self.metadata_df[identifier_col].iat[ndx]
+        
+        id_ts_df = pd.read_parquet(self.ts_dir / f'{ndx_id}.parquet')
 
-        Args:
-            ndx (int): Index of the sample to retrieve.
-
-        Returns:
-            tuple: A tuple containing:
-                - X_data (torch.Tensor): The tensor representation of the data sample.
-                - y_data (torch.Tensor): The tensor representation of the data sample.
-        """
-
-        return self.X_data[ndx], self.y_data[ndx]
+        return torch.tensor(data = id_ts_df.to_numpy(), dtype = torch.float32)
 
 
 

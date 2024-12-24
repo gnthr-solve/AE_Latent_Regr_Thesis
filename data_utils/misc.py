@@ -6,6 +6,8 @@ import json
 
 from torch import Tensor
 from torch.utils.data import Dataset, Subset
+from torch.nn.utils.rnn import pad_sequence
+
 from itertools import product
 from pathlib import Path
 from collections import namedtuple
@@ -115,3 +117,20 @@ def combine_subsets(subset_l: Subset, subset_ul: Subset) -> Subset:
     ])
 
     return Subset(subset_l.dataset, combined_indices.tolist())
+
+
+
+
+"""
+Data Helper Tools - Custom Collate for TimeSeriesDataset
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def custom_collate_fn(batch: list[Tensor]):
+    """
+    Returns padded sequences and original lengths for timeseries for batching
+    """
+    lengths = [ts.shape[0] for ts in batch]
+
+    padded_sequences = pad_sequence(batch, batch_first=True)
+    
+    return padded_sequences, torch.tensor(lengths)

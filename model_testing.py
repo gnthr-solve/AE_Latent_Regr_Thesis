@@ -13,8 +13,8 @@ from models.decoders import (
 )
 from models.var_encoders import VarEncoder
 from models.var_decoders import VarDecoder
-
-from models.regressors import LinearRegr, ProductRegr
+from models.layer_blocks import LinearFunnel, ExponentialFunnel
+from models.regressors import LinearRegr, ProductRegr, FunnelDNNRegr
 from models import AE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
@@ -174,6 +174,12 @@ def test_huber_implementations():
     )
 
 
+
+def test_DNN_layout():
+    #regressor = FunnelDNNRegr(input_dim = 200, n_layers = 3)
+    linear_funnel = LinearFunnel(input_dim = 200, output_dim=2, n_layers = 5)
+    exp_funnel = ExponentialFunnel(input_dim = 200, output_dim=2)
+
 """
 Test Functions Execution
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -186,7 +192,8 @@ if __name__=="__main__":
 
     ###--- Product Regressor ---###
     #product_regr_test()
+    test_DNN_layout()
 
 
     ###--- Loss ---###
-    test_huber_implementations()
+    #test_huber_implementations()

@@ -8,7 +8,7 @@ from torch import nn
 from .loss_classes import LossTerm
 
 """
-Loss Functions - MeanLpLoss
+Loss Functions - LpNorm
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 class LpNorm(LossTerm):
@@ -51,6 +51,28 @@ class RelativeLpNorm(LossTerm):
         
         return batch_norms
     
+
+
+
+class DimLpNorm(LossTerm):
+    """
+    LpNorm adjusted by vector dimension to mitigate losses increasing with vector dimension
+    """
+    def __init__(self, p: int):
+        self.p = p
+
+
+    def __call__(self, t_batch: Tensor, t_hat_batch: Tensor, **tensors: Tensor) -> Tensor:
+
+        diff = t_batch - t_hat_batch
+
+        vec_dim = diff.shape[1]
+
+        diff_norms: Tensor = tla.norm(diff, ord = self.p, dim = 1) / vec_dim
+
+        return diff_norms
+    
+
 
 
 """
