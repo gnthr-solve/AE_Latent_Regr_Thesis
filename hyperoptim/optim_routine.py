@@ -10,7 +10,7 @@ from ray.tune.search.bayesopt import BayesOptSearch
 from ray.tune.search.hyperopt import HyperOptSearch
 from ray.tune.search.optuna import OptunaSearch
 from ray.tune.search import ConcurrencyLimiter
-from ray.train import Checkpoint, CheckpointConfig
+from ray.train import Checkpoint, CheckpointConfig, FailureConfig
 
 from pathlib import Path
 
@@ -40,10 +40,12 @@ from evaluation.eval_visitors import (
 from helper_tools.setup import create_normaliser
 from helper_tools.ray_optim import custom_trial_dir_name, PeriodicSaveCallback, GlobalBestModelSaver
 
+from .config import ExperimentConfig
+
 os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
 os.environ["TUNE_WARN_EXCESSIVE_EXPERIMENT_CHECKPOINT_SYNC_THRESHOLD_S"] = "0"
+#os.environ["RAY_TMPDIR"] = f"{str(Path.cwd().parent)}/ray_tmp"
 
-from .config import ExperimentConfig
 
 
 
@@ -52,8 +54,12 @@ def run_experiment(
     save_frequency: int = 5,
     cleanup_frequency: int = 10,
     max_concurrent: int = 2,
-):
+    should_resume: bool = False
+    ):
     
+    #Trial for avoiding potential right problems
+    #os.makedirs(os.environ["RAY_TMPDIR"], exist_ok = True)
+
     storage_path = Path.cwd().parent / 'ray_results'
 
     ###--- Dataset Setup ---###
@@ -90,9 +96,11 @@ def run_experiment(
     )
 
     checkpoint_cfg = CheckpointConfig(
-        num_to_keep = 1, 
-        checkpoint_score_attribute = exp_cfg.optim_loss, 
-        checkpoint_score_order = exp_cfg.optim_mode
+        num_to_keep = 1,
+        checkpoint_score_attribute = 'training_iteration', 
+        checkpoint_score_order = 'max',
+        # checkpoint_score_attribute = exp_cfg.optim_loss, 
+        # checkpoint_score_order = exp_cfg.optim_mode
     )
 
     ###--- Tune Config ---###
@@ -104,26 +112,52 @@ def run_experiment(
 
 
     ###--- Setup and Run Optimisation ---###
-    tuner = tune.Tuner(
-        tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
-        tune_config = tune.TuneConfig(
-            search_alg = search_alg,
-            metric = exp_cfg.optim_loss,
-            mode = exp_cfg.optim_mode,
-            num_samples = exp_cfg.num_samples,
-            trial_dirname_creator = custom_trial_dir_name,
-        ),
-        run_config=train.RunConfig(
-            name = exp_cfg.experiment_name,
-            storage_path = storage_path,
-            checkpoint_config = checkpoint_cfg,
-            callbacks = [save_results_callback, global_best_model_callback],
-        ),
-        param_space = exp_cfg.search_space,
-    )
+    experiment_path = str(storage_path / exp_cfg.experiment_name)
 
-    # Run the experiment
-    results = tuner.fit()
+    if tune.Tuner.can_restore(experiment_path) and should_resume:
+        print("Can restore and will resume")
+        tuner = tune.Tuner.restore(
+            path = experiment_path,
+            trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
+            param_space = exp_cfg.search_space,
+            restart_errored = True,
+        )
+    
+    else:
+        print("New Setup")
+        tuner = tune.Tuner(
+            trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
+            tune_config = tune.TuneConfig(
+                search_alg = search_alg,
+                metric = exp_cfg.optim_loss,
+                mode = exp_cfg.optim_mode,
+                num_samples = exp_cfg.num_samples,
+                trial_dirname_creator = custom_trial_dir_name,
+            ),
+            run_config=train.RunConfig(
+                name = exp_cfg.experiment_name,
+                storage_path = storage_path,
+                checkpoint_config = checkpoint_cfg,
+                callbacks = [save_results_callback, global_best_model_callback],
+            ),
+            param_space = exp_cfg.search_space,
+        )
+
+    
+
+    try:
+        # Run the experiment
+        results = tuner.fit()
+    except:
+        tuner = tune.Tuner.restore(
+            path = experiment_path,
+            trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
+            param_space = exp_cfg.search_space,
+            restart_errored = True,
+        )
+
+        results = tuner.fit()
+    
     print("Best config is:", results.get_best_result().config)
 
     # Save results

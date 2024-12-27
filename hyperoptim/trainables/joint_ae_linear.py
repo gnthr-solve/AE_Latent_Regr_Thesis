@@ -90,13 +90,12 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
     ###--- Models ---###
     input_dim = dataset.X_dim - 1
 
-    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
-    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4, n_layers = n_layers, activation = activation)
+    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4, n_layers = n_layers, activation = activation)
 
     encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation)
     decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation)
 
-    #model = NaiveVAE(encoder = encoder, decoder = decoder)
     ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
     
     #ae_model = AE(encoder = encoder, decoder = decoder)
@@ -149,13 +148,13 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
             
             Z_batch, X_hat_batch = ae_model(X_batch)
 
-            loss_vae = ae_loss(
+            loss_ae = ae_loss(
                 X_batch = X_batch,
                 X_hat_batch = X_hat_batch,
             )
 
             #--- Backward Pass ---#
-            loss_vae.backward()
+            loss_ae.backward()
 
             optimiser.step()
 

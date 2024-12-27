@@ -3,7 +3,7 @@ import torch
 import pandas as pd
 import numpy as np
 
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 
@@ -21,7 +21,7 @@ from models import (
     VarDecoder,
 )
 
-from models.regressors import LinearRegr, ProductRegr, FunnelDNNRegr
+from models.regressors import LinearRegr, FunnelDNNRegr
 from models import AE, VAE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
@@ -34,6 +34,7 @@ from loss import (
     RelativeHuber,
 )
 
+from loss.topology_term import Topological
 from loss.decorators import Loss, Weigh, Observe
 from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
@@ -51,7 +52,7 @@ from evaluation.eval_visitors import (
     LatentPlotVisitor, LatentDistributionVisitor,
 )
 
-from helper_tools import simple_timer
+from helper_tools.setup import create_normaliser 
 from helper_tools.plotting import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_latent_with_attribute
 
 """
@@ -1505,7 +1506,227 @@ def train_deep_regr():
         f"Avg. Loss on labelled testing subset: {loss_regr}\n"
     )
 
+
+
+
+def AE_regr_loss_tests():
+
+    ###--- Meta ---###
+    epochs = 3
+    batch_size = 25
+    latent_dim = 3
+
+    n_layers_e = 5
+    n_layers_d = 5
+    activation = 'Softplus'
+
+    encoder_lr = 1e-3
+    decoder_lr = 1e-3
+    regr_lr = 1e-2
+    scheduler_gamma = 0.9
+
+    ete_regr_weight = 0.95
+
+    dataset_kind = 'key'
+    normaliser_kind = 'min_max'
+    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+
+
+    ###--- Dataset ---###
+    normaliser = create_normaliser(normaliser_kind)
     
+    dataset_builder = DatasetBuilder(
+        kind = dataset_kind,
+        normaliser = normaliser,
+        exclude_columns = exclude_columns
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+    
+    ###--- Dataset Split ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    train_subsets = subset_factory.retrieve(kind = 'train')
+
+    ae_train_ds = train_subsets['unlabelled']
+    regr_train_ds = train_subsets['labelled']
+
+
+    ###--- DataLoader ---###
+    dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
+    dataloader_regr = DataLoader(regr_train_ds, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Models ---###
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
+
+    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+    
+    #ae_model = AE(encoder = encoder, decoder = decoder)
+    regressor = LinearRegr(latent_dim = latent_dim)
+
+
+    ###--- Observation Test Setup ---###
+    dataset_size_ae = len(ae_train_ds)
+    dataset_size_ete = len(regr_train_ds)
+
+    ae_loss_obs = LossTermObserver(
+        n_epochs = epochs, 
+        dataset_size= dataset_size_ae,
+        batch_size= batch_size,
+        name = 'AE Loss',
+        aggregated = True,
+    )
+    
+    loss_observer = CompositeLossTermObserver(
+        n_epochs = epochs,
+        dataset_size= dataset_size_ete,
+        batch_size= batch_size,
+        members = ['Reconstruction Term', 'Regression Term'],
+        name = 'ETE Loss',
+        aggregated = True,
+    )
+
+
+    ###--- Losses ---###
+    reconstr_loss_term = AEAdapter(LpNorm(p = 2))
+    topo_loss = Topological(p = 2)
+    #reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
+
+    regr_loss_term = RegrAdapter(Huber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
+    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+
+    ete_loss_terms = {
+        'Reconstruction Term': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
+        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
+    }
+
+    ete_loss = Loss(CompositeLossTermObs(observer = loss_observer, **ete_loss_terms))
+    #reconstr_loss = Loss(Observe(observer = ae_loss_obs, loss_term = reconstr_loss_term))
+    reconstr_loss = Loss(loss_term = reconstr_loss_term)
+    
+
+
+    ###--- Optimizer & Scheduler ---###
+    optimiser = Adam([
+        {'params': encoder.parameters(), 'lr': encoder_lr},
+        {'params': decoder.parameters(), 'lr': decoder_lr},
+        {'params': regressor.parameters(), 'lr': regr_lr},
+    ])
+
+    scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
+
+
+    ###--- Training Procedure ---###
+    for epoch in range(epochs):
+        
+        ###--- Training Loop AE---###
+        for iter_idx, (X_batch, _) in enumerate(dataloader_ae):
+            
+            X_batch = X_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            Z_batch, X_hat_batch = ae_model(X_batch)
+
+            loss_reconstr = reconstr_loss(
+                X_batch = X_batch,
+                X_hat_batch = X_hat_batch,
+            )
+            loss_topo = topo_loss(X_batch = X_batch, Z_batch = Z_batch)
+            print(
+                f'Loss Reconstr: {loss_reconstr.item()}\n'
+                f'Loss Topological: {loss_topo.item()}'
+            )
+            loss_ae = loss_reconstr + loss_topo
+
+            #--- Backward Pass ---#
+            loss_ae.backward()
+
+            optimiser.step()
+
+
+        ###--- Training Loop End-To-End ---###
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
+            
+            X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            Z_batch, X_hat_batch = ae_model(X_batch)
+            y_hat_batch = regressor(Z_batch)
+
+            loss_ete_weighted = ete_loss(
+                X_batch = X_batch,
+                X_hat_batch = X_hat_batch,
+                y_batch = y_batch,
+                y_hat_batch = y_hat_batch,
+            )
+
+            #--- Backward Pass ---#
+            loss_ete_weighted.backward()
+
+            optimiser.step()
+
+        scheduler.step()
+
+
+    ###--- Plot Observations ---###
+    #plot_loss_tensor(observed_losses = ae_loss_obs.losses)
+    loss_observer.plot_agg_results()
+
+
+    ###--- Test Loss ---###
+    test_datasets = subset_factory.retrieve(kind = 'test')
+    
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = test_datasets,
+        models = {'AE_model': ae_model,'regressor': regressor},
+    )
+
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = 'Huber')
+
+    visitors = [
+        AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
+        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
+
+        AEOutputVisitor(eval_cfg = eval_cfg_comp),
+        RegrOutputVisitor(eval_cfg = eval_cfg_comp),
+        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
+        LatentPlotVisitor(eval_cfg = eval_cfg_comp)
+    ]
+
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
+    loss_regr = results.metrics[eval_cfg_comp.loss_name]
+
+    print(
+        f"Autoencoder:\n"
+        f"---------------------------------------------------------------\n"
+        f"After {epochs} epochs with {len(dataloader_ae)} iterations each\n"
+        f"Avg. Loss on unlabelled testing subset: {loss_reconstr}\n\n"
+        
+        f"Regression End-To-End:\n"
+        f"---------------------------------------------------------------\n"
+        f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
+        f"Avg. Loss on labelled testing subset: {loss_regr}\n"
+    )
+
+
 
 
 """
@@ -1538,8 +1759,11 @@ if __name__=="__main__":
 
 
     ###--- Baseline ---###
-    train_linear_regr()
+    #train_linear_regr()
     #train_deep_regr()
 
-    
+
+    ###--- Testing ---###
+    AE_regr_loss_tests()
+
     pass

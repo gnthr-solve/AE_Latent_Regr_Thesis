@@ -87,10 +87,10 @@ class CompositeLossTermObs(LossTerm):
 
         self.observer(losses)
 
-        for loss_term in self.loss_terms.values():
+        # for loss_term in self.loss_terms.values():
 
-            if isinstance(loss_term, CompositeLossTermObs):
-                loss_term.notify_observer(loss_batches)
+        #     if isinstance(loss_term, CompositeLossTermObs):
+        #         loss_term.notify_observer(loss_batches)
 
 
 """

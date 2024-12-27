@@ -24,14 +24,15 @@ if __name__=="__main__":
     ###--- Workers, Save and Cleanup ---###
     save_frequency = 5
     cleanup_frequency = 10
-    max_concurrent = 4
+    max_concurrent = 8
+    should_resume = True
 
 
     ###--- Experiments to Run ---###
     experiment_cfgs = [
-        linear_regr_iso_cfg, 
-        deep_regr_cfg, 
-        vae_iso_cfg, 
+        #linear_regr_iso_cfg, 
+        #deep_regr_cfg, 
+        #vae_iso_cfg, 
         ae_linear_joint_epoch_cfg,
     ]
 
@@ -43,8 +44,8 @@ if __name__=="__main__":
             exp_cfg = exp_cfg, 
             save_frequency = save_frequency, 
             cleanup_frequency = cleanup_frequency, 
-            max_concurrent = max_concurrent
+            max_concurrent = max_concurrent,
+            should_resume = should_resume,
         )
 
     
-    #run_experiment(exp_cfg = ae_linear_joint_epoch_cfg, save_frequency = 20, cleanup_frequency = 20, max_concurrent = 2)
