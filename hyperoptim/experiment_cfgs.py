@@ -7,6 +7,7 @@ from .trainables import (
     deep_regr,
     VAE_iso,
     AE_linear_joint_epoch,
+    AE_deep_joint_epoch,
 )
 
 """
@@ -29,7 +30,7 @@ linear_regr_iso_cfg = ExperimentConfig(
     experiment_name = 'linear_regr_iso',
     optim_loss = 'L2_norm',
     optim_mode = 'min',
-    num_samples = 30,
+    num_samples = 50,
     search_space = {
         'epochs': tune.randint(lower=2, upper = 100),
         'batch_size': tune.randint(lower=20, upper = 200),
@@ -55,7 +56,9 @@ deep_regr_cfg = ExperimentConfig(
     search_space = {
         'epochs': tune.randint(lower=2, upper = 10),
         'batch_size': tune.randint(lower=20, upper = 200),
-        'n_layers': tune.randint(lower=2, upper = 15),
+        'n_fixed_layers': tune.choice([1, 2, 3, 4, 5, 6]),
+        'fixed_layer_size': tune.choice([50, 100, 150, 200]),
+        'n_funnel_layers': tune.choice([2, 3, 4, 5, 6, 7, 8]),
         'regr_lr': tune.loguniform(1e-4, 1e-1),
         'scheduler_gamma': tune.uniform(0.5, 1),
         'activation': tune.choice(['ReLU', 'LeakyReLU', 'PReLU', 'Softplus']),
@@ -120,6 +123,37 @@ ae_linear_joint_epoch_cfg = ExperimentConfig(
     data_cfg = data_cfg,
 )
 
+
+
+
+"""
+Concrete Configs - AE Deep Joint Epoch
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+ae_deep_joint_epoch_cfg = ExperimentConfig(
+    experiment_name = 'AE_deep_joint_epoch',
+    optim_loss = 'L2_norm',
+    optim_mode = 'min',
+    num_samples = 50,
+    search_space = {
+        'epochs': tune.randint(lower=2, upper = 200),
+        'batch_size': tune.randint(lower=20, upper = 200),
+        'latent_dim': tune.choice([2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        'n_layers': tune.choice([3, 4, 5, 6, 7, 8, 9, 10]),
+        'n_fixed_layers': tune.choice([1, 2, 3, 4, 5, 6]),
+        'fixed_layer_size': tune.choice([50, 100, 150, 200]),
+        'n_funnel_layers': tune.choice([2, 3, 4, 5, 6, 7, 8]),
+        'encoder_lr': tune.loguniform(1e-4, 1e-1),
+        'decoder_lr': tune.loguniform(1e-4, 1e-1),
+        'regr_lr': tune.loguniform(1e-4, 1e-1),
+        'ete_regr_weight': tune.uniform(0, 1),
+        'scheduler_gamma': tune.uniform(0.5, 1),
+        'activation': tune.choice(['ReLU', 'PReLU', 'Softplus']),
+    },
+    trainable = AE_deep_joint_epoch,
+    metrics = ['L2_norm_reconstr'],
+    data_cfg = data_cfg,
+)
 
 
 

@@ -8,7 +8,13 @@ from ray import train, tune
 from pathlib import Path
 
 from hyperoptim import run_experiment
-from hyperoptim.experiment_cfgs import linear_regr_iso_cfg, deep_regr_cfg, vae_iso_cfg, ae_linear_joint_epoch_cfg
+from hyperoptim.experiment_cfgs import (
+    linear_regr_iso_cfg, 
+    deep_regr_cfg, 
+    vae_iso_cfg, 
+    ae_linear_joint_epoch_cfg,
+    ae_deep_joint_epoch_cfg,
+)
 
 
 # os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
@@ -18,22 +24,28 @@ from hyperoptim.experiment_cfgs import linear_regr_iso_cfg, deep_regr_cfg, vae_i
 """
 Run Optimisation experiments
 -------------------------------------------------------------------------------------------------------------------------------------------
+Issues to address:
+    Checkpoints store models with same name in created tmp directory.
+    If two trial workers save their checkpoint at the same time, conflicts will occur and potentially the wrong models are persisted.
+    Potentially change name.
 """
 if __name__=="__main__":
 
     ###--- Workers, Save and Cleanup ---###
     save_frequency = 5
     cleanup_frequency = 10
-    max_concurrent = 8
+    max_concurrent = 6
     should_resume = True
+    replace_default_tmp = False
 
 
     ###--- Experiments to Run ---###
     experiment_cfgs = [
         #linear_regr_iso_cfg, 
-        #deep_regr_cfg, 
+        deep_regr_cfg, 
         #vae_iso_cfg, 
-        ae_linear_joint_epoch_cfg,
+        #ae_linear_joint_epoch_cfg,
+        #ae_deep_joint_epoch_cfg,
     ]
 
 
@@ -46,6 +58,7 @@ if __name__=="__main__":
             cleanup_frequency = cleanup_frequency, 
             max_concurrent = max_concurrent,
             should_resume = should_resume,
+            replace_default_tmp = replace_default_tmp,
         )
 
     

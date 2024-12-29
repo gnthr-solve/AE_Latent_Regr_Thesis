@@ -83,9 +83,9 @@ def linear_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
 
 
     ###--- Losses ---###
-    regr_loss_term = RegrAdapter(Huber(delta = 1))
+    #regr_loss_term = RegrAdapter(Huber(delta = 1))
     #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+    regr_loss_term = RegrAdapter(LpNorm(p = 2))
 
     regr_loss = Loss(loss_term = regr_loss_term)
     regr_loss_test = Loss(regr_loss_term)

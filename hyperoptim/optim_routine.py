@@ -4,38 +4,18 @@ import tempfile
 import torch
 import ray
 import logging
+import time
 
 from ray import train, tune
 from ray.tune.search.bayesopt import BayesOptSearch
 from ray.tune.search.hyperopt import HyperOptSearch
 from ray.tune.search.optuna import OptunaSearch
 from ray.tune.search import ConcurrencyLimiter
-from ray.train import Checkpoint, CheckpointConfig, FailureConfig
+from ray.train import CheckpointConfig, FailureConfig, SyncConfig
 
 from pathlib import Path
 
 from data_utils import DatasetBuilder, SplitSubsetFactory
-
-from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
-
-from loss import (
-    CompositeLossTerm,
-    LpNorm,
-    RelativeLpNorm,
-    Huber,
-    RelativeHuber,
-)
-
-from loss.decorators import Loss, Weigh, Observe
-from loss.adapters import AEAdapter, RegrAdapter
-from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
-
-from evaluation import Evaluation, EvalConfig
-from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor,
-)
 
 from helper_tools.setup import create_normaliser
 from helper_tools.ray_optim import custom_trial_dir_name, PeriodicSaveCallback, GlobalBestModelSaver
@@ -44,8 +24,6 @@ from .config import ExperimentConfig
 
 os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
 os.environ["TUNE_WARN_EXCESSIVE_EXPERIMENT_CHECKPOINT_SYNC_THRESHOLD_S"] = "0"
-#os.environ["RAY_TMPDIR"] = f"{str(Path.cwd().parent)}/ray_tmp"
-
 
 
 
@@ -54,11 +32,17 @@ def run_experiment(
     save_frequency: int = 5,
     cleanup_frequency: int = 10,
     max_concurrent: int = 2,
-    should_resume: bool = False
+    should_resume: bool = False,
+    replace_default_tmp: bool = False
     ):
     
-    #Trial for avoiding potential right problems
-    #os.makedirs(os.environ["RAY_TMPDIR"], exist_ok = True)
+    
+    if replace_default_tmp:
+        """
+        Replace the default RAY_TMPDIR on windows to avoid IO-permission problems 
+        """
+        os.environ["RAY_TMPDIR"] = f"{str(Path.cwd().parent)}/ray_tmp"
+        os.makedirs(os.environ["RAY_TMPDIR"], exist_ok = True)
 
     storage_path = Path.cwd().parent / 'ray_results'
 
@@ -103,6 +87,10 @@ def run_experiment(
         # checkpoint_score_order = exp_cfg.optim_mode
     )
 
+    failure_cfg = FailureConfig(max_failures = 5)
+    sync_cfg = SyncConfig()
+
+
     ###--- Tune Config ---###
     #search_alg = BayesOptSearch()
     #search_alg = HyperOptSearch()
@@ -138,6 +126,8 @@ def run_experiment(
                 name = exp_cfg.experiment_name,
                 storage_path = storage_path,
                 checkpoint_config = checkpoint_cfg,
+                failure_config= failure_cfg,
+                sync_config = sync_cfg,
                 callbacks = [save_results_callback, global_best_model_callback],
             ),
             param_space = exp_cfg.search_space,
@@ -148,15 +138,23 @@ def run_experiment(
     try:
         # Run the experiment
         results = tuner.fit()
-    except:
-        tuner = tune.Tuner.restore(
-            path = experiment_path,
-            trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
-            param_space = exp_cfg.search_space,
-            restart_errored = True,
-        )
 
-        results = tuner.fit()
+    except:
+        time.sleep(20)
+        if tune.Tuner.can_restore(experiment_path):
+            tuner = tune.Tuner.restore(
+                path = experiment_path,
+                trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
+                param_space = exp_cfg.search_space,
+                restart_errored = True,
+            )
+
+            results = tuner.fit()
+
+        else:
+
+            raise
+
     
     print("Best config is:", results.get_best_result().config)
 

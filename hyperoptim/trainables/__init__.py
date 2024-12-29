@@ -4,4 +4,4 @@ from .deep_regr_iso import deep_regr
 
 from .vae_iso import VAE_iso
 
-from .joint_ae_linear import AE_linear_joint_epoch
+from .ae_joint_epoch import AE_linear_joint_epoch, AE_deep_joint_epoch

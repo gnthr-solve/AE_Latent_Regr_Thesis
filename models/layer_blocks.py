@@ -87,7 +87,6 @@ class LinearFunnel(nn.Module):
         ###--- Create Layers ---###
         layers = []
         for i in range(len(layer_nodes) - 1):
-            print(layer_nodes[i], layer_nodes[i + 1])
             layers.extend([
                 nn.Linear(layer_nodes[i], layer_nodes[i + 1]),
                 nn.BatchNorm1d(layer_nodes[i + 1]),

@@ -25,7 +25,7 @@ from models import (
     VarDecoder,
 )
 
-from models.regressors import LinearRegr, ProductRegr, FunnelDNNRegr
+from models.regressors import LinearRegr, FunnelDNNRegr, DNNRegr
 from models import AE, VAE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
@@ -51,7 +51,7 @@ from evaluation.eval_visitors import (
 from ..config import ExperimentConfig
 
 """
-Main Functions - Training
+Trainables - Deep Regression
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
@@ -63,7 +63,9 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     epochs = config['epochs']
     batch_size = config['batch_size']
     
-    n_layers = config['n_layers']
+    n_fixed_layers = config['n_fixed_layers']
+    fixed_layer_size = config['fixed_layer_size']
+    n_funnel_layers = config['n_funnel_layers']
     activation = config['activation']
 
     regr_lr = config['regr_lr']
@@ -82,7 +84,13 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     input_dim = dataset.X_dim - 1
 
     # Deep Regression
-    regressor = FunnelDNNRegr(input_dim = input_dim, n_layers = n_layers, activation = activation)
+    regressor = DNNRegr(
+        input_dim = input_dim,
+        n_fixed_layers= n_fixed_layers,
+        fixed_layer_size= fixed_layer_size,
+        n_funnel_layers= n_funnel_layers,
+        activation= activation,
+    )
 
 
     ###--- Losses ---###
