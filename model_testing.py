@@ -180,6 +180,23 @@ def test_DNN_layout():
     linear_funnel = LinearFunnel(input_dim = 200, output_dim=2, n_layers = 5)
     exp_funnel = ExponentialFunnel(input_dim = 200, output_dim=2)
 
+
+
+
+def test_hyperop_cfg():
+
+    from hyperoptim.experiment_cfgs import (
+        linear_regr_iso_cfg, 
+        deep_NN_regr_cfg,
+        shallow_NN_regr_cfg, 
+        vae_iso_cfg, 
+        ae_linear_joint_epoch_cfg,
+        ae_deep_joint_epoch_cfg,
+    )
+
+    print(linear_regr_iso_cfg)
+
+
 """
 Test Functions Execution
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -192,7 +209,10 @@ if __name__=="__main__":
 
     ###--- Product Regressor ---###
     #product_regr_test()
-    test_DNN_layout()
+    #test_DNN_layout()
+
+
+    test_hyperop_cfg()
 
 
     ###--- Loss ---###

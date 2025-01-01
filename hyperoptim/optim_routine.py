@@ -95,6 +95,12 @@ def run_experiment(
         level=logging.DEBUG,
     )
     
+    logger.info(
+        f"\n-----------------------------------\n"
+        f"Experiment Config: \n{exp_cfg}\n"
+        f"-----------------------------------\n"
+    )
+
 
     ###--- Run Config ---###
     save_results_callback = PeriodicSaveCallback(
