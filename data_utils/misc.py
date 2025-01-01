@@ -57,6 +57,42 @@ def load_tensor_segment(tensor_path: Path, indices: list[int]) -> Tensor:
 
 
 
+
+"""
+Data Helper Tools - Build Dataframe from Dataset Segment
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def build_dataset_segment_dataframe(dataset: TensorDataset, indices: list[int], from_mapping_idxs: bool = False):
+
+    if not from_mapping_idxs:
+        #indices is a list from e.g. a Subset instance
+        mapping_idxs = dataset.X_data[indices, 0].tolist()
+    else:
+        mapping_idxs = indices
+
+    matched_metadata_df = dataset.metadata_df.query('mapping_idx.isin(@mapping_idxs)')
+
+    # Convert indices to a tensor
+    mapping_indices = torch.tensor(mapping_idxs, dtype=dataset.X_data.dtype)
+
+    # Unsqueezing allows for broadcasting the comparison operation which then results in a matrix mask tensor, reduced by any
+    data_mask = (dataset.X_data[:, 0].unsqueeze(-1) == mapping_indices).any(dim=-1)
+
+    X_data = dataset.X_data[data_mask, 1:]
+    y_data = dataset.y_data[data_mask, 1:]
+
+    X_col_names = [dataset.alignm.X_col_map[i] for i in range(1, X_data.shape[1] + 1)]
+    y_col_names = [dataset.alignm.y_col_map[i] for i in range(1, y_data.shape[1] + 1)]
+
+    X_data_df = pd.DataFrame(X_data, index=matched_metadata_df.index, columns = X_col_names)
+    y_data_df = pd.DataFrame(y_data, index=matched_metadata_df.index, columns = y_col_names)
+
+    reconstructed_df = matched_metadata_df.join([X_data_df, y_data_df])
+    
+    return reconstructed_df
+
+
+
 """
 Data Helper Tools - tensor to df
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -77,6 +113,11 @@ def X_tensor_to_df(X_data: Tensor, alignment, metadata: pd.DataFrame) -> pd.Data
     
 
 
+
+"""
+Data Helper Tools - retrieve metadata for indices
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 def retrieve_metadata(indices, metadata_df: pd.DataFrame) -> pd.DataFrame:
     """
     Given a Sequence of indices by a Subset of the Dataset, retrieve the corresponding metadata.

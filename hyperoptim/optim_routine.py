@@ -1,6 +1,6 @@
 
 import os
-import tempfile
+import pandas as pd
 import torch
 import ray
 import logging
@@ -18,12 +18,30 @@ from pathlib import Path
 from data_utils import DatasetBuilder, SplitSubsetFactory
 
 from helper_tools.setup import create_normaliser
-from helper_tools.ray_optim import custom_trial_dir_name, PeriodicSaveCallback, GlobalBestModelSaver
+from helper_tools.ray_optim import custom_trial_dir_name, export_results_df 
 
 from .config import ExperimentConfig
+from .callbacks import PeriodicSaveCallback, GlobalBestModelSaver
 
 os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
 os.environ["TUNE_WARN_EXCESSIVE_EXPERIMENT_CHECKPOINT_SYNC_THRESHOLD_S"] = "0"
+
+logger = logging.getLogger(__name__)
+
+
+
+
+def execute_tuner(current_tuner: tune.Tuner):
+    try:
+        logger.info("Starting tuner.fit()")
+        results = current_tuner.fit()
+        logger.info("tuner.fit() completed successfully.")
+        return results
+    
+    except Exception as e:
+        logger.error(f"An error occurred during tuning: \n{e}")
+        return None
+
 
 
 
@@ -33,21 +51,31 @@ def run_experiment(
     cleanup_frequency: int = 10,
     max_concurrent: int = 2,
     should_resume: bool = False,
-    replace_default_tmp: bool = False
+    max_retries: int = 20,
+    retry_delay: int = 20,
+    replace_default_tmp: bool = False,
     ):
-    
     
     if replace_default_tmp:
         """
-        Replace the default RAY_TMPDIR on windows to avoid IO-permission problems 
+        Replace the default RAY_TMPDIR on windows attempting to avoid IO-permission problems 
         """
         os.environ["RAY_TMPDIR"] = f"{str(Path.cwd().parent)}/ray_tmp"
         os.makedirs(os.environ["RAY_TMPDIR"], exist_ok = True)
 
-    storage_path = Path.cwd().parent / 'ray_results'
-
-    ###--- Dataset Setup ---###
+    
+    ###--- Experiment Meta ---###
     data_cfg = exp_cfg.data_cfg
+    experiment_name = f'{exp_cfg.experiment_name}_{data_cfg.dataset_kind}_{data_cfg.normaliser_kind}'
+
+    #--- Results Directory ---#
+    results_dir = Path(f'./results/{experiment_name}/')
+    os.makedirs(results_dir, exist_ok=True)
+
+    storage_path = Path.cwd().parent / 'ray_results'
+    
+
+    ###--- Dataset Setup ---##
     normaliser = create_normaliser(data_cfg.normaliser_kind)
     dataset_builder = DatasetBuilder(
         kind = data_cfg.dataset_kind,
@@ -57,11 +85,16 @@ def run_experiment(
     
     dataset = dataset_builder.build_dataset()
 
-    #--- Results Directory ---#
-    dir_name = f'{exp_cfg.experiment_name}_{data_cfg.dataset_kind}_{data_cfg.normaliser_kind}'
-    results_dir = Path(f'./results/{dir_name}/')
-    os.makedirs(results_dir, exist_ok=True)
 
+    ###--- Set Up Log Config ---###
+    logging.basicConfig(
+        filename= results_dir / 'experiment.log',
+        filemode='a',
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        #level=logging.INFO,
+        level=logging.DEBUG,
+    )
+    
 
     ###--- Run Config ---###
     save_results_callback = PeriodicSaveCallback(
@@ -100,10 +133,10 @@ def run_experiment(
 
 
     ###--- Setup and Run Optimisation ---###
-    experiment_path = str(storage_path / exp_cfg.experiment_name)
+    experiment_path = str(storage_path / experiment_name)
 
     if tune.Tuner.can_restore(experiment_path) and should_resume:
-        print("Can restore and will resume")
+        logger.info("Can restore and will resume")
         tuner = tune.Tuner.restore(
             path = experiment_path,
             trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
@@ -112,7 +145,7 @@ def run_experiment(
         )
     
     else:
-        print("New Setup")
+        logger.info("Setting up new experiment")
         tuner = tune.Tuner(
             trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
             tune_config = tune.TuneConfig(
@@ -123,7 +156,7 @@ def run_experiment(
                 trial_dirname_creator = custom_trial_dir_name,
             ),
             run_config=train.RunConfig(
-                name = exp_cfg.experiment_name,
+                name = experiment_name,
                 storage_path = storage_path,
                 checkpoint_config = checkpoint_cfg,
                 failure_config= failure_cfg,
@@ -134,30 +167,55 @@ def run_experiment(
         )
 
     
+    ###--- Run Experiment, retry upon Failure ---###
+    attempt = 0
+    results = None
 
-    try:
-        # Run the experiment
-        results = tuner.fit()
+    while attempt < max_retries and results is None:
+        
+        if attempt > 0:
 
-    except:
-        time.sleep(20)
-        if tune.Tuner.can_restore(experiment_path):
-            tuner = tune.Tuner.restore(
-                path = experiment_path,
-                trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
-                param_space = exp_cfg.search_space,
-                restart_errored = True,
-            )
+            if tune.Tuner.can_restore(experiment_path):
+                logger.info("Attempting to restore the tuner from the last checkpoint.")
+                tuner = tune.Tuner.restore(
+                    path = experiment_path,
+                    trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
+                    param_space = exp_cfg.search_space,
+                    restart_errored = True,
+                )
 
-            results = tuner.fit()
+            else:
+                logger.info("Restoring Tuner unsuccessful, aborting experiment.")
+                raise PermissionError
 
+        # Execute Tuner
+        results = execute_tuner(tuner)
+
+        if results is None:
+            attempt += 1
+            logger.info(f"Retrying... Attempt {attempt} of {max_retries} after {retry_delay} seconds.")
+            time.sleep(retry_delay)
         else:
-
-            raise
+            logger.info("Experiment completed successfully.")
+            break
 
     
-    print("Best config is:", results.get_best_result().config)
+    ###--- Export on Success or Raise on Failure---###
+    if results is None:
+        logger.critical("Exceeded maximum retry attempts. Experiment failed.")
+        raise RuntimeError("Ray Tune experiment failed after multiple retries.")
+    
+    else:
+        best_result = results.get_best_result()
+        logger.info(
+            f"Best result:\n"
+            f'-----------------------------------\n'
+            f'Metric: \n{best_result.metrics[exp_cfg.optim_loss]}\n'
+            f'With config: \n{best_result.config}\n'
+            f'-----------------------------------\n'
+        )
 
-    # Save results
-    results_df = results.get_dataframe()
-    results_df.to_csv(results_dir / f'final_results.csv', index=False)
+        # Save all results
+        results_df = results.get_dataframe()
+        
+        export_results_df(results_df = results_df, results_dir = results_dir)

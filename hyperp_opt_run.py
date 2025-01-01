@@ -10,15 +10,13 @@ from pathlib import Path
 from hyperoptim import run_experiment
 from hyperoptim.experiment_cfgs import (
     linear_regr_iso_cfg, 
-    deep_regr_cfg, 
+    deep_NN_regr_cfg,
+    shallow_NN_regr_cfg, 
     vae_iso_cfg, 
     ae_linear_joint_epoch_cfg,
     ae_deep_joint_epoch_cfg,
 )
 
-
-# os.environ["RAY_CHDIR_TO_TRIAL_DIR"] = "0"
-# os.environ["TUNE_WARN_EXCESSIVE_EXPERIMENT_CHECKPOINT_SYNC_THRESHOLD_S"] = "0"
 
 
 """
@@ -37,12 +35,15 @@ if __name__=="__main__":
     max_concurrent = 6
     should_resume = True
     replace_default_tmp = False
+    max_retries = 5
+    retry_delay = 10
 
 
     ###--- Experiments to Run ---###
     experiment_cfgs = [
-        #linear_regr_iso_cfg, 
-        deep_regr_cfg, 
+        linear_regr_iso_cfg, 
+        #deep_NN_regr_cfg,
+        #shallow_NN_regr_cfg,
         #vae_iso_cfg, 
         #ae_linear_joint_epoch_cfg,
         #ae_deep_joint_epoch_cfg,
@@ -58,6 +59,8 @@ if __name__=="__main__":
             cleanup_frequency = cleanup_frequency, 
             max_concurrent = max_concurrent,
             should_resume = should_resume,
+            max_retries = max_retries,
+            retry_delay = retry_delay,
             replace_default_tmp = replace_default_tmp,
         )
 

@@ -5,7 +5,7 @@ from typing import Callable, Optional
 @dataclass
 class DatasetConfig:
     dataset_kind: str  = 'key'
-    normaliser_kind: str = ''
+    normaliser_kind: str = 'raw'
     exclude_columns: list[str] = field(default_factory = lambda: [])
     train_size: float = 0.9
 

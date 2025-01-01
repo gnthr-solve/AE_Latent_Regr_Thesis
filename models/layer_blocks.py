@@ -83,7 +83,7 @@ class LinearFunnel(nn.Module):
         n_f = lambda i: start - transition_step * i
 
         layer_nodes = [input_dim, *(n_f(i) for i in range(n_layers - 1))]
-
+        
         ###--- Create Layers ---###
         layers = []
         for i in range(len(layer_nodes) - 1):
