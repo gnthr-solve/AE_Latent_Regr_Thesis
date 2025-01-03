@@ -137,11 +137,35 @@ ae_linear_joint_epoch_cfg = ExperimentConfig(
         'activation': tune.choice(['ReLU', 'LeakyReLU', 'PReLU', 'Softplus']),
     },
     trainable = AE_linear_joint_epoch,
-    metrics = ['L2_norm_reconstr'],
+    eval_metrics = ['L2_norm_reconstr'],
     data_cfg = data_cfg,
+    model_params = {'AE_model_type': 'AE'}
 )
 
 
+
+nvae_linear_joint_epoch_cfg = ExperimentConfig(
+    experiment_name = 'NVAE_linear_joint_epoch',
+    optim_loss = 'L2_norm',
+    optim_mode = 'min',
+    num_samples = 2000,
+    search_space = {
+        'epochs': tune.randint(lower = 2, upper = 200),
+        'batch_size': tune.randint(lower = 20, upper = 200),
+        'latent_dim': tune.randint(lower = 2, upper = 10),
+        'n_layers': tune.randint(lower = 3, upper = 15),
+        'encoder_lr': tune.loguniform(1e-4, 1e-1),
+        'decoder_lr': tune.loguniform(1e-4, 1e-1),
+        'regr_lr': tune.loguniform(1e-4, 1e-1),
+        'ete_regr_weight': tune.uniform(0, 1),
+        'scheduler_gamma': tune.uniform(0.8, 1),
+        'activation': tune.choice(['ReLU', 'LeakyReLU', 'PReLU', 'Softplus']),
+    },
+    trainable = AE_linear_joint_epoch,
+    eval_metrics = ['L2_norm_reconstr'],
+    data_cfg = data_cfg,
+    model_params = {'AE_model_type': 'NVAE'}
+)
 
 
 """
@@ -169,8 +193,36 @@ ae_deep_joint_epoch_cfg = ExperimentConfig(
         'activation': tune.choice(['ReLU', 'LeakyReLU', 'PReLU', 'Softplus']),
     },
     trainable = AE_deep_joint_epoch,
-    metrics = ['L2_norm_reconstr'],
+    eval_metrics = ['L2_norm_reconstr'],
     data_cfg = data_cfg,
+    model_params = {'AE_model_type': 'AE'}
+)
+
+
+nvae_deep_joint_epoch_cfg = ExperimentConfig(
+    experiment_name = 'NVAE_deep_joint_epoch',
+    optim_loss = 'L2_norm',
+    optim_mode = 'min',
+    num_samples = 2000,
+    search_space = {
+        'epochs': tune.randint(lower = 2, upper = 200),
+        'batch_size': tune.randint(lower = 20, upper = 200),
+        'latent_dim': tune.randint(lower = 2, upper = 10),
+        'n_layers': tune.randint(lower = 3, upper = 10),
+        'n_fixed_layers': tune.randint(lower = 1, upper = 10),
+        'fixed_layer_size': tune.randint(lower = 20, upper = 100),
+        'n_funnel_layers': tune.randint(lower = 2, upper = 10),
+        'encoder_lr': tune.loguniform(1e-4, 1e-1),
+        'decoder_lr': tune.loguniform(1e-4, 1e-1),
+        'regr_lr': tune.loguniform(1e-4, 1e-1),
+        'ete_regr_weight': tune.uniform(0, 1),
+        'scheduler_gamma': tune.uniform(0.8, 1),
+        'activation': tune.choice(['ReLU', 'LeakyReLU', 'PReLU', 'Softplus']),
+    },
+    trainable = AE_deep_joint_epoch,
+    eval_metrics = ['L2_norm_reconstr'],
+    data_cfg = data_cfg,
+    model_params = {'AE_model_type': 'NVAE'}
 )
 
 

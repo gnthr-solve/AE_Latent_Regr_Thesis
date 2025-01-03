@@ -15,8 +15,12 @@ from hyperoptim.experiment_cfgs import (
     vae_iso_cfg, 
     ae_linear_joint_epoch_cfg,
     ae_deep_joint_epoch_cfg,
+    nvae_linear_joint_epoch_cfg,
+    nvae_deep_joint_epoch_cfg,
 )
 
+
+logger = logging.getLogger(__name__)
 
 
 """
@@ -39,6 +43,17 @@ if __name__=="__main__":
     retry_delay = 10
 
 
+    ###--- Set Up Log Config ---###
+    results_dir = Path(f'./results/')
+    logging.basicConfig(
+        filename= results_dir / 'experiment.log',
+        filemode='a',
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        #level=logging.DEBUG,
+    )
+
+
     ###--- Experiments to Run ---###
     experiment_cfgs = [
         linear_regr_iso_cfg, 
@@ -46,7 +61,9 @@ if __name__=="__main__":
         #shallow_NN_regr_cfg,
         #vae_iso_cfg, 
         #ae_linear_joint_epoch_cfg,
+        #nvae_linear_joint_epoch_cfg,
         #ae_deep_joint_epoch_cfg,
+        #nvae_deep_joint_epoch_cfg,
     ]
 
 

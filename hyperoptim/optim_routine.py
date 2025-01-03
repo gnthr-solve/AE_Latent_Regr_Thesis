@@ -56,6 +56,18 @@ def run_experiment(
     replace_default_tmp: bool = False,
     ):
     
+    logger.info(
+        f"Experiment started\n"
+        f"---------------------------------------------------------------------------------------------\n"
+        f"With Config: \n{exp_cfg}\n"
+        f"---------------------------------------------------------------------------------------------\n"
+        f"And settings: \n"
+        f"max_concurrent: {max_concurrent} \n"
+        f"save_frequency: {save_frequency}\n"
+        f"cleanup_frequency: {cleanup_frequency}\n"
+        f"---------------------------------------------------------------------------------------------\n"
+    )
+
     if replace_default_tmp:
         """
         Replace the default RAY_TMPDIR on windows attempting to avoid IO-permission problems 
@@ -86,27 +98,11 @@ def run_experiment(
     dataset = dataset_builder.build_dataset()
 
 
-    ###--- Set Up Log Config ---###
-    logging.basicConfig(
-        filename= results_dir / 'experiment.log',
-        filemode='a',
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        #level=logging.INFO,
-        level=logging.DEBUG,
-    )
-    
-    logger.info(
-        f"\n-----------------------------------\n"
-        f"Experiment Config: \n{exp_cfg}\n"
-        f"-----------------------------------\n"
-    )
-
-
     ###--- Run Config ---###
     save_results_callback = PeriodicSaveCallback(
         save_frequency = save_frequency, 
         experiment_name = exp_cfg.experiment_name, 
-        tracked_metrics=[exp_cfg.optim_loss, *exp_cfg.metrics],
+        tracked_metrics=[exp_cfg.optim_loss, *exp_cfg.eval_metrics],
         results_dir=results_dir,
     )
 
@@ -213,12 +209,13 @@ def run_experiment(
     
     else:
         best_result = results.get_best_result()
+        best_result_cfg_string = ',\n'.join([f'{param}: {value}' for param, value in best_result.config.items()])
         logger.info(
             f"Best result:\n"
-            f'-----------------------------------\n'
+            f'------------------------------------------------------------------------------------------\n'
             f'Metric: \n{best_result.metrics[exp_cfg.optim_loss]}\n'
-            f'With config: \n{best_result.config}\n'
-            f'-----------------------------------\n'
+            f'With config: \n{best_result_cfg_string}\n'
+            f'------------------------------------------------------------------------------------------\n'
         )
 
         # Save all results

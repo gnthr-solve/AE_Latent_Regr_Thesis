@@ -91,15 +91,23 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
     ###--- Models ---###
     input_dim = dataset.X_dim - 1
 
-    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4, n_layers = n_layers, activation = activation)
-    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4, n_layers = n_layers, activation = activation)
+    ae_model_type = exp_cfg.model_params.get('AE_model_type', '')
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation)
+    if ae_model_type == 'AE':
+        encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers, activation = activation)
+        decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers, activation = activation)
+        
+        ae_model = AE(encoder = encoder, decoder = decoder)
 
-    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+    elif ae_model_type == 'NVAE':
+        encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation)
+        decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation)
+
+        ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
     
-    #ae_model = AE(encoder = encoder, decoder = decoder)
+    else:
+        raise ValueError('Model not supported or specified')
+    
     regressor = LinearRegr(latent_dim = latent_dim)
     #regressor = ProductRegr(latent_dim = latent_dim)
 
@@ -186,22 +194,22 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
 
 
         #--- Model Checkpoints & Report ---#
-        if checkpoint_condition(epoch + 1):
-            print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                checkpoint = None
-                #context = train.get_context()
+        # if checkpoint_condition(epoch + 1):
+        #     print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
+        #     with tempfile.TemporaryDirectory() as tmp_dir:
+        #         checkpoint = None
+        #         #context = train.get_context()
                 
-                torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
-                torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
+        #         torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
+        #         torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
 
 
-                checkpoint = Checkpoint.from_directory(tmp_dir)
+        #         checkpoint = Checkpoint.from_directory(tmp_dir)
 
-                #NOTE: This reporting needs to be adjusted because the ETE loss is not the same as the regression loss
-                train.report({optim_loss: loss_ete_weighted.item()}, checkpoint=checkpoint)
-        else:
-            train.report({optim_loss: loss_ete_weighted.item()})
+        #         #NOTE: This reporting needs to be adjusted because the ETE loss is not the same as the regression loss
+        #         train.report({optim_loss: loss_ete_weighted.item()}, checkpoint=checkpoint)
+        # else:
+        #     train.report({optim_loss: loss_ete_weighted.item()})
 
 
         scheduler.step()
@@ -233,8 +241,18 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
     loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
     loss_regr = results.metrics[eval_cfg_comp.loss_name]
 
-    train.report({eval_cfg_comp.loss_name: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr})
-    
+    #train.report({eval_cfg_comp.loss_name: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr})
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        checkpoint = None
+        
+        torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
+        torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
+
+
+        checkpoint = Checkpoint.from_directory(tmp_dir)
+
+        train.report({optim_loss: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr}, checkpoint=checkpoint)
+
 
 
 
@@ -286,16 +304,23 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
 
     ###--- Models ---###
     input_dim = dataset.X_dim - 1
+    ae_model_type = exp_cfg.model_params.get('AE_model_type', '')
 
-    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4, n_layers = n_layers, activation = activation)
-    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4, n_layers = n_layers, activation = activation)
+    if ae_model_type == 'AE':
+        encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers, activation = activation_ae)
+        decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers, activation = activation_ae)
+        
+        ae_model = AE(encoder = encoder, decoder = decoder)
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation_ae)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation_ae)
+    elif ae_model_type == 'NVAE':
+        encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation_ae)
+        decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation_ae)
 
-    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+        ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
     
-    #ae_model = AE(encoder = encoder, decoder = decoder)
+    else:
+        raise ValueError('Model not supported or specified')
+    
     regressor = DNNRegr(
         input_dim = latent_dim, 
         output_dim = 2,
@@ -388,22 +413,22 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
 
 
         #--- Model Checkpoints & Report ---#
-        if checkpoint_condition(epoch + 1):
-            print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                checkpoint = None
-                #context = train.get_context()
+        # if checkpoint_condition(epoch + 1):
+        #     print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
+        #     with tempfile.TemporaryDirectory() as tmp_dir:
+        #         checkpoint = None
+        #         #context = train.get_context()
                 
-                torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
-                torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
+        #         torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
+        #         torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
 
 
-                checkpoint = Checkpoint.from_directory(tmp_dir)
+        #         checkpoint = Checkpoint.from_directory(tmp_dir)
 
-                #NOTE: This reporting needs to be adjusted because the ETE loss is not the same as the regression loss
-                train.report({optim_loss: loss_ete_weighted.item()}, checkpoint=checkpoint)
-        else:
-            train.report({optim_loss: loss_ete_weighted.item()})
+        #         #NOTE: This reporting needs to be adjusted because the ETE loss is not the same as the regression loss
+        #         train.report({optim_loss: loss_ete_weighted.item()}, checkpoint=checkpoint)
+        # else:
+        #     train.report({optim_loss: loss_ete_weighted.item()})
 
 
         scheduler.step()
@@ -435,5 +460,14 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
     loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
     loss_regr = results.metrics[eval_cfg_comp.loss_name]
 
-    train.report({eval_cfg_comp.loss_name: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr})
+    #train.report({eval_cfg_comp.loss_name: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr})
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        checkpoint = None
+        
+        torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
+        torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
 
+
+        checkpoint = Checkpoint.from_directory(tmp_dir)
+
+        train.report({optim_loss: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr}, checkpoint=checkpoint)
