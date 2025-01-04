@@ -16,8 +16,8 @@ Concrete Configs - Data
 """
 data_cfg = DatasetConfig(
     dataset_kind = 'key',
-    normaliser_kind = 'min_max',
-    exclude_columns = ['Time_ptp', 'Time_ps1_ptp', 'Time_ps5_ptp', 'Time_ps9_ptp'],
+    #normaliser_kind = 'min_max',
+    #exclude_columns = ['Time_ptp', 'Time_ps1_ptp', 'Time_ps5_ptp', 'Time_ps9_ptp'],
 )
 
 
@@ -52,9 +52,9 @@ deep_NN_regr_cfg = ExperimentConfig(
     experiment_name = 'deep_NN_regr',
     optim_loss = 'L2_norm',
     optim_mode = 'min',
-    num_samples = 2000,
+    num_samples = 30,
     search_space = {
-        'epochs': tune.randint(lower=2, upper = 200),
+        'epochs': tune.randint(lower=2, upper = 20),
         'batch_size': tune.randint(lower=20, upper = 200),
         'n_fixed_layers': tune.randint(lower = 3, upper = 10),
         'fixed_layer_size': tune.randint(lower = 100, upper = 300),
@@ -64,6 +64,7 @@ deep_NN_regr_cfg = ExperimentConfig(
         'activation': tune.choice(['ReLU', 'LeakyReLU', 'PReLU', 'Softplus']),
     },
     trainable = deep_regr,
+    #eval_metrics = ['Rel_L2-norm', 'L1-norm'],
     data_cfg = data_cfg,
 )
 

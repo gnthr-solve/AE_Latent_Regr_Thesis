@@ -39,12 +39,20 @@ class CompositeLossTerm(LossTerm):
             name: loss_term(**tensors)
             for name, loss_term in self.loss_terms.items()
         }
+        self.current_losses = loss_batches
 
         stacked_losses = torch.stack(tuple(loss_batches.values()))
         batch_losses = torch.sum(stacked_losses, dim=0)
 
         return batch_losses
 
+
+    def get_current_losses(self) -> dict[str, Tensor]:
+        """
+        Retrieves the individual loss components from the last forward pass.
+        """
+        return self.current_losses
+    
 
     def add_term(self, name: str, loss_term: LossTerm):
 

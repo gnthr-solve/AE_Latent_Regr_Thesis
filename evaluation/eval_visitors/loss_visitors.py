@@ -100,10 +100,10 @@ Loss Visitors - Generalisation Attempt
 
 class LossTermVisitor(LossVisitor):
 
-    def __init__(self, loss_term: LossTerm, eval_cfg: EvalConfig):
+    def __init__(self, loss_terms: dict[str, LossTerm], eval_cfg: EvalConfig):
         super().__init__(eval_cfg = eval_cfg)
 
-        self.loss_term = loss_term
+        self.loss_terms = loss_terms
 
 
     def visit(self, eval: Evaluation):
@@ -112,10 +112,12 @@ class LossTermVisitor(LossVisitor):
         tensors = self._get_data(eval)
 
         with torch.no_grad():
+            
+            for name, loss_term in self.loss_terms.items():
 
-            loss_batch = self.loss_term(**tensors)
+                loss_batch = loss_term(**tensors)
 
-            eval_results.losses[self.loss_name] = loss_batch
-            eval_results.metrics[self.loss_name] = loss_batch.mean().item()
+                eval_results.losses[name] = loss_batch
+                eval_results.metrics[name] = loss_batch.mean().item()
 
 
