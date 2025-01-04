@@ -37,10 +37,11 @@ Loss Visitors - ReconstrLossVisitor
 """
 class ReconstrLossVisitor(LossVisitor):
 
-    def __init__(self, loss_term: LossTerm, eval_cfg: EvalConfig):
+    def __init__(self, loss_term: LossTerm, loss_name: str, eval_cfg: EvalConfig):
         super().__init__(eval_cfg = eval_cfg)
 
         self.loss_term = loss_term
+        self.loss_name = loss_name
         
 
     def visit(self, eval: Evaluation):
@@ -69,11 +70,11 @@ Loss Visitors - RegrLossVisitor
 """
 class RegrLossVisitor(LossVisitor):
 
-    def __init__(self, loss_term: LossTerm, eval_cfg: EvalConfig):
+    def __init__(self, loss_term: LossTerm, loss_name: str, eval_cfg: EvalConfig):
         super().__init__(eval_cfg = eval_cfg)
 
         self.loss_term = loss_term
-
+        self.loss_name = loss_name
     
     def visit(self, eval: Evaluation):
 

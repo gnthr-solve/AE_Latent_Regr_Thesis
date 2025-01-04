@@ -41,6 +41,7 @@ if __name__=="__main__":
     replace_default_tmp = False
     max_retries = 5
     retry_delay = 10
+    restart_errored = True
 
 
     ###--- Set Up Log Config ---###
@@ -56,8 +57,8 @@ if __name__=="__main__":
 
     ###--- Experiments to Run ---###
     experiment_cfgs = [
-        #linear_regr_iso_cfg, 
-        deep_NN_regr_cfg,
+        linear_regr_iso_cfg, 
+        #deep_NN_regr_cfg,
         #shallow_NN_regr_cfg,
         #vae_iso_cfg, 
         #ae_linear_joint_epoch_cfg,
@@ -79,6 +80,7 @@ if __name__=="__main__":
             max_retries = max_retries,
             retry_delay = retry_delay,
             replace_default_tmp = replace_default_tmp,
+            restart_errored = restart_errored,
         )
 
     

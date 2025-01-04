@@ -17,10 +17,10 @@ Plots the latent Z in a 3D plot, if latent_dim = 3. Either with or without an as
 """
 class LatentPlotVisitor(EvaluationVisitor):
 
-    def __init__(self, eval_cfg: EvalConfig, w_loss: bool = True):
+    def __init__(self, eval_cfg: EvalConfig, loss_name: str = None):
         super().__init__(eval_cfg = eval_cfg)
 
-        self.w_loss = w_loss
+        self.loss_name = loss_name
 
 
     def visit(self, eval: Evaluation):
@@ -31,7 +31,7 @@ class LatentPlotVisitor(EvaluationVisitor):
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
 
-        if self.w_loss:
+        if self.loss_name:
             loss_tensor = eval.results.losses[self.loss_name]
 
             scatter = ax.scatter(latent_tensor[:, 0], latent_tensor[:, 1], latent_tensor[:, 2], c = loss_tensor, cmap = 'RdYlGn_r')

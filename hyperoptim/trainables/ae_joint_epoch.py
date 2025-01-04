@@ -44,8 +44,10 @@ from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
     AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor,
+    ReconstrLossVisitor, RegrLossVisitor, LossTermVisitor
 )
+
+from helper_tools.setup import create_eval_metric
 
 from ..config import ExperimentConfig
 
@@ -216,6 +218,8 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
 
 
     ###--- Evaluation ---###
+    ae_model.eval()
+    regressor.eval()
     test_subsets = subset_factory.retrieve(kind='test')
 
     evaluation = Evaluation(
@@ -224,24 +228,26 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
         models = {'AE_model': ae_model,'regressor': regressor},
     )
 
-    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm_reconstr')
-    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = optim_loss)
-
+    ae_eval_metrics = {name: create_eval_metric(name) for name in exp_cfg.eval_metrics if name.endswith('_reconstr')}
+    regr_eval_metrics = {
+        optim_loss: regr_loss_term,
+        **{name: create_eval_metric(name) for name in exp_cfg.eval_metrics if name not in ae_eval_metrics.keys()}
+    }
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed')
+   
     visitors = [
-        AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
-
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
+        LossTermVisitor(loss_terms = regr_eval_metrics, eval_cfg = eval_cfg_comp),
+
+        AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
+        LossTermVisitor(loss_terms = ae_eval_metrics, eval_cfg = eval_cfg_reconstr),
     ]
 
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
-    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
-    loss_regr = results.metrics[eval_cfg_comp.loss_name]
-
-    #train.report({eval_cfg_comp.loss_name: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr})
+    
     with tempfile.TemporaryDirectory() as tmp_dir:
         checkpoint = None
         
@@ -251,8 +257,7 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
 
         checkpoint = Checkpoint.from_directory(tmp_dir)
 
-        train.report({optim_loss: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr}, checkpoint=checkpoint)
-
+        train.report(results.metrics, checkpoint=checkpoint)
 
 
 
@@ -435,6 +440,8 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
 
 
     ###--- Evaluation ---###
+    ae_model.eval()
+    regressor.eval()
     test_subsets = subset_factory.retrieve(kind='test')
 
     evaluation = Evaluation(
@@ -443,24 +450,26 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
         models = {'AE_model': ae_model,'regressor': regressor},
     )
 
-    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm_reconstr')
-    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = optim_loss)
-
+    ae_eval_metrics = {name: create_eval_metric(name) for name in exp_cfg.eval_metrics if name.endswith('_reconstr')}
+    regr_eval_metrics = {
+        optim_loss: regr_loss_term,
+        **{name: create_eval_metric(name) for name in exp_cfg.eval_metrics if name not in ae_eval_metrics.keys()}
+    }
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed')
+   
     visitors = [
-        AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
-
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
+        LossTermVisitor(loss_terms = regr_eval_metrics, eval_cfg = eval_cfg_comp),
+
+        AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
+        LossTermVisitor(loss_terms = ae_eval_metrics, eval_cfg = eval_cfg_reconstr),
     ]
 
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
-    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
-    loss_regr = results.metrics[eval_cfg_comp.loss_name]
-
-    #train.report({eval_cfg_comp.loss_name: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr})
+    
     with tempfile.TemporaryDirectory() as tmp_dir:
         checkpoint = None
         
@@ -470,4 +479,4 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
 
         checkpoint = Checkpoint.from_directory(tmp_dir)
 
-        train.report({optim_loss: loss_regr, eval_cfg_reconstr.loss_name: loss_reconstr}, checkpoint=checkpoint)
+        train.report(results.metrics, checkpoint=checkpoint)

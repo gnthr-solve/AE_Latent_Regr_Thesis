@@ -44,8 +44,10 @@ from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
     AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor,
+    ReconstrLossVisitor, RegrLossVisitor, LossTermVisitor
 )
+
+from helper_tools.setup import create_eval_metric
 
 from ..config import ExperimentConfig
 
@@ -148,22 +150,27 @@ def linear_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
         scheduler.step()
 
     
-    ###--- Test Loss ---###
-    test_subsets = subset_factory.retrieve(kind = 'test')
+    ###--- Evaluation ---###
+    regressor.eval()
+    test_datasets = subset_factory.retrieve(kind = 'test')
     
-    regr_test_ds = test_subsets['labelled']
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = test_datasets,
+        models = {'regressor': regressor},
+    )
 
-    test_indices = regr_test_ds.indices
-    X_test_l = dataset.X_data[test_indices]
-    y_test_l = dataset.y_data[test_indices]
+    eval_metrics = {optim_loss: regr_loss_term, **{name: create_eval_metric(name) for name in exp_cfg.eval_metrics}}
+    eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso')
 
-    X_test_l = X_test_l[:, 1:]
-    y_test_l = y_test_l[:, 1:]
+    visitors = [
+        RegrOutputVisitor(eval_cfg = eval_cfg),
+        LossTermVisitor(loss_terms = eval_metrics, eval_cfg = eval_cfg)
+    ]
 
-    with torch.no_grad():
-        y_test_l_hat = regressor(X_test_l)
-
-        loss_regr = regr_loss_test(y_batch = y_test_l, y_hat_batch = y_test_l_hat)
-
-    train.report({optim_loss :loss_regr.item()})
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    
+    train.report(results.metrics)
+    
 

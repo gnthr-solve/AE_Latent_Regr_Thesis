@@ -43,8 +43,10 @@ from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
     AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor,
+    ReconstrLossVisitor, RegrLossVisitor, LossTermVisitor
 )
+
+from helper_tools.setup import create_eval_metric
 
 from ..config import ExperimentConfig
 
@@ -95,7 +97,7 @@ def VAE_iso(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
 
     ae_loss = Loss(CompositeLossTerm(loss_terms))
-    eval_ae_loss = AEAdapter(RelativeLpNorm(p = 2))
+    eval_ae_loss_term = AEAdapter(LpNorm(p = 2))
 
 
     ###--- Optimizer & Scheduler ---###
@@ -154,6 +156,7 @@ def VAE_iso(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
 
 
     ###--- Test Loss ---###
+    ae_model.eval()
     test_dataset = subset_factory.retrieve(kind = 'test', combine = True)
     
     evaluation = Evaluation(
@@ -162,17 +165,18 @@ def VAE_iso(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
         models = {'AE_model': ae_model},
     )
 
-    eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso', loss_name = optim_loss)
+    eval_metrics = {optim_loss: eval_ae_loss_term, **{name: create_eval_metric(name) for name in exp_cfg.eval_metrics}}
+    eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso')
 
     ae_output_visitor = VAEOutputVisitor(eval_cfg = eval_cfg)
     
     visitors = [
         ae_output_visitor,
-        ReconstrLossVisitor(eval_ae_loss, eval_cfg = eval_cfg),
+        LossTermVisitor(loss_terms = eval_metrics, eval_cfg = eval_cfg)
     ]
 
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
 
-    train.report({eval_cfg.loss_name: results.metrics[eval_cfg.loss_name]})
+    train.report(results.metrics)
 

@@ -54,6 +54,7 @@ def run_experiment(
     max_retries: int = 20,
     retry_delay: int = 20,
     replace_default_tmp: bool = False,
+    restart_errored: bool = True,
     ):
     
     logger.info(
@@ -143,7 +144,7 @@ def run_experiment(
             path = experiment_path,
             trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
             param_space = exp_cfg.search_space,
-            restart_errored = True,
+            restart_errored = restart_errored,
         )
     
     else:
@@ -183,7 +184,7 @@ def run_experiment(
                     path = experiment_path,
                     trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
                     param_space = exp_cfg.search_space,
-                    restart_errored = True,
+                    restart_errored = restart_errored,
                 )
 
             else:

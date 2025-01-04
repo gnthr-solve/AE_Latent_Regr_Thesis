@@ -33,7 +33,6 @@ class ExperimentConfig:
     num_samples: int
     search_space: dict
     trainable: Callable
-    #loss_name: Optional[str] = None
     eval_metrics: list[str] = field(default_factory = lambda: [])
     data_cfg: DatasetConfig = field(default_factory = DatasetConfig)
     model_params: dict[str, Any] = field(default_factory = lambda: {})

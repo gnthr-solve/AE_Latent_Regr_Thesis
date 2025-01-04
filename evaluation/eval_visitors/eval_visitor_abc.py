@@ -34,10 +34,6 @@ class EvaluationVisitor(ABC):
         return self.eval_cfg.mode
     
     @property
-    def loss_name(self) -> str:
-        return self.eval_cfg.loss_name
-    
-    @property
     def description(self) -> str:
         return self.eval_cfg.description
     

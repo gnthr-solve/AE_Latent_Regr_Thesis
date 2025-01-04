@@ -76,6 +76,25 @@ def print_iter_types(iterable_obj):
 String Discriminator
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
+def normalise_dataframe(df: pd.DataFrame, columns: list[str]):
+
+    normalised_df = df.copy()
+    
+    for col in columns:
+        min_val = df[col].min()
+        max_val = df[col].max()
+    
+        normalised_df[col] = (df[col] - min_val) / (max_val - min_val)
+
+    return normalised_df
+
+
+
+
+"""
+String Discriminator
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class StringDiscriminator:
     """
     Callable meant to search a string any substring in list of interest and to be applied as a boolean check in comprehensions.
