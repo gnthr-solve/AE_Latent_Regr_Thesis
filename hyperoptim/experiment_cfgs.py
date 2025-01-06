@@ -127,9 +127,9 @@ ae_linear_joint_epoch_cfg = ExperimentConfig(
     experiment_name = 'AE_linear_joint_epoch',
     optim_loss = 'L2_norm',
     optim_mode = 'min',
-    num_samples = 2000,
+    num_samples = 20,
     search_space = {
-        'epochs': tune.randint(lower = 2, upper = 200),
+        'epochs': tune.randint(lower = 2, upper = 100),
         'batch_size': tune.randint(lower = 20, upper = 200),
         'latent_dim': tune.randint(lower = 2, upper = 10),
         'n_layers': tune.randint(lower = 3, upper = 15),

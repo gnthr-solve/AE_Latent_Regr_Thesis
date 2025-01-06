@@ -100,6 +100,7 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
         decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers, activation = activation)
         
         ae_model = AE(encoder = encoder, decoder = decoder)
+        print(f'Type: {ae_model_type}')
 
     elif ae_model_type == 'NVAE':
         encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation)
@@ -169,7 +170,7 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
 
             optimiser.step()
 
-
+        print('AE Epoch completed')
         ###--- Training Loop End-To-End ---###
         for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
@@ -194,7 +195,7 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
 
             optimiser.step()
 
-
+        print('ETE Epoch completed')
         #--- Model Checkpoints & Report ---#
         # if checkpoint_condition(epoch + 1):
         #     print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
@@ -216,7 +217,7 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
 
         scheduler.step()
 
-
+    print('Training completed')
     ###--- Evaluation ---###
     ae_model.eval()
     regressor.eval()
