@@ -13,7 +13,7 @@ if __name__=="__main__":
     #--- Preprocessing ---#
     #drop_unnamed_Xmax()
     #join_extracts()
-    preprocess_raw(kind = 'key')
+    #preprocess_raw(kind = 'key')
     preprocess_raw(kind = 'max')
 
     #normalise_stored_tensors()

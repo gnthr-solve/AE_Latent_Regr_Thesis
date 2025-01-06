@@ -119,11 +119,14 @@ def preprocess_raw(kind: str):
     isna_any_mask = data_df[X_data_cols].isna().any(axis = 1)
     data_df = data_df[~isna_any_mask]
 
-    data_df.sort_values(by = time_col, inplace = True)
+    #--- 3.2. Eliminate Outliers Timewise ---#
+    data_df.query('(Time_ps9_ptp > 30) & (Time_ps9_ptp < 120)', inplace = True)
 
+    #--- 3.3. Sort and Reset index ---#
+    data_df.sort_values(by = time_col, inplace = True)
     data_df.reset_index(inplace = True, drop = True)
 
-    #--- 3.2. Divide y-values by Time to get MRR ---#
+    #--- 3.4. Divide y-values by Time to get MRR ---#
     data_df[y_data_cols] = data_df[y_data_cols].div(data_df['Time_ps9_ptp'], axis = 0)
 
 
