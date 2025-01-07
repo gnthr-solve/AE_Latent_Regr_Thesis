@@ -74,7 +74,7 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
     regr_lr = config['regr_lr']
     scheduler_gamma = config['scheduler_gamma']
 
-    ete_regr_weight = config['ete_regr_weight']
+    ete_regr_weight: float = config['ete_regr_weight']
 
 
     ###--- Dataset Split ---###
@@ -100,7 +100,6 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
         decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers, activation = activation)
         
         ae_model = AE(encoder = encoder, decoder = decoder)
-        print(f'Type: {ae_model_type}')
 
     elif ae_model_type == 'NVAE':
         encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers, activation = activation)
@@ -122,12 +121,6 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
     #regr_loss_term = RegrAdapter(Huber(delta = 1))
     regr_loss_term = RegrAdapter(LpNorm(p = 2))
 
-    ete_loss_terms = {
-        'Reconstruction Term': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
-        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
-    }
-
-    ete_loss = Loss(CompositeLossTerm(ete_loss_terms))
     ae_loss = Loss(loss_term = reconstr_loss_term)
     
 
@@ -170,7 +163,7 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
 
             optimiser.step()
 
-        print('AE Epoch completed')
+
         ###--- Training Loop End-To-End ---###
         for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
             
@@ -183,41 +176,37 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
             Z_batch, X_hat_batch = ae_model(X_batch)
             y_hat_batch = regressor(Z_batch)
 
-            loss_ete_weighted = ete_loss(
-                X_batch = X_batch,
-                X_hat_batch = X_hat_batch,
-                y_batch = y_batch,
-                y_hat_batch = y_hat_batch,
-            )
+            reconstr_component = reconstr_loss_term(X_batch = X_batch, X_hat_batch = X_hat_batch).mean()
+            regr_component = regr_loss_term(y_batch = y_batch, y_hat_batch = y_hat_batch).mean()
+
+            loss_ete_weighted = (1 - ete_regr_weight) * reconstr_component + ete_regr_weight * regr_component
 
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
 
             optimiser.step()
 
-        print('ETE Epoch completed')
+        
         #--- Model Checkpoints & Report ---#
-        # if checkpoint_condition(epoch + 1):
-        #     print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
-        #     with tempfile.TemporaryDirectory() as tmp_dir:
-        #         checkpoint = None
-        #         #context = train.get_context()
+        if checkpoint_condition(epoch + 1):
+            print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                checkpoint = None
                 
-        #         torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
-        #         torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
+                torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
+                torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
 
 
-        #         checkpoint = Checkpoint.from_directory(tmp_dir)
+                checkpoint = Checkpoint.from_directory(tmp_dir)
 
-        #         #NOTE: This reporting needs to be adjusted because the ETE loss is not the same as the regression loss
-        #         train.report({optim_loss: loss_ete_weighted.item()}, checkpoint=checkpoint)
-        # else:
-        #     train.report({optim_loss: loss_ete_weighted.item()})
+                train.report({optim_loss: regr_component.item()}, checkpoint=checkpoint)
+        else:
+            train.report({optim_loss: regr_component.item()})
 
 
         scheduler.step()
 
-    print('Training completed')
+
     ###--- Evaluation ---###
     ae_model.eval()
     regressor.eval()
@@ -292,7 +281,7 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
     regr_lr = config['regr_lr']
     scheduler_gamma = config['scheduler_gamma']
 
-    ete_regr_weight = config['ete_regr_weight']
+    ete_regr_weight: float = config['ete_regr_weight']
 
 
     ###--- Dataset Split ---###
@@ -405,12 +394,13 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
             Z_batch, X_hat_batch = ae_model(X_batch)
             y_hat_batch = regressor(Z_batch)
 
-            loss_ete_weighted = ete_loss(
-                X_batch = X_batch,
-                X_hat_batch = X_hat_batch,
-                y_batch = y_batch,
-                y_hat_batch = y_hat_batch,
-            )
+            Z_batch, X_hat_batch = ae_model(X_batch)
+            y_hat_batch = regressor(Z_batch)
+
+            reconstr_component = reconstr_loss_term(X_batch = X_batch, X_hat_batch = X_hat_batch).mean()
+            regr_component = regr_loss_term(y_batch = y_batch, y_hat_batch = y_hat_batch).mean()
+
+            loss_ete_weighted = (1 - ete_regr_weight) * reconstr_component + ete_regr_weight * regr_component
 
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
@@ -419,22 +409,21 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
 
 
         #--- Model Checkpoints & Report ---#
-        # if checkpoint_condition(epoch + 1):
-        #     print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
-        #     with tempfile.TemporaryDirectory() as tmp_dir:
-        #         checkpoint = None
-        #         #context = train.get_context()
+        if checkpoint_condition(epoch + 1):
+            print(f'Checkpoint created at epoch {epoch + 1}/{epochs}')
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                checkpoint = None
                 
-        #         torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
-        #         torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
+                torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
+                torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
 
 
-        #         checkpoint = Checkpoint.from_directory(tmp_dir)
+                checkpoint = Checkpoint.from_directory(tmp_dir)
 
-        #         #NOTE: This reporting needs to be adjusted because the ETE loss is not the same as the regression loss
-        #         train.report({optim_loss: loss_ete_weighted.item()}, checkpoint=checkpoint)
-        # else:
-        #     train.report({optim_loss: loss_ete_weighted.item()})
+                train.report({optim_loss: regr_component.item()}, checkpoint=checkpoint)
+        else:
+            train.report({optim_loss: regr_component.item()})
+
 
 
         scheduler.step()

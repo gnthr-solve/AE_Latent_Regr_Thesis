@@ -47,7 +47,7 @@ class LatentPlotVisitor(EvaluationVisitor):
         ax.set_ylabel('$y_l$')
         ax.set_zlabel('$z_l$')
 
-        title = f'Latent Space with {self.loss_name} Error' if self.w_loss else 'Latent Space'
+        title = f'Latent Space with {self.loss_name} Error' if self.loss_name else 'Latent Space'
         plt.title(title)
 
         plt.show()

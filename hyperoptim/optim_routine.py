@@ -12,6 +12,7 @@ from ray.tune.search.hyperopt import HyperOptSearch
 from ray.tune.search.optuna import OptunaSearch
 from ray.tune.search import ConcurrencyLimiter
 from ray.train import CheckpointConfig, FailureConfig, SyncConfig
+from ray.tune.schedulers import ASHAScheduler
 
 from pathlib import Path
 
@@ -115,6 +116,16 @@ def run_experiment(
         results_dir = results_dir,
     )
 
+    asha_scheduler = ASHAScheduler(
+        time_attr = 'training_iteration',
+        metric= exp_cfg.optim_loss,
+        mode = exp_cfg.optim_mode,
+        max_t = 200,
+        grace_period = 15,
+        reduction_factor = 2,
+        brackets = 2,
+    )
+
     checkpoint_cfg = CheckpointConfig(
         num_to_keep = 1,
         checkpoint_score_attribute = 'training_iteration', 
@@ -153,6 +164,7 @@ def run_experiment(
             trainable = tune.with_parameters(exp_cfg.trainable, dataset = dataset, exp_cfg = exp_cfg),
             tune_config = tune.TuneConfig(
                 search_alg = search_alg,
+                scheduler =  asha_scheduler,
                 metric = exp_cfg.optim_loss,
                 mode = exp_cfg.optim_mode,
                 num_samples = exp_cfg.num_samples,

@@ -966,23 +966,23 @@ def AE_joint_epoch_procedure():
         models = {'AE_model': ae_model,'regressor': regressor},
     )
 
-    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm')
-    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = 'Huber')
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed')
 
     visitors = [
         AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
+        ReconstrLossVisitor(reconstr_loss_term, 'L2_norm', eval_cfg = eval_cfg_reconstr),
 
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
-        LatentPlotVisitor(eval_cfg = eval_cfg_comp)
+        RegrLossVisitor(regr_loss_term, 'Huber', eval_cfg = eval_cfg_comp),
+        LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name ='Huber')
     ]
 
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
-    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
-    loss_regr = results.metrics[eval_cfg_comp.loss_name]
+    loss_reconstr = results.metrics['L2_norm']
+    loss_regr = results.metrics['Huber']
 
     print(
         f"Autoencoder:\n"
@@ -1754,7 +1754,7 @@ if __name__=="__main__":
     #train_joint_seq_VAE()
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
-    #AE_joint_epoch_procedure()
+    AE_joint_epoch_procedure()
     #VAE_joint_epoch_procedure()
 
 
@@ -1764,6 +1764,6 @@ if __name__=="__main__":
 
 
     ###--- Testing ---###
-    AE_regr_loss_tests()
+    #AE_regr_loss_tests()
 
     pass
