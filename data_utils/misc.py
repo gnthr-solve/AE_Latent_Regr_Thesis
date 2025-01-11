@@ -22,7 +22,7 @@ from .dataset_builder import DatasetBuilder
 from .split_factory import SplitSubsetFactory
 
 """
-Data Helper Tools - Load Tensor segments
+Data Helper Tools - Setup build Test
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def setup_dataset_build(
@@ -41,6 +41,25 @@ def setup_dataset_build(
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = train_size)
 
     return dataset, subset_factory
+
+
+
+"""
+Data Helper Tools - Get full subset based on label status
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def get_subset_by_label_status(dataset: TensorDataset, labelled: bool = True) -> Subset:
+    
+    y_data = dataset.y_data
+    y_isnan = y_data[:, 1:].isnan().all(dim = 1)
+
+    if labelled:
+        indices = torch.where(~y_isnan)[0].tolist()
+    else:
+        indices = torch.where(y_isnan)[0].tolist()
+    
+    return Subset(dataset=dataset, indices=indices)
+
 
 
 

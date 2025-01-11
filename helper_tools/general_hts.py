@@ -6,6 +6,8 @@ import pandas as pd
 import re
 import importlib
 
+from torch import Tensor
+from typing import Callable, Any
 from itertools import product
 from functools import wraps
 
@@ -27,6 +29,9 @@ def simple_timer(func):
         return result
     
     return wrapper
+
+
+
 
 """
 Miscellaneous
@@ -73,7 +78,48 @@ def print_iter_types(iterable_obj):
 
 
 """
-String Discriminator
+Dictionaries
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def split_dict(
+        d: dict, 
+        condition: Callable[[Any], bool], 
+        on_key: bool = False
+    ) -> tuple[dict, dict]:
+    """
+    Split a dictionary into two based on a condition applied to either keys or values.
+    
+    Args:
+        d: Input dictionary
+        condition: Boolean function to evaluate on either keys or values
+        on_key: If True, apply condition to keys. If False, apply to values
+    
+    Returns:
+        Tuple of (dict_true, dict_false) where condition is satisfied/violated
+    """
+    dict_true = {}
+    dict_false = {}
+    
+    for k, v in d.items():
+        target = k if on_key else v
+        if condition(target):
+            dict_true[k] = v
+        else:
+            dict_false[k] = v
+            
+    return dict_true, dict_false
+
+
+
+def map_dict_keys(d: dict[str, Any], key_map: dict[str, str]):
+
+    return {key_map.get(k, k): v for k, v in d.items()}
+    
+
+
+
+"""
+Normalise
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def normalise_dataframe(df: pd.DataFrame, columns: list[str]):
@@ -87,6 +133,17 @@ def normalise_dataframe(df: pd.DataFrame, columns: list[str]):
         normalised_df[col] = (df[col] - min_val) / (max_val - min_val)
 
     return normalised_df
+
+
+
+def normalise_tensor(tensor: Tensor):
+
+    min_val = tensor.min(dim = 0, keepdim = True)[0]
+    max_val = tensor.max(dim = 0, keepdim = True)[0]
+    
+    normalised_tensor = (tensor - min_val) / (max_val - min_val)
+    
+    return normalised_tensor
 
 
 

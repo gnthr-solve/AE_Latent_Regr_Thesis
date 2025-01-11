@@ -118,8 +118,6 @@ def run_experiment(
 
     asha_scheduler = ASHAScheduler(
         time_attr = 'training_iteration',
-        metric= exp_cfg.optim_loss,
-        mode = exp_cfg.optim_mode,
         max_t = 200,
         grace_period = 15,
         reduction_factor = 2,
@@ -134,7 +132,7 @@ def run_experiment(
         # checkpoint_score_order = exp_cfg.optim_mode
     )
 
-    failure_cfg = FailureConfig(max_failures = 5)
+    failure_cfg = FailureConfig(max_failures = 1)
     sync_cfg = SyncConfig()
 
 
