@@ -13,14 +13,14 @@ from torch import Tensor
 Read and retrieve experiment results for connected experiments
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def read_experiment_results(experiment_names: list[str]):
+def read_experiment_results(experiment_names: list[str], results_dir: Path = None):
 
-    result_dir = Path('../results')
+    results_dir = results_dir or Path('../results')
 
     experiment_results: dict[str, pd.DataFrame] = {}
     for experiment_name in experiment_names:
 
-        experiment_dir = result_dir / experiment_name
+        experiment_dir = results_dir / experiment_name
 
         experiment_results[experiment_name] = pd.read_csv(experiment_dir / 'final_results.csv', low_memory = False)
 
