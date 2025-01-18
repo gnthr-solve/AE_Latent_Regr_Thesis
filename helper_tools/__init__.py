@@ -10,4 +10,3 @@ from .pandas_hts import *
 
 from .torch_general import *
 from .torch_grad import *
-from .plotting import *

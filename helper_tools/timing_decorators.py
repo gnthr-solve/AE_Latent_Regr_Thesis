@@ -13,9 +13,9 @@ This descriptor is meant to be used by the TimingDecorator below.
 When the method it manages is first called the descriptor registers the name of the owner class and wraps the method
 in timing logic.
 While the wrapping itself is only done once and the overhead is minimal on CPU, 
-on GPU the native python implementation of the descriptor can slow down execution.
-This is because native python instructions are executed on CPU 
-and this requires torch to interrupt GPU processing and switch to CPU execution between method calls.
+on GPU the native python implementation of the descriptor could slow down execution.
+
+Implemented, but thus far not used in the repository.
 """
 class MethodTimingDescriptor:
 
@@ -49,7 +49,9 @@ class MethodTimingDescriptor:
 Torch based TimingDescriptor Blueprints
 -----------------------------------------------------------------------------------------------------------------------------------------------
 Using the time module could incur timing overhead and potentially induce context switching between GPU and CPU
--> Applying torch tracking could be beneficial 
+-> Applying torch tracking could be beneficial.
+
+Attempts to make descriptor more torch-friendly. Not persued further or used thus far.
 """
 class TorchMethodTimingDescriptor:
 

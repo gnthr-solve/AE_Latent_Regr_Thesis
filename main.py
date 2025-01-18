@@ -53,7 +53,7 @@ from evaluation.eval_visitors import (
 )
 
 from helper_tools.setup import create_normaliser 
-from helper_tools.plotting import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_latent_with_attribute
+from visualisation.plotting import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_latent_with_attribute
 
 """
 Main Functions - Training
