@@ -10,9 +10,15 @@ import pandas as pd
 import os
 
 
-
+"""
+Hydra Callbacks - SaveResultsTable
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class SaveResultsTable(Callback):
-
+    """
+    Tracks job results of a hydra sweep and stores them as a csv in the sweep directory,
+    whenever a job completes.
+    """
     def __init__(self, tracked_results: list[str]):
         
         self.tracked_results = tracked_results
@@ -51,8 +57,15 @@ class SaveResultsTable(Callback):
 
 
 
+"""
+Hydra Callbacks - BestModelCallback
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class BestModelCallback(Callback):
-
+    """
+    Keeps track of the currently best job result and stores model in the sweep directory, 
+    if its results surpass the best previously seen results of the tracked loss. 
+    """
     def __init__(self, tracked_loss: str, tracked_model: str):
 
         self.tracked_loss = tracked_loss

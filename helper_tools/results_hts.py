@@ -15,7 +15,7 @@ Read and retrieve experiment results for connected experiments
 """
 def read_experiment_results(experiment_names: list[str], results_dir: Path = None):
 
-    results_dir = results_dir or Path('../results')
+    results_dir = results_dir or Path('./results')
 
     experiment_results: dict[str, pd.DataFrame] = {}
     for experiment_name in experiment_names:

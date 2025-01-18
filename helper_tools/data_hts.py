@@ -1,10 +1,8 @@
 
-import torch
 import pandas as pd
 import numpy as np
 import json
 
-from torch import Tensor
 from itertools import product
 from pathlib import Path
 from collections import namedtuple
@@ -16,7 +14,9 @@ Data Helper Tools - Map Loader
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 class MapLoader:
-
+    """
+    Helper class to load and transform the column and index mappings from json files.
+    """
     def __call__(self, map_path: Path) -> dict[int, str]:
 
         with open(map_path, 'r') as f:
