@@ -20,6 +20,8 @@ from preprocessing.normalisers import Normaliser
 
 from .dataset_builder import DatasetBuilder
 from .split_factory import SplitSubsetFactory
+from .info import identifier_col
+
 
 """
 Data Helper Tools - Setup build Test
@@ -49,7 +51,20 @@ Data Helper Tools - Get full subset based on label status
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def get_subset_by_label_status(dataset: TensorDataset, labelled: bool = True) -> Subset:
-    
+    """
+    Returns dataset subset by label status without train-test-split.
+
+    Parameters
+    ----------
+        dataset: TensorDataset
+            Input dataset instance.
+        labelled: bool = True
+            Whether to return Subset of only labelled samples (True) or unlabelled samples (False).
+
+    Returns:
+        Subset 
+            Subset instance of input TensorDataset, based on availability of labels.
+    """
     y_data = dataset.y_data
     y_isnan = y_data[:, 1:].isnan().all(dim = 1)
 
@@ -122,11 +137,11 @@ def X_tensor_to_df(X_data: Tensor, alignment, metadata: pd.DataFrame) -> pd.Data
     col_map = alignment.X_col_map
 
     indices = X_data[:, 0].tolist()
-    df_dict = {'WAFER_ID': [index_map[int(idx)] for idx in indices]}
+    df_dict = {identifier_col: [index_map[int(idx)] for idx in indices]}
     df_dict.update({col_map[i]: X_data[:, i].tolist() for i in range(1, X_data.shape[1])})
 
     df = pd.DataFrame(df_dict)
-    df = df.merge(metadata, on = 'WAFER_ID')
+    df = df.merge(metadata, on = identifier_col)
 
     return df
     

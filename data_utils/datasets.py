@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 from torch import Tensor
-from torch.utils.data import Dataset, Subset, random_split
+from torch.utils.data import Dataset
 
 from itertools import product
 from pathlib import Path
@@ -15,10 +15,11 @@ from .alignment import Alignment
 from .info import identifier_col
 
 """
-DataSets - DataFrameDataset
+DataSets - TimeSeriesDataset
 -------------------------------------------------------------------------------------------------------------------------------------------
+Dataset implemented for potential usage with Transformer models.
+NOTE: Not tested & requires custom collate function to work with pytorch dataloaders.
 """
-
 class TimeSeriesDataset(Dataset):
 
     def __init__(self, alignment: Alignment):
@@ -59,7 +60,28 @@ DataSets - TensorDataset
 """
 
 class TensorDataset(Dataset):
+    """
+    Main Dataset subclass used in this work.
+    Instances contain a full dataset, including the X_data (input), y_data (target, output),
+    metadata and the alignment mappings.
 
+    Attributes
+    ----------
+        alignment: Alignment
+            Alignment linking tensor dimensions to their identity and meaning.
+        metadata_df: pd.DataFrame
+            Dataframe of metadata associated with each sample.
+            Connected to the tensor entries via the 'mapping_idx'.
+        X_data: Tensor
+            Input data for the models.
+        y_data: Tensor
+            Output/target labels.
+        X_dim: int
+            Number of input features.
+        y_dim: int
+            Number of output features.
+
+    """
     def __init__(self, X_data: Tensor, y_data: Tensor, metadata_df: pd.DataFrame, alignment: Alignment):
 
         self.alignm = alignment
@@ -89,8 +111,8 @@ class TensorDataset(Dataset):
 
         Returns:
             tuple: A tuple containing:
-                - X_data (torch.Tensor): The tensor representation of the data sample.
-                - y_data (torch.Tensor): The tensor representation of the data sample.
+                - X_data (torch.Tensor): The tensor representation of the input of the data sample.
+                - y_data (torch.Tensor): The tensor representation of the label of the data sample.
         """
 
         return self.X_data[ndx], self.y_data[ndx]

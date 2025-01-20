@@ -13,15 +13,31 @@ from dataclasses import dataclass, field
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser
 
 from .datasets import TensorDataset
-from .alignment import Alignment, alignment_key, alignment_max
+from .alignment import Alignment, load_init_alignment
 from .info import time_col
 
 """
 Data Helper Tools - Dataset Builder
 -------------------------------------------------------------------------------------------------------------------------------------------
+Setup class following the Builder design pattern.
 """
 class DatasetBuilder:
+    """
+    Builder class that assembles a TensorDataset instance by loading and adjusting 
+    the data tensors and mappings.
 
+    Input Parameters
+    ----------
+        kind: str = 'key'
+            Aggregated dataset kind to use, can be 'key' or 'max', defaults to 'key'
+        normaliser: MinMaxNormaliser | ZScoreNormaliser = None,
+            Normaliser class to normalise the X/input tensor with.
+            If None, no normalisation is performed.
+        exclude_columns: list[str] = []
+            List of strings of input data columns/features to exclude from the data.
+            Allows using a reduced dataset for experiments.
+
+    """
     def __init__(
         self,
         kind: str = 'key', 
@@ -35,7 +51,7 @@ class DatasetBuilder:
         self.exclude_columns = exclude_columns
         self.normaliser = normaliser
 
-        self.alignment = alignment_key if kind == 'key' else alignment_max
+        self.alignment = load_init_alignment(kind = kind)
 
         self.metadata_df = pd.read_csv(data_dir / "metadata.csv", low_memory = False)
         self.metadata_df.loc[:, time_col] = pd.to_datetime(self.metadata_df[time_col], format=r'%Y-%m-%d %H:%M:%S')
@@ -45,7 +61,9 @@ class DatasetBuilder:
 
         
     def exclude_columns_and_update_mapping(self):
-
+        """
+        Uses the exclude_columns attribute to remove features from the input tensor and adjust the alignment mapping.
+        """
         indices_to_keep = [int(idx) for idx, key in self.alignment.X_col_map.items() if key not in self.exclude_columns]
 
         self.X_data = self.X_data[:, indices_to_keep]
@@ -53,6 +71,13 @@ class DatasetBuilder:
 
 
     def exclude_rows_by_metadata(self, filter_condition = None):
+        """
+        Method to use a metadata-filter-condition to remove rows/samples from the data.
+        For now only a dummy condition based on the time stamp is used.
+
+        Works by retrieving the mapping_idx column of the segment of the metadata dataframe, 
+        that satisfies the condition, and creating a mask of tensor segments to keep.
+        """
 
         #dummy filter condition for now
         filter_condition = lambda df: df[time_col] > pd.Timestamp('2023-08-01')
@@ -73,7 +98,9 @@ class DatasetBuilder:
 
 
     def normalise(self):
-
+        """
+        Normalises the input data, using the normaliser attribute, first, then updates alignment.
+        """
         with torch.no_grad():
 
             self.X_data[:, 1:] = self.normaliser.normalise(self.X_data[:, 1:])
@@ -87,7 +114,11 @@ class DatasetBuilder:
 
 
     def build_dataset(self) -> TensorDataset:
-
+        """
+        Principal builder method.
+        Applies normalisation and filter operations if applicable, then instantiates and returns
+        the TensorDataset.
+        """
         if self.exclude_columns:
             self.exclude_columns_and_update_mapping()
 

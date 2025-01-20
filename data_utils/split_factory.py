@@ -28,7 +28,10 @@ Idea 2:
 """
 
 class SplitSubsetFactory:
-
+    """
+    Produces Subset instances of a TensorDataset by conducting a train-test-split 
+    and separating the split data into labelled und unlabelled Subsets respectively.
+    """
     def __init__(self, dataset: Dataset | TensorDataset, train_size = 0.8):
 
         self.dataset = dataset
@@ -64,7 +67,17 @@ class SplitSubsetFactory:
 
 
     def retrieve(self, kind: str, combine: bool = False) -> dict[str, Subset] | Subset:
+        """
+        Retrieves the train or test data Subsets. 
+        Optional 'combine' parameter allows returning the labelled and unlabelled Subsets as one Subset.
 
+        Parameters
+        ----------
+            kind: str
+                'test' or 'train'.
+            combine: bool = False
+                Combines labelled and unlabelled samples if True. Defaults to False.
+        """
         subsets = self.splits[kind]
 
         if combine:
