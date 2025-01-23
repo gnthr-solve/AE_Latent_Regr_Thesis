@@ -24,7 +24,10 @@ class LatentPlotVisitor(EvaluationVisitor):
 
 
     def visit(self, eval: Evaluation):
-
+        """
+        Plots the 3D latent representation of an AE model output as a scatterplot,
+        optionally colour-coding the samples by their loss if Visitor was initialised with a loss name.
+        """
         model_output = eval.model_outputs[self.output_name]
         latent_tensor = model_output.Z_batch
 
@@ -62,7 +65,6 @@ class LatentDistributionVisitor(EvaluationVisitor):
         Z_batch = eval.model_outputs[self.output_name].Z_batch
         latent_dim = Z_batch.shape[1]
         
-        # Statistical analysis
         stats = {
             'mean': Z_batch.mean(dim=0),
             'std': Z_batch.std(dim=0),

@@ -20,7 +20,9 @@ from loss import LossTerm
 
 
 class LossVisitor(EvaluationVisitor):
-
+    """
+    EvaluationVisitor sub-base-class to apply LossTerms and metrics to ModelOutput instances.
+    """
     def _get_data(self, eval: Evaluation) -> dict[str, Tensor]:
 
         data_key = self.data_key
@@ -45,7 +47,11 @@ class ReconstrLossVisitor(LossVisitor):
         
 
     def visit(self, eval: Evaluation):
-        
+        """
+        Calculates reconstruction losses for AE model outputs via a LossTerm instance.
+
+        Produces both the complete loss batch, inscribed in losses, and the mean loss, inscribed in metrics.
+        """
         eval_results = eval.results
 
         data = self._get_data(eval)
@@ -77,7 +83,11 @@ class RegrLossVisitor(LossVisitor):
         self.loss_name = loss_name
     
     def visit(self, eval: Evaluation):
+        """
+        Calculates losses for regression model outputs via a LossTerm instance.
 
+        Produces both the complete loss batch, inscribed in losses, and the mean loss, inscribed in metrics.
+        """
         eval_results = eval.results
 
         data = self._get_data(eval)
@@ -108,7 +118,11 @@ class LossTermVisitor(LossVisitor):
 
 
     def visit(self, eval: Evaluation):
+        """
+        Applies a dictionary of named LossTerms to the output of a model or model composition.
 
+        Produces both the complete loss batches, inscribed in losses, and the mean losses, inscribed in metrics.
+        """
         eval_results = eval.results
         tensors = self._get_data(eval)
 

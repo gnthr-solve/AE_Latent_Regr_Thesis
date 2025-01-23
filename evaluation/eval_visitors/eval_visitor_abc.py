@@ -17,7 +17,13 @@ from ..model_output import ModelOutput
 
 
 class EvaluationVisitor(ABC):
+    """
+    EvaluationVisitor abstract base class following the Visitor pattern.
+    An Evaluation instance accepts EvaluationVisitor's that access its attributes 
+    and modify the assigned containers in place.
 
+    Base class initialises with an EvalConfig and relays attribute requests to it.
+    """
     def __init__(self, eval_cfg: EvalConfig):
         self.eval_cfg = eval_cfg
 
@@ -38,7 +44,16 @@ class EvaluationVisitor(ABC):
         return self.eval_cfg.description
     
     @abstractmethod
-    def visit(self, evaluation: Evaluation):
+    def visit(self, eval: Evaluation):
+        """
+        Abstract method to operate on an Evaluation instance and modify it in place.
+        EvaluationVisitors access the Evaluation attributes and produce model outputs, metrics and plots.
+        
+        Parameters
+        ----------
+            eval: Evaluation
+                Evaluation instance accessed by the visitor.
+        """
         pass
 
 

@@ -1,6 +1,4 @@
 
-import torch
-
 from torch import Tensor
 
 from dataclasses import dataclass
@@ -10,7 +8,14 @@ from dataclasses import asdict
 
 @dataclass
 class ModelOutput:
+    """
+    ModelOutput Container class.
+    For connected models Visitors write to the same output container.
 
+    Example:
+        Autoencoder: X_batch -> Z_batch, X_hat_batch
+        Regressor: Z_batch -> y_hat_batch
+    """
     Z_batch: Optional[Tensor] = None
     X_hat_batch: Optional[Tensor] = None
     

@@ -14,7 +14,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from .training_observer import IterObserver
-from helper_tools import plot_training_losses, plot_param_norms, AbortTrainingError
+from helper_tools import AbortTrainingError
 
 
 """

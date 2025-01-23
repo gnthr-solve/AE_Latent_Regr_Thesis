@@ -3,7 +3,7 @@ import torch
 import pandas as pd
 
 from torch import Tensor
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Subset
 
 from data_utils.datasets import TensorDataset
 
@@ -20,10 +20,16 @@ if TYPE_CHECKING:
     from .eval_visitors.eval_visitor_abc import EvaluationVisitor
 
 
-
+"""
+Evaluation - Evaluation Results Container
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 @dataclass
 class EvaluationResults:
-
+    """
+    Container class to store results, 
+    that are produced by applying EvaluationVisitor's to an Evaluation instance.
+    """
     losses: dict[str, Tensor] = field(default_factory = lambda: dict())
     metrics: dict[str, float] = field(default_factory = lambda: dict())
 
@@ -31,7 +37,30 @@ class EvaluationResults:
 
 
 
+
+"""
+Evaluation - Primary Evaluation Class
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class Evaluation:
+    """
+    Main Evaluation class. Follows the Visitor design pattern.
+    Initialises incorporating the TensorDataset instance, the Subset's of the dataset, 
+    and the models that are to be evaluated.
+    Evaluation prepares and stores the data, the outputs of the models applied to the data
+    and the results of the evaluation.
+    Accepts EvaluationVisitors that operate on the data stored within it.
+
+    Input Parameters
+    ----------
+        dataset: TensorDataset
+            Instance of the dataset that was used for training.
+        subsets: dict[str, Subset]
+            Dictionary with names as keys and Subset instances as values.
+            E.g. key 'labelled' with Subset of all labelled samples.
+        models: dict[str, torch.nn.Module]
+            Dictionary of (named) trained models that are to be evaluated.
+    """
     def __init__(
             self, 
             dataset: TensorDataset, 
@@ -52,7 +81,28 @@ class Evaluation:
         
     
     def _prepare_data(self, subsets: dict[str, Subset]) -> dict[str, Tensor]:
+        """
+        Prepares the data for evaluation.
+        Retrieves the tensors for input data 'X_batch' and the labels 'y_batch', 
+        that match the Subset.indices from the dataset, and stores them separately in a dictionary.
+        Furthermore it aligns the extracted mapping indices with the metadata 
+        and stores the aligned metadata in a separate dictionary.
+        Does not have return values but modifies the Evaluation instance inplace.
 
+        Parameters
+        ----------
+            subsets: dict[str, Subset]
+                Dictionary with names as keys and Subset instances as values.
+        
+        Output
+        ----------
+            test_data: dict[str, dict[str, Tensor]]
+                Dictionary of dictionaries where the keys correspond to the Subset names
+                and the values are dictionaries of separated tensors matching the Subset.indices.
+            aligned_metadata: dict[str, pd.DataFrame]
+                Dictionary with Subset names as keys and aligned metadata DataFrames as values.
+                Metadata DataFrames represent the metadata of the samples matching Subset.indices. 
+        """
         test_data = {}
 
         for kind, subset in subsets.items():
