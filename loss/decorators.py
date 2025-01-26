@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 
 from observers.loss_observer import LossTermObserver, ComposedLossTermObserver
 
-from .loss_classes import LossTerm, CompositeLossTerm
+from .loss_classes import LossTerm, CompositeLossTerm, DecCompositeLossTerm
 
 
 """
@@ -85,6 +85,32 @@ class Observe(LossTerm):
 
 
 
+class ObserveComponent(DecCompositeLossTerm):
+    """
+    Allows attaching an observer to a CompositeLossTerm from the outside,
+    hence avoiding wrapping the LossTerm at setup.
+    """
+    def __init__(self, composite: CompositeLossTerm, observer, target_name: str):
+        
+        self.target_name = target_name
+
+        self.composite = composite
+        self.loss_terms = composite.loss_terms
+
+        self.observer = observer
+        
+    
+    def calc_component(self, name: str, **tensors: Tensor) -> Tensor:
+
+        result = super().calc_component(name, **tensors)
+
+        if name == self.target_name:
+            self.observer(result)
+
+        return result
+
+
+
 
 """
 Decorators - Normalised Loss Term
@@ -113,7 +139,7 @@ class NormalisedLossTerm(LossTerm):
         self.running_mean = self.alpha * self.running_mean + (1 - self.alpha) * batch_mean
         self.running_var = self.alpha * self.running_var + (1 - self.alpha) * batch_var
 
-        # Normalize loss
-        normalized_loss = (loss_batch - self.running_mean) / (self.running_var ** 0.5 + 1e-8)
+        # Normalise loss
+        normalised_loss = (loss_batch - self.running_mean) / (self.running_var ** 0.5 + 1e-8)
 
-        return normalized_loss
+        return normalised_loss
