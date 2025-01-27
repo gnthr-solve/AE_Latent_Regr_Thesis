@@ -22,7 +22,7 @@ class LossTerm(ABC):
         """
         Abstract method.
         Concrete LossTerm subclasses map batch tensors to loss batch, i.e.
-            tensor (b, *dims) -> loss batch (b,)
+            tensors of shape (b, *dims) -> loss batch of shape (b,)
 
         Parameters
         ----------
@@ -55,6 +55,8 @@ class CompositeLossTerm(LossTerm):
     def __call__(self, **tensors: Tensor) -> Tensor:
         """
         Relays the call to registered loss terms and returns their sample-wise sum.
+        Shares LossTerm signature, i.e.
+            tensors of shape (b, *dims) -> loss batch (b,)
 
         Parameters
         ----------
@@ -91,25 +93,33 @@ class CompositeLossTerm(LossTerm):
 
 
 
+
 """
-Decorateable CompositeLossTerm
+CompositeLossTermPrime
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class DecCompositeLossTerm(LossTerm):
+class CompositeLossTermPrime(LossTerm):
     """
     CompositeLossTerm representing the composite in the LossTerm Composite pattern.
-    Version conducts the result calculation of individual loss terms in the calc_component method,
-    instead of directly in __call__, allowing decorators to intercept and modify behaviour.
+    Adapted to integrate callbacks and allows decorating the calculation of individual terms 
+    via application to the composite from the outside.
     """
-    def __init__(self, loss_terms: dict[str, LossTerm] = {}):
-
+    def __init__(
+        self, 
+        loss_terms: dict[str, LossTerm],
+        callbacks: Optional[dict[str, list[Callable]]] = None,
+        ):
+        
         self.loss_terms = loss_terms
+        self.callbacks = callbacks or {}
         
 
     def __call__(self, **tensors: Tensor) -> Tensor:
         """
         Relays the call to registered loss terms and returns their sample-wise sum.
-
+        Shares LossTerm signature, i.e.
+            tensors of shape (b, *dims) -> loss batch (b,)
+            
         Parameters
         ----------
             **tensors: Tensor
@@ -133,51 +143,15 @@ class DecCompositeLossTerm(LossTerm):
 
     def calc_component(self, name: str, **tensors: Tensor) -> Tensor:
         """
-        Calculate individual component loss. 
-        Separate calculation method allows decorator integration 
+        Calculate individual component loss and apply callbacks. 
+        Separate calculation method allows Composite decorator integration.
         """
-        return self.loss_terms[name](**tensors)
+        loss_batch = self.loss_terms[name](**tensors)
 
+        for callback in self.callbacks.get(name, []):
+            callback(name, loss_batch)
 
-
-
-"""
-Callback-CompositeLossTerm
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-class CBCompositeLossTerm(LossTerm):
-    """
-    CompositeLossTerm representing the composite in the LossTerm Composite pattern.
-    Version integrates a callback mechanism after the calculation of each loss term. 
-    Callbacks could handle secondary tasks, like reporting to Ray Tune.
-    """
-    def __init__(
-        self, 
-        loss_terms: dict[str, LossTerm],
-        callbacks: Optional[dict[str, list[Callable]]] = None,
-        ):
-        
-        self.loss_terms = loss_terms
-        self.callbacks = callbacks or {}
-
-
-    def __call__(self, **tensors: Tensor) -> Tensor:
-
-        loss_batches = {}
-
-        for name, term in self.loss_terms.items():
-            
-            result = term(**tensors)
-            loss_batches[name] = result
-            
-            # Apply callbacks registered for LossTerm name
-            for callback in self.callbacks.get(name, []):
-                callback(name, result)
-
-        stacked_losses = torch.stack(tuple(loss_batches.values()))
-        batch_losses = torch.sum(stacked_losses, dim=0)
-
-        return batch_losses
+        return loss_batch
 
 
     def add_callback(self, name: str, callback: Callable):
@@ -186,5 +160,3 @@ class CBCompositeLossTerm(LossTerm):
             self.callbacks[name] = []
 
         self.callbacks[name].append(callback)
-
-

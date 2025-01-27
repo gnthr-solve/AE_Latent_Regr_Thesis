@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 
 from observers.loss_observer import LossTermObserver, ComposedLossTermObserver
 
-from .loss_classes import LossTerm, CompositeLossTerm, DecCompositeLossTerm
+from .loss_classes import LossTerm, CompositeLossTerm, CompositeLossTermPrime
 
 
 """
@@ -53,6 +53,27 @@ class Weigh(LossTerm):
     
 
 
+
+class WeightedCompositeLoss(CompositeLossTermPrime):
+
+    def __init__(self, composite_lt: CompositeLossTermPrime, weights: dict[str, float]):
+
+        self.composite_lt = composite_lt
+        self.loss_terms = composite_lt.loss_terms
+        self.callbacks = composite_lt.callbacks
+        
+        self.weights = weights
+
+
+    def calc_component(self, name: str, **tensors: Tensor) -> Tensor:
+
+        loss_batch = self.composite_lt.calc_component(name, **tensors)
+
+        return self.weights.get(name, 1.0) * loss_batch
+    
+
+
+
 """
 Decorators - Observed LossTerm
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -85,7 +106,7 @@ class Observe(LossTerm):
 
 
 
-class ObserveComponent(DecCompositeLossTerm):
+class ObserveComponent(CompositeLossTermPrime):
     """
     Allows attaching an observer to a CompositeLossTerm from the outside,
     hence avoiding wrapping the LossTerm at setup.

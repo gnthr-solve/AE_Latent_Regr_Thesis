@@ -17,6 +17,8 @@ from hyperoptim.experiment_cfgs import (
     ae_deep_joint_epoch_cfg,
     nvae_linear_joint_epoch_cfg,
     nvae_deep_joint_epoch_cfg,
+
+    ae_linear_joint_epoch_prime_cfg,
 )
 
 
@@ -61,10 +63,12 @@ if __name__=="__main__":
         #deep_NN_regr_cfg,
         #shallow_NN_regr_cfg,
         #vae_iso_cfg, 
-        ae_linear_joint_epoch_cfg,
+        #ae_linear_joint_epoch_cfg,
         #nvae_linear_joint_epoch_cfg,
         #ae_deep_joint_epoch_cfg,
         #nvae_deep_joint_epoch_cfg,
+
+        ae_linear_joint_epoch_prime_cfg
     ]
 
 

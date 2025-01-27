@@ -60,14 +60,14 @@ def run_experiment(
     
     logger.info(
         f"Experiment started\n"
-        f"---------------------------------------------------------------------------------------------\n"
+        f"{'-'*80}\n"
         f"With Config: \n{exp_cfg}\n"
-        f"---------------------------------------------------------------------------------------------\n"
+        f"{'-'*80}\n"
         f"And settings: \n"
         f"max_concurrent: {max_concurrent} \n"
         f"save_frequency: {save_frequency}\n"
         f"cleanup_frequency: {cleanup_frequency}\n"
-        f"---------------------------------------------------------------------------------------------\n"
+        f"{'-'*80}\n"
     )
 
     if replace_default_tmp:
@@ -223,10 +223,10 @@ def run_experiment(
         best_result_cfg_string = ',\n'.join([f'{param}: {value}' for param, value in best_result.config.items()])
         logger.info(
             f"Best result:\n"
-            f'------------------------------------------------------------------------------------------\n'
+            f"{'-'*80}\n"
             f'Metric: \n{best_result.metrics[exp_cfg.optim_loss]}\n'
             f'With config: \n{best_result_cfg_string}\n'
-            f'------------------------------------------------------------------------------------------\n'
+            f"{'-'*80}\n\n"
         )
 
         # Save all results

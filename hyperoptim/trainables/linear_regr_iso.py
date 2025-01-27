@@ -23,13 +23,12 @@ from models import (
     VarDecoder,
 )
 
-from models.regressors import LinearRegr, ProductRegr, DNNRegr
+from models.regressors import LinearRegr, DNNRegr
 from models import AE, VAE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
     CompositeLossTerm,
-    CompositeLossTermObs,
     LpNorm,
     RelativeLpNorm,
     Huber,

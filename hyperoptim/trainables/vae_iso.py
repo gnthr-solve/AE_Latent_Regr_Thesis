@@ -28,7 +28,6 @@ from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
     CompositeLossTerm,
-    CompositeLossTermObs,
     LpNorm,
     RelativeLpNorm,
     Huber,
