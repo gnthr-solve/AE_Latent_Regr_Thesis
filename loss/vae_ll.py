@@ -6,7 +6,7 @@ from torch import Tensor
 from torch import nn
 
 from abc import ABC, abstractmethod
-from .loss_classes import LossTerm
+from .loss_term_classes import LossTerm
 
 """
 Reconstruction Loss - ABC

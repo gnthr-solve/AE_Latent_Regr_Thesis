@@ -101,7 +101,14 @@ and at the same time in a CompositeLossTerm, when also used in an End-to-End fas
 """
 class LossTermObserver(LossComponentObserver):
 
-    def __init__(self, n_epochs: int, dataset_size: int, batch_size: int, name: str = None, aggregated: bool = False):
+    def __init__(
+            self, 
+            n_epochs: int, 
+            dataset_size: int, 
+            batch_size: int, 
+            name: str = None, 
+            aggregated: bool = False,
+        ):
         super().__init__(n_epochs, dataset_size, batch_size, name, aggregated)
 
         
@@ -165,7 +172,6 @@ class CompositeLossTermObserver(LossComponentObserver):
 
         elif isinstance(members, dict):
             self.loss_obs = members
-        
         
 
     def __call__(self, loss_batches: dict[str, Tensor], **kwargs):

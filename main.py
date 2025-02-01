@@ -11,8 +11,6 @@ from tqdm import tqdm
 
 from data_utils import DatasetBuilder, SplitSubsetFactory, retrieve_metadata, time_col
 
-from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
-
 from models import (
     LinearEncoder,
     LinearDecoder,
@@ -32,6 +30,7 @@ from loss import (
     RelativeHuber,
 )
 
+from loss.clt_callbacks import LossTrajectoryObserver
 from loss.topology_term import Topological
 from loss.decorators import Loss, Weigh, Observe
 from loss.adapters import AEAdapter, RegrAdapter
@@ -51,7 +50,14 @@ from evaluation.eval_visitors import (
 )
 
 from helper_tools.setup import create_normaliser 
-from visualisation.plotting import plot_loss_tensor, plot_latent_with_reconstruction_error, plot_latent_with_attribute
+from visualisation.plotting import (
+    plot_loss_tensor,
+    plot_contiguous_loss_tensor,
+    plot_latent_with_reconstruction_error, 
+    plot_latent_with_attribute,
+)
+
+
 
 """
 Main Functions - Training
@@ -76,12 +82,11 @@ def AE_iso_training_procedure():
     model_kind = 'stochastic'
     model_type = 'NVAE'
 
+    normaliser_kind = 'min_max'
+
 
     ###--- Dataset ---###
-    #normaliser = MinMaxNormaliser()
-    normaliser = MinMaxEpsNormaliser(epsilon=1e-3)
-    #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = create_normaliser(normaliser_kind)
 
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
@@ -204,11 +209,11 @@ def train_joint_seq_AE():
     batch_size = 50
     latent_dim = 10
 
+    normaliser_kind = 'min_max'
+
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = create_normaliser(normaliser_kind)
     
     dataset_builder = DatasetBuilder(
         kind = 'max',
@@ -375,11 +380,11 @@ def train_joint_seq_VAE():
     batch_size = 50
     latent_dim = 3
 
+    normaliser_kind = 'min_max'
+
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = create_normaliser(normaliser_kind)
     
     dataset_builder = DatasetBuilder(
         kind = 'max',
@@ -583,11 +588,11 @@ def train_joint_epoch_wise_VAE_recon():
     batch_size = 50
     latent_dim = 10
 
+    normaliser_kind = 'min_max'
+
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = create_normaliser(normaliser_kind)
     
     dataset_builder = DatasetBuilder(
         kind = 'max',
@@ -795,10 +800,11 @@ def train_joint_epoch_wise_VAE_recon():
 def AE_joint_epoch_procedure():
 
     ###--- Meta ---###
-    epochs = 5
+    epochs = 2
     batch_size = 25
     latent_dim = 10
 
+    ae_model_type = 'NVAE'
     n_layers_e = 5
     n_layers_d = 5
     activation = 'Softplus'
@@ -812,14 +818,12 @@ def AE_joint_epoch_procedure():
 
     dataset_kind = 'key'
     exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    normaliser_kind = 'min_max'
 
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = MinMaxEpsNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = None
-    
+    normaliser = create_normaliser(normaliser_kind)
+
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
         normaliser = normaliser,
@@ -846,60 +850,46 @@ def AE_joint_epoch_procedure():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
-    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    if ae_model_type == 'AE':
+        encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e, activation = activation)
+        decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d, activation = activation)
+        
+        ae_model = AE(encoder = encoder, decoder = decoder)
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
+    elif ae_model_type == 'NVAE':
+        encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
+        decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
 
-    #model = NaiveVAE(encoder = encoder, decoder = decoder)
-    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+        ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
     
-    #ae_model = AE(encoder = encoder, decoder = decoder)
+    else:
+        raise ValueError('Model not supported or specified')
+    
     regressor = LinearRegr(latent_dim = latent_dim)
-    #regressor = ProductRegr(latent_dim = latent_dim)
 
 
     ###--- Observation Test Setup ---###
-    dataset_size_ae = len(ae_train_ds)
-    dataset_size_ete = len(regr_train_ds)
-
-    # ae_loss_obs = LossTermObserver(
-    #     n_epochs = epochs, 
-    #     dataset_size= dataset_size_ae,
-    #     batch_size= batch_size,
-    #     name = 'AE Loss',
-    #     aggregated = True,
-    # )
-    
-    # loss_observer = CompositeLossTermObserver(
-    #     n_epochs = epochs,
-    #     dataset_size= dataset_size_ete,
-    #     batch_size= batch_size,
-    #     members = ['Reconstruction Term', 'Regression Term'],
-    #     name = 'ETE Loss',
-    #     aggregated = True,
-    # )
+    observer_callback = LossTrajectoryObserver()
 
 
     ###--- Losses ---###
     reconstr_loss_term = AEAdapter(LpNorm(p = 2))
-    #reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
-
     regr_loss_term = RegrAdapter(Huber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
 
     ete_loss_terms = {
-        'Reconstruction Term': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
-        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
+        'Reconstr': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
+        'Regr': Weigh(regr_loss_term, weight = ete_regr_weight),
     }
 
-    ete_loss = Loss(CompositeLossTerm(loss_terms = ete_loss_terms))
-    #reconstr_loss = Loss(Observe(observer = ae_loss_obs, loss_term = reconstr_loss_term))
-    reconstr_loss = Loss(loss_term = reconstr_loss_term)
+    ete_loss = Loss(
+        CompositeLossTerm(
+            loss_terms = ete_loss_terms,
+            callbacks = {name: [observer_callback] for name in ete_loss_terms.keys()}
+        )
+    )
     
-
+    ae_loss = Loss(loss_term = reconstr_loss_term)
+    
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
@@ -912,23 +902,67 @@ def AE_joint_epoch_procedure():
 
 
     ###--- Training Procedure ---###
-    training_procedure = JointEpochTrainingProcedure(
-        ae_train_dataloader = dataloader_ae,
-        regr_train_dataloader = dataloader_regr,
-        ae_model = ae_model,
-        regr_model = regressor,
-        ae_loss = reconstr_loss,
-        ete_loss = ete_loss, 
-        optimizer = optimiser,
-        scheduler = scheduler,
-        epochs = epochs,
-    )
+    for epoch in range(epochs):
+        
+        ###--- Training Loop AE---###
+        for iter_idx, (X_batch, _) in enumerate(dataloader_ae):
+            
+            X_batch = X_batch[:, 1:]
 
-    training_procedure()
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            Z_batch, X_hat_batch = ae_model(X_batch)
+
+            loss_ae = ae_loss(
+                X_batch = X_batch,
+                X_hat_batch = X_hat_batch,
+            )
+
+            #--- Backward Pass ---#
+            loss_ae.backward()
+
+            optimiser.step()
+
+
+        ###--- Training Loop End-To-End ---###
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
+            
+            X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            Z_batch, X_hat_batch = ae_model(X_batch)
+            y_hat_batch = regressor(Z_batch)
+            
+            loss_ete_weighted = ete_loss(
+                X_batch = X_batch, 
+                X_hat_batch = X_hat_batch,
+                y_batch = y_batch, 
+                y_hat_batch = y_hat_batch,
+            )
+        
+            
+            #--- Backward Pass ---#
+            loss_ete_weighted.backward()
+
+            optimiser.step()
+
+        
+        scheduler.step()
+
 
     ###--- Plot Observations ---###
-    #plot_loss_tensor(observed_losses = ae_loss_obs.losses)
-    #loss_observer.plot_agg_results()
+    observed_losses_dict = observer_callback.get_history(concat = True)
+    for name, observed_losses in observed_losses_dict.items():
+        plot_contiguous_loss_tensor(
+            name = name,
+            epochs = epochs,
+            n_iter = len(dataloader_regr),
+            observed_losses = observed_losses,
+        )
 
 
     ###--- Test Loss ---###
@@ -950,7 +984,7 @@ def AE_joint_epoch_procedure():
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrLossVisitor(regr_loss_term, 'Huber', eval_cfg = eval_cfg_comp),
-        LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name ='Huber')
+        #LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name ='Huber')
     ]
 
     evaluation.accept_sequence(visitors = visitors)
@@ -1007,12 +1041,11 @@ def VAE_joint_epoch_procedure():
 
     dataset_kind = 'key'
     exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    normaliser_kind = 'min_max'
 
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = create_normaliser(normaliser_kind)
     
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
@@ -1179,11 +1212,11 @@ def train_linear_regr():
     exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
 
     observe_loss_dev = False
+    normaliser_kind = 'min_max'
+
 
     ###--- Dataset ---###
-    normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    #normaliser = None
+    normaliser = create_normaliser(normaliser_kind)
 
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
@@ -1361,11 +1394,11 @@ def train_deep_regr():
 
     dataset_kind = 'key'
     exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    normaliser_kind = 'min_max'
+
 
     ###--- Dataset ---###
-    #normaliser = MinMaxNormaliser()
-    #normaliser = ZScoreNormaliser()
-    normaliser = None
+    normaliser = create_normaliser(normaliser_kind)
 
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
@@ -1708,7 +1741,7 @@ if __name__=="__main__":
     #train_joint_seq_VAE()
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
-    #AE_joint_epoch_procedure()
+    AE_joint_epoch_procedure()
     #VAE_joint_epoch_procedure()
 
 
@@ -1718,6 +1751,6 @@ if __name__=="__main__":
 
 
     ###--- Testing ---###
-    AE_regr_loss_tests()
+    #AE_regr_loss_tests()
 
     pass

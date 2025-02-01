@@ -1,7 +1,7 @@
 
 import torch
 from torch import Tensor
-from .loss_classes import LossTerm, CompositeLossTerm
+from .loss_term_classes import LossTerm, CompositeLossTerm
     
 from .determ_terms import LpNorm, RelativeLpNorm, Huber, RelativeHuber
 

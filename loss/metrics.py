@@ -4,7 +4,7 @@ import torch.linalg as tla
 from torch import Tensor
 from torch import nn
 
-from .loss_classes import LossTerm
+from .loss_term_classes import LossTerm
 
 
 

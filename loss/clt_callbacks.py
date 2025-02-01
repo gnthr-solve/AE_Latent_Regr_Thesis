@@ -9,7 +9,6 @@ from collections import defaultdict
 from typing import Callable, Optional
 
 from helper_tools import AbortTrainingError, no_grad_decorator
-from .loss_classes import LossTerm, CompositeLossTerm
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +45,7 @@ class LossSpikeDetektor:
 
 
 
+
 """
 Composite LossTerm Callbacks - Numerical Stability Monitor
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -73,19 +73,51 @@ class NumericalStabilityMonitor:
 
 
 
+
 """
-Callbacks - Loss Trajectory Tracker
+Callbacks - Loss Trajectory Observer
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class LossTrajectoryTracker:
-
-    def __init__(self):
+class LossTrajectoryObserver:
+    """
+    Callback version of list-based Observer pattern.
+    """
+    def __init__(self, store_batches: bool = False, device: str = 'cpu'):
+        self.store_batches = store_batches
+        self.device = device
         self.history = defaultdict(list)
         
 
     @no_grad_decorator
     def __call__(self, name: str, loss_batch: Tensor):
+        """
+        Callback method. Detaches loss_batch and stores it in a list for each name.
+        """
+        detached = loss_batch.detach().to(self.device)
 
-        mean_loss = loss_batch.mean().item()
-        self.history[name].append(mean_loss)
+        if self.store_batches:
+            self.history[name].append(detached)
+
+        else:
+            self.history[name].append(detached.mean().item())
             
+
+    def get_history(self, concat: bool = False) -> dict[str, list[Tensor] | Tensor]:
+        """
+        Return stored loss history. 
+        If 'concat == True' return a dict of concatenated tensors.
+        Otherwise a dict of lists of tensors.
+        If 'store_batches' was set to True concatenation might raise an error,
+        as the last batch might mismatch, leading to a tensor with uneven shape.
+        """
+        if concat:
+            history = {
+                name: torch.cat(batches) 
+                if self.store_batches else torch.tensor(batches, device=self.device, dtype=torch.float32)
+                for name, batches in self.history.items()
+            }
+
+        else:
+            history = dict(self.history)
+
+        return history

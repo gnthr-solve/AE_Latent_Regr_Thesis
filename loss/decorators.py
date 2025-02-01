@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 
 from observers.loss_observer_fixed import LossTermObserver, ComposedLossTermObserver
 
-from .loss_classes import LossTerm, CompositeLossTerm
+from .loss_term_classes import LossTerm, CompositeLossTerm
 
 
 """

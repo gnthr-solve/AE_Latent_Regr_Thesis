@@ -9,7 +9,7 @@ from torch import nn
 from typing import Callable
 from abc import ABC, abstractmethod
 
-from .loss_classes import LossTerm
+from .loss_term_classes import LossTerm
 
 
 

@@ -1,5 +1,5 @@
 
-from .loss_classes import *
+from .loss_term_classes import *
 from .adapters import *
 from .decorators import *
 
