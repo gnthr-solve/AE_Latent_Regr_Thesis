@@ -236,10 +236,10 @@ class TopologicalSignatureDistance:
 
 
     def _get_pairings(self, distances):
-        print(distances.shape)
+        #print(distances.shape)
         pairs = self.signature_calculator(
             distances.detach().cpu().numpy())
-        print(pairs.shape)
+        #print(pairs.shape)
         return pairs
 
 
@@ -253,7 +253,7 @@ class TopologicalSignatureDistance:
     @staticmethod
     def sig_error(signature1, signature2):
         """Compute distance between two topological signatures."""
-        print(signature1.shape[0])
+        #print(signature1.shape[0])
         return ((signature1 - signature2)**2).sum(dim=-1)
 
 

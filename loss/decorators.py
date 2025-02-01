@@ -9,9 +9,9 @@ from torch import nn
 from typing import Callable, Any
 from abc import ABC, abstractmethod
 
-from observers.loss_observer import LossTermObserver, ComposedLossTermObserver
+from observers.loss_observer_fixed import LossTermObserver, ComposedLossTermObserver
 
-from .loss_classes import LossTerm, CompositeLossTerm, CompositeLossTermPrime
+from .loss_classes import LossTerm, CompositeLossTerm
 
 
 """
@@ -54,9 +54,9 @@ class Weigh(LossTerm):
 
 
 
-class WeightedCompositeLoss(CompositeLossTermPrime):
+class WeightedCompositeLoss(CompositeLossTerm):
 
-    def __init__(self, composite_lt: CompositeLossTermPrime, weights: dict[str, float]):
+    def __init__(self, composite_lt: CompositeLossTerm, weights: dict[str, float]):
 
         self.composite_lt = composite_lt
         self.loss_terms = composite_lt.loss_terms
@@ -106,7 +106,7 @@ class Observe(LossTerm):
 
 
 
-class ObserveComponent(CompositeLossTermPrime):
+class ObserveComponent(CompositeLossTerm):
     """
     Allows attaching an observer to a CompositeLossTerm from the outside,
     hence avoiding wrapping the LossTerm at setup.
