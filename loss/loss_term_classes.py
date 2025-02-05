@@ -105,6 +105,23 @@ class CompositeLossTerm(LossTerm):
         self.callbacks[name].append(callback)
 
 
+    def apply_decorator(
+        self,
+        target_name: str,
+        decorator_cls: Type[LossTerm],
+        **decorator_args
+        ):
+        
+        for name, term in self.loss_terms.items():
+            if name == target_name:
+                original = self.loss_terms[target_name]
+                self.loss_terms[target_name] = decorator_cls(original, **decorator_args)
+            
+            if isinstance(term, CompositeLossTerm):
+                term.apply_decorator(target_name, decorator_cls, **decorator_args)
+
+
+
 
 """
 CompositeLossTermPrime

@@ -39,8 +39,10 @@ class VAE(nn.Module, ABC):
 
 
 """
-VAE - ABC
+VAE - GaussVAE
 -------------------------------------------------------------------------------------------------------------------------------------------
+Inference Model is assumed Gaussian with diagonal covariance matrix.
+Expects encoder to return mean and log(variance) as parameters.
 """
 class GaussVAE(VAE):
 
@@ -60,6 +62,30 @@ class GaussVAE(VAE):
 
         return z
 
+
+
+
+"""
+VAE - GaussVAESigma
+-------------------------------------------------------------------------------------------------------------------------------------------
+Inference Model is assumed Gaussian with diagonal covariance matrix.
+Expects encoder to return mean and standard deviation as parameters.
+"""
+class GaussVAESigma(VAE):
+
+    def __init__(self, encoder, decoder):
+        super().__init__(encoder, decoder)
+    
+
+    def reparameterise(self, dist_params: Tensor):
+
+        mu, sigma = dist_params.unbind(dim = -1)
+
+        eps = torch.randn_like(sigma)
+
+        z = mu + sigma * eps
+
+        return z
 
 
 

@@ -7,8 +7,7 @@ import json
 from torch import Tensor
 from itertools import product
 from pathlib import Path
-from collections import namedtuple
-from dataclasses import dataclass, field
+from typing import Callable
 
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser
 
@@ -42,14 +41,16 @@ class DatasetBuilder:
         self,
         kind: str = 'key', 
         normaliser: MinMaxNormaliser | ZScoreNormaliser = None,
-        exclude_columns: list[str] = []
+        exclude_columns: list[str] = [],
+        filter_condition: Callable[[pd.DataFrame], pd.Series] = None,
         ):
 
         data_dir = Path(f"./data")
         tensor_dir = data_dir / "tensors"
 
-        self.exclude_columns = exclude_columns
         self.normaliser = normaliser
+        self.exclude_columns = exclude_columns
+        self.filter_condition = filter_condition
 
         self.alignment = load_init_alignment(kind = kind)
 
@@ -70,7 +71,7 @@ class DatasetBuilder:
         self.alignment.filter_col_map(filter_out_values = self.exclude_columns, by_key = True)
 
 
-    def exclude_rows_by_metadata(self, filter_condition = None):
+    def filter_rows_by_metadata(self):
         """
         Method to use a metadata-filter-condition to remove rows/samples from the data.
         For now only a dummy condition based on the time stamp is used.
@@ -78,12 +79,8 @@ class DatasetBuilder:
         Works by retrieving the mapping_idx column of the segment of the metadata dataframe, 
         that satisfies the condition, and creating a mask of tensor segments to keep.
         """
-
-        #dummy filter condition for now
-        filter_condition = lambda df: df[time_col] > pd.Timestamp('2023-08-01')
-
-        row_mask = filter_condition(self.metadata_df)
-
+        row_mask = self.filter_condition(self.metadata_df)
+        #print(row_mask)
         self.metadata_df = self.metadata_df[row_mask]
         indices = self.metadata_df['mapping_idx'].tolist()
 
@@ -125,7 +122,8 @@ class DatasetBuilder:
         if self.normaliser is not None:
             self.normalise()
 
-        self.exclude_rows_by_metadata()
+        if self.filter_condition is not None:
+            self.filter_rows_by_metadata()
 
         dataset = TensorDataset(self.X_data, self.y_data, self.metadata_df, alignment = self.alignment)
 

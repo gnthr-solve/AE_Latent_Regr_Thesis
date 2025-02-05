@@ -10,16 +10,19 @@ from torch.optim.lr_scheduler import ExponentialLR
 from tqdm import tqdm
 
 from data_utils import DatasetBuilder, SplitSubsetFactory, retrieve_metadata, time_col
+from data_utils.data_filters import filter_by_machine
 
 from models import (
     LinearEncoder,
     LinearDecoder,
     VarEncoder,
     VarDecoder,
+    SigmaGaussVarEncoder,
+    SigmaGaussVarDecoder,
 )
 
 from models.regressors import LinearRegr, FunnelDNNRegr
-from models import AE, VAE, GaussVAE, EnRegrComposite
+from models import AE, VAE, GaussVAE, GaussVAESigma, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
@@ -845,6 +848,7 @@ def AE_joint_epoch_procedure():
     dataset_kind = 'key'
     exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     normaliser_kind = 'min_max'
+    filter_condition = filter_by_machine('M_A')
 
 
     ###--- Dataset ---###
@@ -853,11 +857,12 @@ def AE_joint_epoch_procedure():
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
         normaliser = normaliser,
-        exclude_columns = exclude_columns
+        exclude_columns = exclude_columns,
+        #filter_condition = filter_condition,
     )
     
     dataset = dataset_builder.build_dataset()
-    
+    print(f'Dataset size: {len(dataset)}')
     
     ###--- Dataset Split ---###
     subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
@@ -1056,6 +1061,7 @@ def VAE_joint_epoch_procedure():
     n_layers_e = 3
     n_layers_d = 3
     activation = 'Softplus'
+    use_logvar = False
 
     encoder_lr = 1e-3
     decoder_lr = 1e-3
@@ -1067,7 +1073,8 @@ def VAE_joint_epoch_procedure():
     dataset_kind = 'key'
     exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     normaliser_kind = 'min_max'
-
+    #normaliser_kind = 'z_score'
+    filter_condition = filter_by_machine('M_A')
 
     ###--- Dataset ---###
     normaliser = create_normaliser(normaliser_kind)
@@ -1075,7 +1082,8 @@ def VAE_joint_epoch_procedure():
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
         normaliser = normaliser,
-        exclude_columns = exclude_columns
+        exclude_columns = exclude_columns,
+        #filter_condition = filter_condition,
     )
     
     dataset = dataset_builder.build_dataset()
@@ -1098,11 +1106,17 @@ def VAE_joint_epoch_procedure():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
+    if use_logvar:
+        encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
+        decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
 
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
+        ae_model = GaussVAE(encoder = encoder, decoder = decoder)
 
-    ae_model = GaussVAE(encoder = encoder, decoder = decoder)
+    else:
+        encoder = SigmaGaussVarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e, activation = activation)
+        decoder = SigmaGaussVarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d, activation = activation)
+
+        ae_model = GaussVAESigma(encoder = encoder, decoder = decoder)
 
     regressor = LinearRegr(latent_dim = latent_dim)
 
@@ -1114,16 +1128,16 @@ def VAE_joint_epoch_procedure():
 
     ###--- Loss Terms ---###
     #--- VAE ---#
-    ll_term = Weigh(GaussianDiagLL(), weight = -1)
-
-    #kld_term = GaussianAnaKLDiv()
-    kld_term = GaussianMCKLDiv()
+    ll_term = GaussianDiagLL(receives_logvar = use_logvar)
+    kld_term = GaussianAnaKLDiv(receives_logvar = use_logvar)
+    #kld_term = GaussianMCKLDiv(receives_logvar = use_logvar)
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
     vae_loss_term = CompositeLossTerm(
         loss_terms = vae_loss_terms,
         callbacks = {name: [observer_callback] for name in vae_loss_terms.keys()},
     )
+    vae_loss_term.apply_decorator(target_name = 'Log-Likelihood', decorator_cls = Weigh, weight = -1)
 
     ae_loss = Loss(vae_loss_term)
 
@@ -1136,8 +1150,8 @@ def VAE_joint_epoch_procedure():
     
     #--- Composite ETE ---#
     ete_loss_terms = {
-        'Reconstruction Term': Weigh(vae_loss_term, weight = 1 - ete_regr_weight), 
-        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
+        'Reconstr': Weigh(vae_loss_term, weight = 1 - ete_regr_weight), 
+        'Regr': Weigh(regr_loss_term, weight = ete_regr_weight),
     }
 
     ete_loss = Loss(
@@ -1242,7 +1256,7 @@ def VAE_joint_epoch_procedure():
         VAEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrLossVisitor(regr_loss_term, loss_name = 'L2_error_regr', eval_cfg = eval_cfg_comp),
-        LatentPlotVisitor(eval_cfg = eval_cfg_comp)
+        LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name = 'L2_error_regr')
     ]
 
     evaluation.accept_sequence(visitors = visitors)

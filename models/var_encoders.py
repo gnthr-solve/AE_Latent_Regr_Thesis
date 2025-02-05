@@ -94,15 +94,15 @@ class VarEncoder(nn.Module):
 Variational Encoder Classes - Experiment
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class GaussVarEncoder(nn.Module):
+class SigmaGaussVarEncoder(nn.Module):
     
-    def __init__(self, input_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, activation = 'ReLU'):
+    def __init__(self, input_dim: int, latent_dim: int, n_layers: int = 4, activation = 'ReLU'):
         super().__init__()
 
         self.latent_dim = latent_dim
-        self.n_dist_params = n_dist_params
+        self.n_dist_params = 2
 
-        dist_dim = n_dist_params * latent_dim
+        dist_dim = self.n_dist_params * latent_dim
 
         transition_step = (input_dim - dist_dim) // n_layers
         remainder = (input_dim - dist_dim) % n_layers
@@ -133,9 +133,11 @@ class GaussVarEncoder(nn.Module):
         # shape = (b, l, 2)
         infrm_dist_params = infrm_dist_params.view(-1, self.latent_dim, self.n_dist_params).squeeze()
 
-        # transform variance for stability
-        infrm_dist_params[:, :, 1] = softplus(infrm_dist_params[:, :, 1])
-
-        return infrm_dist_params
+        # transform variance-related parameter for stability, interpret as std sigma.
+        mean = infrm_dist_params[..., 0]
+        var_param = infrm_dist_params[..., 1]
+        
+        sigma = softplus(var_param)
+        return torch.stack([mean, sigma], dim=-1).squeeze()
     
 

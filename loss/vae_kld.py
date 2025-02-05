@@ -44,15 +44,48 @@ Analytical KL-divergence loss term for Gaussian inference model and standard Gau
 """
 class GaussianAnaKLDiv(AnalyticalKLDiv):
 
+    def __init__(self, receives_logvar: bool = True):
+        self.receives_logvar = receives_logvar
+
+
     def __call__(self, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
+        """
+        Analytical KL-Divergence calculation for encoder inference model parameters consisting of
+        mean and diagonal variance matrix, where the variance component is hence taken as a vector.
+            infrm_dist_params[..., 0] <--> mean 
+            infrm_dist_params[..., 1] <--> logvar | sigma    (log of variance or std)
 
-        mu , logvar = infrm_dist_params.unbind(dim = -1)
+        Args:
+            infrm_dist_params: Tensor
+                Inference model dist. params, shape (b, d, 2)
+        """
+        mu, var, logvar = self._get_params(infrm_dist_params = infrm_dist_params)
 
-        kld_batch = 0.5 * (-1 - logvar + mu.pow(2) + torch.exp(logvar)).sum(dim = -1)
+        kld_batch = 0.5 * (-1 - logvar + mu.pow(2) + var).sum(dim = -1)
         
         return kld_batch
     
 
+    def _get_params(self, infrm_dist_params: Tensor):
+        """
+        Unpacks and returns mean, variance and log of variance based on two cases:
+            1. Encoders infrm_dist_params[..., 1] = logvar (i.e. log(sigma^2))
+            2. Encoders infrm_dist_params[..., 1] = sigma 
+        
+        Args:
+            infrm_dist_params: Tensor
+                Inference model dist. params, shape (b, d, 2)
+        """
+        if self.receives_logvar:
+            mu, logvar = infrm_dist_params.unbind(dim = -1)
+            var = torch.exp(logvar)
+            
+        else:
+            mu, sigma = infrm_dist_params.unbind(dim = -1)
+            var = sigma**2
+            logvar = 2 * torch.log(sigma)
+        
+        return mu, var, logvar
 
 
 """
@@ -63,13 +96,27 @@ following the same principle as for the reconstruction
 """
 class GaussianMCKLDiv(MonteCarloKLDiv):
 
+    def __init__(self, receives_logvar: bool = True):
+        self.receives_logvar = receives_logvar
+
+
     def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
-        
-        mu, logvar = infrm_dist_params.unbind(dim = -1)
+        """
+        Monte-Carlo KL-Divergence calculation for encoder inference model parameters consisting of
+        mean and diagonal variance matrix, where the variance component is hence taken as a vector.
+            infrm_dist_params[..., 0] <--> mean 
+            infrm_dist_params[..., 1] <--> logvar | sigma    (log of variance or std)
+
+        Args:
+            Z_batch: Tensor
+                Tensor of latent representations obtained via the reparameterisation trick.
+            infrm_dist_params: Tensor
+                Inference model dist. params, shape (b, d, 2)
+        """
+        mu, var, logvar = self._get_params(infrm_dist_params = infrm_dist_params)
 
         sq_diff_means = (Z_batch - mu).pow(2)
         sq_Z_batch = Z_batch.pow(2)
-        var = torch.exp(logvar)
 
         sq_mean_deviations = (sq_diff_means / var)
 
@@ -84,6 +131,29 @@ class GaussianMCKLDiv(MonteCarloKLDiv):
         return kld_batch
 
 
+    def _get_params(self, infrm_dist_params: Tensor):
+        """
+        Unpacks and returns mean, variance and log of variance based on two cases:
+            1. Encoders infrm_dist_params[..., 1] = logvar (i.e. log(sigma^2))
+            2. Encoders infrm_dist_params[..., 1] = sigma 
+        
+        Args:
+            infrm_dist_params: Tensor
+                Inference model dist. params, shape (b, d, 2)
+        """
+        if self.receives_logvar:
+            mu, logvar = infrm_dist_params.unbind(dim = -1)
+            var = torch.exp(logvar)
+            
+        else:
+            mu, sigma = infrm_dist_params.unbind(dim = -1)
+            var = sigma**2
+            logvar = 2 * torch.log(sigma)
+        
+        return mu, var, logvar
+    
+
+
 
 """
 Alternative Monte Carlo KL Divergence - GaussianMCKLDiv
@@ -91,7 +161,7 @@ Alternative Monte Carlo KL Divergence - GaussianMCKLDiv
 Analogous, but intended to be more numerically stable
 """
 MAX_LOGVAR = 10
-class GaussianMCKLDiv(MonteCarloKLDiv):
+class GaussianMCKLDivClamp(MonteCarloKLDiv):
 
     def __call__(self, Z_batch: Tensor, infrm_dist_params: Tensor, **tensors: Tensor) -> Tensor:
 

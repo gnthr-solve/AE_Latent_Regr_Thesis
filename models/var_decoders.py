@@ -61,15 +61,15 @@ class VarDecoder(nn.Module):
 Variational Decoder Classes - Experiment
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class GaussVarDecoder(nn.Module):
+class SigmaGaussVarDecoder(nn.Module):
 
-    def __init__(self, output_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, activation = 'ReLU'):
+    def __init__(self, output_dim: int, latent_dim: int, n_layers: int = 4, activation = 'ReLU'):
         super().__init__()
 
         self.output_dim = output_dim
-        self.n_dist_params = n_dist_params
+        self.n_dist_params = 2
 
-        dist_dim = n_dist_params * output_dim
+        dist_dim = self.n_dist_params * output_dim
 
         transition_step = (dist_dim - latent_dim) // n_layers
 
@@ -98,8 +98,9 @@ class GaussVarDecoder(nn.Module):
         # shape = (b, d, 2)
         genm_dist_params = genm_dist_params.view(-1, self.output_dim, self.n_dist_params).squeeze()
 
-        # transform variance for stability
-        genm_dist_params[:, :, 1] = softplus(genm_dist_params[:, :, 1])
-
-        return genm_dist_params
-    
+        # transform variance-related parameter for stability, interpret as std sigma.
+        mean = genm_dist_params[..., 0]
+        var_param = genm_dist_params[..., 1]
+        
+        sigma = softplus(var_param)
+        return torch.stack([mean, sigma], dim=-1).squeeze()
