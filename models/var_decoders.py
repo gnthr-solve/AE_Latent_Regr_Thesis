@@ -4,7 +4,9 @@ import numpy as np
 
 from torch import Tensor
 from torch import nn
+from torch.nn.functional import softplus
 
+from .activations import ACTIVATIONS
 
 """
 Variational Decoder Classes - Base class
@@ -35,17 +37,7 @@ class VarDecoder(nn.Module):
         self.layers.append(nn.Linear(in_features = n_f(n_layers - 1), out_features = dist_dim))
 
         ###--- Activation ---###
-        if activation == 'ReLU':
-            self.activation = nn.ReLU()
-
-        elif activation == 'PReLU':
-            self.activation = nn.PReLU()
-
-        elif activation == 'LeakyReLU':
-            self.activation = nn.LeakyReLU()
-        
-        elif activation == 'Softplus':
-            self.activation = nn.Softplus()
+        self.activation = ACTIVATIONS[activation]()
 
 
     def forward(self, x: Tensor) -> Tensor:
@@ -69,9 +61,9 @@ class VarDecoder(nn.Module):
 Variational Decoder Classes - Experiment
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class VarDecoderExp(nn.Module):
+class GaussVarDecoder(nn.Module):
 
-    def __init__(self, output_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, dtype = torch.float64):
+    def __init__(self, output_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, activation = 'ReLU'):
         super().__init__()
 
         self.output_dim = output_dim
@@ -87,12 +79,12 @@ class VarDecoderExp(nn.Module):
 
         for i in range(n_layers - 1):
 
-            self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True, dtype = dtype))
+            self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True))
         
-        self.layers.append(nn.Linear(in_features = n_f(n_layers - 1), out_features = dist_dim, dtype = dtype))
+        self.layers.append(nn.Linear(in_features = n_f(n_layers - 1), out_features = dist_dim))
 
-        self.activation = nn.ReLU()
-        #self.activation = nn.PReLU()
+        ###--- Activation ---###
+        self.activation = ACTIVATIONS[activation]()
 
 
     def forward(self, x: Tensor) -> Tensor:
@@ -103,12 +95,11 @@ class VarDecoderExp(nn.Module):
 
         genm_dist_params: Tensor = self.layers[-1](x)
 
-        #genm_dist_params = genm_dist_params.reshape(-1, self.latent_dim, self.n_dist_params).squeeze()
-        #genm_dist_params = genm_dist_params.view(-1, self.n_dist_params, self.output_dim).squeeze()
+        # shape = (b, d, 2)
         genm_dist_params = genm_dist_params.view(-1, self.output_dim, self.n_dist_params).squeeze()
+
+        # transform variance for stability
+        genm_dist_params[:, :, 1] = softplus(genm_dist_params[:, :, 1])
 
         return genm_dist_params
     
-
-
-#VarDecoder = VarDecoderExp

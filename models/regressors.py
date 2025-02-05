@@ -12,7 +12,7 @@ from torch import Tensor
 from torch import nn
 
 from .layer_blocks import LinearFunnel, ExponentialFunnel
-    
+from .activations import ACTIVATIONS
 
 """
 Regressor Classes - Linear
@@ -63,17 +63,7 @@ class FunnelDNNRegr(nn.Module):
         
 
         ###--- Activation ---###
-        if activation == 'ReLU':
-            self.activation = nn.ReLU()
-
-        elif activation == 'PReLU':
-            self.activation = nn.PReLU()
-
-        elif activation == 'LeakyReLU':
-            self.activation = nn.LeakyReLU()
-
-        elif activation == 'Softplus':
-            self.activation = nn.Softplus()
+        self.activation = ACTIVATIONS[activation]()
         
 
         ###--- Create Layers ---###
@@ -115,22 +105,8 @@ class DNNRegr(nn.Module):
         ):
         super().__init__()
         
-        if activation == 'ReLU':
-            self.activation = nn.ReLU()
-
-        elif activation == 'PReLU':
-            self.activation = nn.PReLU()
-
-        elif activation == 'LeakyReLU':
-            self.activation = nn.LeakyReLU()
-
-        elif activation == 'Softplus':
-            self.activation = nn.Softplus()
-
-        else:
-            raise ValueError(f"Unsupported activation: {activation}")
+        self.activation = ACTIVATIONS[activation]()
         
-
         ###--- Fixed Hidden layers ---###
         layers = []
         

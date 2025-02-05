@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from dataclasses import asdict
 
+
 @dataclass
 class ModelOutput:
     """
@@ -25,7 +26,9 @@ class ModelOutput:
     y_hat_batch: Optional[Tensor] = None
     
     def to_dict(self) -> dict[str, Tensor]:
-        """Returns only non-None entries"""
+        """
+        Returns only non-None entries
+        """
         return {k: v for k, v in asdict(self).items() if v is not None}
     
 

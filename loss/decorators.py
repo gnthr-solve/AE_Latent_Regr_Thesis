@@ -111,9 +111,9 @@ class ObserveComponent(CompositeLossTerm):
     Allows attaching an observer to a CompositeLossTerm from the outside,
     hence avoiding wrapping the LossTerm at setup.
     """
-    def __init__(self, composite: CompositeLossTerm, observer, target_name: str):
+    def __init__(self, composite: CompositeLossTerm, observer, target_names: list[str]):
         
-        self.target_name = target_name
+        self.target_names = target_names
 
         self.composite = composite
         self.loss_terms = composite.loss_terms
@@ -125,7 +125,7 @@ class ObserveComponent(CompositeLossTerm):
 
         result = super().calc_component(name, **tensors)
 
-        if name == self.target_name:
+        if name in self.target_names:
             self.observer(result)
 
         return result

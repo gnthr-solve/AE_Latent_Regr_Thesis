@@ -32,7 +32,7 @@ from loss import (
 
 from loss.clt_callbacks import LossTrajectoryObserver
 from loss.topology_term import Topological
-from loss.decorators import Loss, Weigh, Observe
+from loss.decorators import Loss, Weigh, WeightedCompositeLoss, Observe
 from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
@@ -50,11 +50,11 @@ from evaluation.eval_visitors import (
 )
 
 from helper_tools.setup import create_normaliser 
-from visualisation.plotting import (
+from visualisation.general_plot_funcs import (
     plot_loss_tensor,
-    plot_contiguous_loss_tensor,
-    plot_latent_with_reconstruction_error, 
-    plot_latent_with_attribute,
+    plot_agg_training_losses,
+    plot_3Dlatent_with_error, 
+    plot_3Dlatent_with_attribute,
 )
 
 
@@ -193,7 +193,7 @@ def AE_iso_training_procedure():
 
     # if latent_dim == 3:
     #     title = f'NVAE Normalised MinMax (epochs = {epochs})'
-    #     plot_latent_with_reconstruction_error(
+    #     plot_3Dlatent_with_error(
     #         latent_tensor = Z_batch_hat,
     #         loss_tensor = loss_reconst,
     #         title = title
@@ -376,10 +376,23 @@ def train_joint_seq_AE():
 def train_joint_seq_VAE():
 
     ###--- Meta ---###
-    epochs = 3
-    batch_size = 50
+    epochs = 2
+    batch_size = 100
     latent_dim = 3
 
+    n_layers_e = 3
+    n_layers_d = 3
+    activation = 'Softplus'
+
+    encoder_lr = 1e-3
+    decoder_lr = 1e-3
+    regr_lr = 1e-2
+    scheduler_gamma = 0.9
+
+    ete_regr_weight = 0.95
+
+    dataset_kind = 'key'
+    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     normaliser_kind = 'min_max'
 
 
@@ -387,9 +400,9 @@ def train_joint_seq_VAE():
     normaliser = create_normaliser(normaliser_kind)
     
     dataset_builder = DatasetBuilder(
-        kind = 'max',
+        kind = dataset_kind,
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        exclude_columns = exclude_columns
     )
     
     dataset = dataset_builder.build_dataset()
@@ -412,50 +425,58 @@ def train_joint_seq_VAE():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
+    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
 
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = 5)
+    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
 
-    vae_model = GaussVAE(encoder = encoder, decoder = decoder)
+    ae_model = GaussVAE(encoder = encoder, decoder = decoder)
 
     regressor = LinearRegr(latent_dim = latent_dim)
 
 
     ###--- Observation Test Setup ---###
-    n_iterations_ae = len(dataloader_ae)
-    n_iterations_regr = len(dataloader_regr)
-
-    #vae_model_obs = ModelObserver(n_epochs = epochs, n_iterations = n_iterations_ae, model = vae_model)
-    #vae_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_ae)
-
-    #regr_loss_obs = LossObserver(n_epochs = epochs, n_iterations = n_iterations_regr)
+    dataset_size_ete = len(regr_train_ds)
+    observer_callback = LossTrajectoryObserver()
 
 
     ###--- Loss Terms ---###
+    #--- VAE ---#
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
 
     kld_term = GaussianAnaKLDiv()
     #kld_term = GaussianMCKLDiv()
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    vae_loss_term = CompositeLossTerm(**vae_loss_terms)
+    vae_loss_term = CompositeLossTerm(
+        loss_terms = vae_loss_terms,
+        callbacks = {name: [observer_callback] for name in vae_loss_terms.keys()},
+    )
 
-    #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
-    reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
+    ae_loss = Loss(vae_loss_term)
 
-    regr_loss_term = RegrAdapter(Huber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+    #--- Reconstruction for testing ---#
+    reconstr_loss_term = AEAdapter(LpNorm(p = 2))
 
+    #--- Regression ---#
+    #regr_loss_term = RegrAdapter(Huber(delta = 1))
+    regr_loss_term = RegrAdapter(LpNorm(p = 2))
+    
+    #--- Composite ETE ---#
+    ete_loss_terms = {
+        'Reconstruction Term': Weigh(vae_loss_term, weight = 1 - ete_regr_weight), 
+        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
+    }
 
-    ###--- Losses ---###
-    vae_loss = Loss(vae_loss_term)
-    regr_loss = Loss(regr_loss_term)
-
-
+    ete_loss = Loss(
+        CompositeLossTerm(
+            loss_terms = ete_loss_terms,
+            callbacks = {name: [observer_callback] for name in ete_loss_terms.keys()},
+        )
+    )
+    
 
     ###--- Optimizer & Scheduler ---###
-    optimiser_vae = Adam([
+    optimiser_ae = Adam([
         {'params': encoder.parameters(), 'lr': 1e-3},
         {'params': decoder.parameters(), 'lr': 1e-3},
     ])
@@ -465,7 +486,7 @@ def train_joint_seq_VAE():
         {'params': regressor.parameters(), 'lr': 5e-3},
     ])
 
-    scheduler_vae = ExponentialLR(optimiser_vae, gamma = 0.5)
+    scheduler_ae = ExponentialLR(optimiser_ae, gamma = 0.5)
     scheduler_regr = ExponentialLR(optimiser_regr, gamma = 0.5)
 
 
@@ -478,11 +499,11 @@ def train_joint_seq_VAE():
             X_batch = X_batch[:, 1:]
 
             #--- Forward Pass ---#
-            optimiser_vae.zero_grad()
+            optimiser_ae.zero_grad()
             
-            Z_batch, infrm_dist_params, genm_dist_params = vae_model(X_batch)
+            Z_batch, infrm_dist_params, genm_dist_params = ae_model(X_batch)
 
-            loss_vae = vae_loss(
+            loss_ae = ae_loss(
                 X_batch = X_batch,
                 Z_batch = Z_batch,
                 genm_dist_params = genm_dist_params,
@@ -491,15 +512,15 @@ def train_joint_seq_VAE():
 
 
             #--- Backward Pass ---#
-            loss_vae.backward()
+            loss_ae.backward()
 
-            optimiser_vae.step()
+            optimiser_ae.step()
 
             #--- Observer Call ---#
             #vae_model_obs(epoch = epoch, iter_idx = iter_idx, model = vae_model)
             #vae_loss_obs(epoch = epoch, iter_idx = iter_idx, batch_loss = loss_vae)
 
-        scheduler_vae.step()
+        scheduler_ae.step()
 
 
     ###--- Training Loop Regr ---###
@@ -513,15 +534,20 @@ def train_joint_seq_VAE():
             #--- Forward Pass ---#
             optimiser_regr.zero_grad()
             
-            Z_batch, infrm_dist_params, genm_dist_params = vae_model(X_batch)
-
+            Z_batch, infrm_dist_params, genm_dist_params = ae_model(X_batch)
             y_hat_batch = regressor(Z_batch)
-
-
-            loss_regr = regr_loss(y_batch = y_batch, y_hat_batch = y_hat_batch)
-
+            
+            loss_ete_weighted = ete_loss(
+                X_batch = X_batch,
+                Z_batch = Z_batch,
+                genm_dist_params = genm_dist_params,
+                infrm_dist_params = infrm_dist_params,
+                y_batch = y_batch, 
+                y_hat_batch = y_hat_batch,
+            )
+        
             #--- Backward Pass ---#
-            loss_regr.backward()
+            loss_ete_weighted.backward()
 
             optimiser_regr.step()
 
@@ -545,19 +571,19 @@ def train_joint_seq_VAE():
     evaluation = Evaluation(
         dataset = dataset,
         subsets = test_datasets,
-        models = {'AE_model': vae_model,'regressor': regressor},
+        models = {'AE_model': ae_model,'regressor': regressor},
     )
 
-    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm')
-    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = 'Huber')
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed')
 
     visitors = [
         VAEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
+        ReconstrLossVisitor(reconstr_loss_term, loss_name = 'L2_norm', eval_cfg = eval_cfg_reconstr),
 
         VAEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
+        RegrLossVisitor(regr_loss_term, loss_name = 'Huber', eval_cfg = eval_cfg_comp),
         LatentPlotVisitor(eval_cfg = eval_cfg_comp)
     ]
 
@@ -801,8 +827,8 @@ def AE_joint_epoch_procedure():
 
     ###--- Meta ---###
     epochs = 2
-    batch_size = 25
-    latent_dim = 10
+    batch_size = 50
+    latent_dim = 3
 
     ae_model_type = 'NVAE'
     n_layers_e = 5
@@ -876,19 +902,24 @@ def AE_joint_epoch_procedure():
     reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     regr_loss_term = RegrAdapter(Huber(delta = 1))
 
+    # ete_loss_terms = {
+    #     'Reconstr': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
+    #     'Regr': Weigh(regr_loss_term, weight = ete_regr_weight),
+    # }
     ete_loss_terms = {
-        'Reconstr': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
-        'Regr': Weigh(regr_loss_term, weight = ete_regr_weight),
+        'Reconstr': reconstr_loss_term, 
+        'Regr': regr_loss_term,
     }
 
-    ete_loss = Loss(
-        CompositeLossTerm(
-            loss_terms = ete_loss_terms,
-            callbacks = {name: [observer_callback] for name in ete_loss_terms.keys()}
-        )
+    ete_clt = CompositeLossTerm(
+        loss_terms = ete_loss_terms,
+        callbacks = {name: [observer_callback] for name in ete_loss_terms.keys()}
     )
-    
-    ae_loss = Loss(loss_term = reconstr_loss_term)
+
+    ete_clt = WeightedCompositeLoss(composite_lt=ete_clt, weights={'Reconstr': 1 - ete_regr_weight, 'Regr': ete_regr_weight})
+
+    ete_loss = Loss(ete_clt)
+    ae_loss = Loss(reconstr_loss_term)
     
 
     ###--- Optimizer & Scheduler ---###
@@ -944,26 +975,20 @@ def AE_joint_epoch_procedure():
                 y_hat_batch = y_hat_batch,
             )
         
-            
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
 
             optimiser.step()
 
-        
         scheduler.step()
 
 
     ###--- Plot Observations ---###
     observed_losses_dict = observer_callback.get_history(concat = True)
-    for name, observed_losses in observed_losses_dict.items():
-        plot_contiguous_loss_tensor(
-            name = name,
-            epochs = epochs,
-            n_iter = len(dataloader_regr),
-            observed_losses = observed_losses,
-        )
-
+    plot_agg_training_losses(
+        training_losses = observed_losses_dict,
+        epochs = epochs,
+    )
 
     ###--- Test Loss ---###
     test_datasets = subset_factory.retrieve(kind = 'test')
@@ -1006,13 +1031,13 @@ def AE_joint_epoch_procedure():
 
     # if latent_dim == 3:
     #     title = f'NVAE Normalised (epochs = {epochs})'
-    #     plot_latent_with_reconstruction_error(
+    #     plot_3Dlatent_with_error(
     #         latent_tensor = Z_batch_ul,
     #         loss_tensor = loss_reconst,
     #         title = title
     #     )
     #     title = f'NVAE Normalised Regr(epochs = {epochs})'
-    #     plot_latent_with_reconstruction_error(
+    #     plot_3Dlatent_with_error(
     #         latent_tensor = Z_batch_l,
     #         loss_tensor = loss_regr,
     #         title = title
@@ -1024,12 +1049,12 @@ def AE_joint_epoch_procedure():
 def VAE_joint_epoch_procedure():
 
     ###--- Meta ---###
-    epochs = 5
-    batch_size = 25
-    latent_dim = 10
+    epochs = 2
+    batch_size = 100
+    latent_dim = 3
 
-    n_layers_e = 5
-    n_layers_d = 5
+    n_layers_e = 3
+    n_layers_d = 3
     activation = 'Softplus'
 
     encoder_lr = 1e-3
@@ -1077,55 +1102,51 @@ def VAE_joint_epoch_procedure():
 
     decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
 
-    vae_model = GaussVAE(encoder = encoder, decoder = decoder)
+    ae_model = GaussVAE(encoder = encoder, decoder = decoder)
 
     regressor = LinearRegr(latent_dim = latent_dim)
 
 
     ###--- Observation Test Setup ---###
     dataset_size_ete = len(regr_train_ds)
+    observer_callback = LossTrajectoryObserver()
 
-    loss_observer = CompositeLossTermObserver(
-        n_epochs = epochs,
-        dataset_size= dataset_size_ete,
-        batch_size= batch_size,
-        members = ['Reconstruction Term', 'Regression Term'],
-        name = 'ETE Loss',
-        aggregated = True,
-    )
 
     ###--- Loss Terms ---###
+    #--- VAE ---#
     ll_term = Weigh(GaussianDiagLL(), weight = -1)
 
-    kld_term = GaussianAnaKLDiv()
-    #kld_term = GaussianMCKLDiv()
+    #kld_term = GaussianAnaKLDiv()
+    kld_term = GaussianMCKLDiv()
 
     vae_loss_terms = {'Log-Likelihood': ll_term, 'KL-Divergence': kld_term}
-    vae_loss_term = CompositeLossTerm(loss_terms = vae_loss_terms)
+    vae_loss_term = CompositeLossTerm(
+        loss_terms = vae_loss_terms,
+        callbacks = {name: [observer_callback] for name in vae_loss_terms.keys()},
+    )
 
-    #reconstr_loss_term = AEAdapter(LpNorm(p = 2))
-    reconstr_loss_term = AEAdapter(RelativeLpNorm(p = 2))
+    ae_loss = Loss(vae_loss_term)
 
-    regr_loss_term = RegrAdapter(Huber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeHuber(delta = 1))
-    #regr_loss_term = RegrAdapter(RelativeLpNorm(p = 2))
+    #--- Reconstruction for testing ---#
+    reconstr_loss_term = AEAdapter(LpNorm(p = 2))
 
+    #--- Regression ---#
+    #regr_loss_term = RegrAdapter(Huber(delta = 1))
+    regr_loss_term = RegrAdapter(LpNorm(p = 2))
+    
+    #--- Composite ETE ---#
     ete_loss_terms = {
         'Reconstruction Term': Weigh(vae_loss_term, weight = 1 - ete_regr_weight), 
         'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
     }
 
-
-    ###--- Losses ---###
-    #--- For Training ---#
-    vae_loss = Loss(vae_loss_term)
-    ete_loss = Loss(CompositeLossTerm(loss_terms = ete_loss_terms))
-
-    #--- For Testing ---#
-    reconstr_loss = Loss(reconstr_loss_term)
-    regr_loss = Loss(regr_loss_term)
-
-
+    ete_loss = Loss(
+        CompositeLossTerm(
+            loss_terms = ete_loss_terms,
+            callbacks = {name: [observer_callback] for name in ete_loss_terms.keys()},
+        )
+    )
+    
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([
@@ -1138,23 +1159,68 @@ def VAE_joint_epoch_procedure():
 
 
     ###--- Training Procedure ---###
-    training_procedure = JointEpochTrainingProcedure(
-        ae_train_dataloader = dataloader_ae,
-        regr_train_dataloader = dataloader_regr,
-        ae_model = vae_model,
-        regr_model = regressor,
-        ae_loss = vae_loss,
-        ete_loss = ete_loss, 
-        optimizer = optimiser,
-        scheduler = scheduler,
-        epochs = epochs,
-    )
+    for epoch in range(epochs):
+        
+        ###--- Training Loop AE---###
+        for iter_idx, (X_batch, _) in enumerate(dataloader_ae):
+            
+            X_batch = X_batch[:, 1:]
 
-    training_procedure()
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            Z_batch, infrm_dist_params, genm_dist_params = ae_model(X_batch)
+
+            loss_ae = ae_loss(
+                X_batch = X_batch,
+                Z_batch = Z_batch,
+                genm_dist_params = genm_dist_params,
+                infrm_dist_params = infrm_dist_params,
+            )
+
+            #--- Backward Pass ---#
+            loss_ae.backward()
+
+            optimiser.step()
+
+
+        ###--- Training Loop End-To-End ---###
+        for iter_idx, (X_batch, y_batch) in enumerate(dataloader_regr):
+            
+            X_batch = X_batch[:, 1:]
+            y_batch = y_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            Z_batch, infrm_dist_params, genm_dist_params = ae_model(X_batch)
+            y_hat_batch = regressor(Z_batch)
+            
+            loss_ete_weighted = ete_loss(
+                X_batch = X_batch,
+                Z_batch = Z_batch,
+                genm_dist_params = genm_dist_params,
+                infrm_dist_params = infrm_dist_params,
+                y_batch = y_batch, 
+                y_hat_batch = y_hat_batch,
+            )
+        
+            
+            #--- Backward Pass ---#
+            loss_ete_weighted.backward()
+
+            optimiser.step()
+
+        
+        scheduler.step()
 
 
     ###--- Plot Observations ---###
-    loss_observer.plot_agg_results()
+    observed_losses_dict = observer_callback.get_history(concat = True)
+    plot_agg_training_losses(
+        training_losses = observed_losses_dict,
+        epochs = epochs,
+    )
 
 
     ###--- Test Loss ---###
@@ -1163,26 +1229,26 @@ def VAE_joint_epoch_procedure():
     evaluation = Evaluation(
         dataset = dataset,
         subsets = test_datasets,
-        models = {'AE_model': vae_model,'regressor': regressor},
+        models = {'AE_model': ae_model,'regressor': regressor},
     )
 
-    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso', loss_name = 'L2_norm')
-    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed', loss_name = 'Huber')
+    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso')
+    eval_cfg_comp = EvalConfig(data_key = 'labelled', output_name = 'ae_regr', mode = 'composed')
 
     visitors = [
         VAEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, eval_cfg = eval_cfg_reconstr),
+        ReconstrLossVisitor(reconstr_loss_term, loss_name = 'L2_error_reconstr', eval_cfg = eval_cfg_reconstr),
 
         VAEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg_comp),
+        RegrLossVisitor(regr_loss_term, loss_name = 'L2_error_regr', eval_cfg = eval_cfg_comp),
         LatentPlotVisitor(eval_cfg = eval_cfg_comp)
     ]
 
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
-    loss_reconstr = results.metrics[eval_cfg_reconstr.loss_name]
-    loss_regr = results.metrics[eval_cfg_comp.loss_name]
+    loss_reconstr = results.metrics['L2_error_reconstr']
+    loss_regr = results.metrics['L2_error_regr']
 
     print(
         f"Autoencoder:\n"
@@ -1246,8 +1312,6 @@ def train_linear_regr():
     ###--- Observation Test Setup ---###
     n_iterations_regr = len(dataloader_regr)
     dataset_size = len(regr_train_ds)
-
-    
 
 
     ###--- Losses ---###
@@ -1575,8 +1639,8 @@ def AE_regr_loss_tests():
     decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
 
     ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
-    
     #ae_model = AE(encoder = encoder, decoder = decoder)
+
     regressor = LinearRegr(latent_dim = latent_dim)
 
 
@@ -1592,15 +1656,14 @@ def AE_regr_loss_tests():
     regr_loss_term = RegrAdapter(Huber(delta = 1))
 
     ete_loss_terms = {
-        'Reconstruction Term': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
-        'Regression Term': Weigh(regr_loss_term, weight = ete_regr_weight),
+        'Reconstr': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
+        'Regr': Weigh(regr_loss_term, weight = ete_regr_weight),
     }
 
     ete_loss = Loss(CompositeLossTerm(loss_terms = ete_loss_terms))
     
     reconstr_loss = Loss(loss_term = reconstr_loss_term)
     
-
 
     ###--- Optimizer & Scheduler ---###
     optimiser = Adam([

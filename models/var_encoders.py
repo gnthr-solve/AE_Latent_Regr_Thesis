@@ -34,7 +34,9 @@ import numpy as np
 
 from torch import Tensor
 from torch import nn
+from torch.nn.functional import softplus
 
+from .activations import ACTIVATIONS
 
 
 """
@@ -68,17 +70,7 @@ class VarEncoder(nn.Module):
             self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True))
         
         ###--- Activation ---###
-        if activation == 'ReLU':
-            self.activation = nn.ReLU()
-
-        elif activation == 'PReLU':
-            self.activation = nn.PReLU()
-
-        elif activation == 'LeakyReLU':
-            self.activation = nn.LeakyReLU()
-
-        elif activation == 'Softplus':
-            self.activation = nn.Softplus()
+        self.activation = ACTIVATIONS[activation]()
 
 
     def forward(self, x: Tensor) -> Tensor:
@@ -102,9 +94,9 @@ class VarEncoder(nn.Module):
 Variational Encoder Classes - Experiment
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class VarEncoderExp(nn.Module):
+class GaussVarEncoder(nn.Module):
     
-    def __init__(self, input_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, dtype = torch.float64):
+    def __init__(self, input_dim: int, latent_dim: int, n_dist_params: int, n_layers: int = 4, activation = 'ReLU'):
         super().__init__()
 
         self.latent_dim = latent_dim
@@ -120,14 +112,14 @@ class VarEncoderExp(nn.Module):
 
         self.layers = nn.ModuleList()
 
-        self.layers.append(nn.Linear(in_features = input_dim, out_features = start, dtype = dtype))
+        self.layers.append(nn.Linear(in_features = input_dim, out_features = start))
 
         for i in range(n_layers - 1):
 
-            self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True, dtype = dtype))
+            self.layers.append(nn.Linear(in_features = n_f(i), out_features = n_f(i+1), bias = True))
         
-        self.activation = nn.ReLU()
-        #self.activation = nn.PReLU()
+        ###--- Activation ---###
+        self.activation = ACTIVATIONS[activation]()
 
 
     def forward(self, x: Tensor) -> Tensor:
@@ -138,28 +130,12 @@ class VarEncoderExp(nn.Module):
 
         infrm_dist_params: Tensor = self.layers[-1](x)
 
-        #infrm_dist_params = infrm_dist_params.reshape(-1, self.latent_dim, self.n_dist_params).squeeze()
-        #infrm_dist_params = infrm_dist_params.view(-1, self.n_dist_params, self.latent_dim).squeeze()
+        # shape = (b, l, 2)
         infrm_dist_params = infrm_dist_params.view(-1, self.latent_dim, self.n_dist_params).squeeze()
+
+        # transform variance for stability
+        infrm_dist_params[:, :, 1] = softplus(infrm_dist_params[:, :, 1])
 
         return infrm_dist_params
     
 
-
-#VarEncoder = VarEncoderExp
-
-"""
-def forward(self, x: Tensor) -> Tensor:
-    for layer in self.layers[:-1]:
-        x = self.activation(layer(x))
-    infrm_dist_params = self.layers[-1](x)
-    infrm_dist_params = infrm_dist_params.view(-1, self.latent_dim, self.n_dist_params).squeeze()
-    # Separate mean and variance components
-    mean = infrm_dist_params[:, :, 0]
-    var = infrm_dist_params[:, :, 1]
-    # Apply Softplus to variance
-    var = torch.nn.functional.softplus(var)
-    # Recombine mean and variance
-    infrm_dist_params = torch.stack([mean, var], dim=2)
-    return infrm_dist_params
-"""
