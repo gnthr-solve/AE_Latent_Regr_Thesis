@@ -1,8 +1,15 @@
-
+###--- External Library Imports ---###
 import torch
 
 from torch import Tensor
 from torch.nn import Module
+from torch.utils.data import DataLoader
+
+from pathlib import Path
+
+
+###--- Custom Imports ---###
+from data_utils import TimeSeriesDataset, AlignmentTS, custom_collate_fn
 
 from models.encoders import (
     LinearEncoder,
@@ -25,8 +32,9 @@ from loss import (
     RelativeLpNorm,
     Huber,
     RelativeHuber,
-    HuberOwn,
 )
+
+from helper_tools import map_loader
 
 
 """
@@ -134,47 +142,11 @@ def product_regr_test():
 
 
 
-def test_huber_implementations():
 
-    ###--- Tensors ---###
-    y = torch.tensor(
-        [[1.0, 2.0, 3.0],
-         [2.0, 3.0, 4.0]]
-    )
-    y_hat = torch.tensor(
-        [[1.5, 3, 5],
-         [2.5, 3.5, 4.5]]
-    )
-
-    print(
-        f'Input Tensors: \n'
-        f'-------------------------------------------------\n'
-        f'y: \n{y}\n'
-        f'y_hat: \n{y_hat}\n'
-        f'-------------------------------------------------\n'
-    )
-
-    ###--- Huber Loss ---###
-    delta = 1.0
-    huber = Huber(delta = delta)
-    huber_own = HuberOwn(delta = delta)
-
-    loss = huber(y, y_hat)
-    loss_own = huber_own(y, y_hat)
-
-    print(
-        f'Loss: \n'
-        f'-------------------------------------------------\n'
-        f'loss term: {loss}\n'
-        f'loss term shape: {loss.shape}\n'
-        f'-------------------------------------------------\n'
-        f'own loss term: {loss_own}\n'
-        f'own loss term shape: {loss_own.shape}\n'
-        f'-------------------------------------------------\n'
-    )
-
-
-
+"""
+Test Functions - DNN
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 def test_DNN_layout():
     #regressor = FunnelDNNRegr(input_dim = 200, n_layers = 3)
     linear_funnel = LinearFunnel(input_dim = 200, output_dim=2, n_layers = 5)
@@ -183,6 +155,10 @@ def test_DNN_layout():
 
 
 
+"""
+Test Functions - Hyperparam configs
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 def test_hyperop_cfg():
 
     from hyperoptim.experiment_cfgs import (
@@ -197,8 +173,34 @@ def test_hyperop_cfg():
     print(linear_regr_iso_cfg)
 
 
+
+
 """
-Test Functions Execution
+Test Functions - Transformer Approach Testing
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def transformer_approach():
+
+    index_map = map_loader(Path('data/alignment_info/index_id_map.json'))
+    alignment_ts = AlignmentTS(index_map = index_map)
+
+    ts_dataset = TimeSeriesDataset(alignment = alignment_ts)
+
+    sample = ts_dataset[5]
+    print(
+        f'Sample properties: \n'
+        f'---------------------------------------------------------------\n'
+        f'Type: \n{type(sample)}\n'
+        f'Length: \n{len(sample)}\n'
+        f'Shape: \n{sample.shape}\n'
+        f'---------------------------------------------------------------\n'
+        f'First 10 entries: \n{sample[:10]}\n'
+    )
+
+
+
+"""
+Test Functions - Execution
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 
@@ -207,13 +209,19 @@ if __name__=="__main__":
     ###--- Module ---###
     #module_properties_test()
 
+
     ###--- Product Regressor ---###
     #product_regr_test()
+
+
+    ###--- DNN Funnel layout ---###
     #test_DNN_layout()
 
 
-    test_hyperop_cfg()
+    ###--- Hyperparameter Opt. Cfgs ---###
+    #test_hyperop_cfg()
 
 
-    ###--- Loss ---###
-    #test_huber_implementations()
+    ###--- Transformer build Tests ---###
+    transformer_approach()
+    

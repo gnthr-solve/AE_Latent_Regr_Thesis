@@ -16,7 +16,7 @@ from .alignment import Alignment, load_init_alignment
 from .info import time_col
 
 """
-Data Helper Tools - Dataset Builder
+Data - Dataset Builder
 -------------------------------------------------------------------------------------------------------------------------------------------
 Setup class following the Builder design pattern.
 """

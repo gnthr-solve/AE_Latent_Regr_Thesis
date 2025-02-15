@@ -3,8 +3,6 @@ import os
 import ray
 import logging
 
-from ray import train, tune
-
 from pathlib import Path
 
 from hyperoptim import run_experiment
@@ -41,10 +39,19 @@ if __name__=="__main__":
     max_concurrent = 6
     should_resume = True
     replace_default_tmp = False
+    restart_errored = True
+    # only windows:
     max_retries = 5
     retry_delay = 10
-    restart_errored = True
+    
 
+    scheduler_kwargs = {
+        'time_attr': 'training_iteration',
+        'max_t': 200,
+        'grace_period': 15,
+        'reduction_factor': 2,
+        'brackets': 2,
+    }
 
     ###--- Set Up Log Config ---###
     results_dir = Path(f'./results/')
@@ -72,7 +79,7 @@ if __name__=="__main__":
     ]
 
 
-    ###--- Run Experiments ---###
+    ###--- Run all Experiments in experiment_cfgs ---###
     for exp_cfg in experiment_cfgs:
 
         run_experiment(
@@ -81,10 +88,20 @@ if __name__=="__main__":
             cleanup_frequency = cleanup_frequency, 
             max_concurrent = max_concurrent,
             should_resume = should_resume,
+            scheduler_kwargs = scheduler_kwargs,
             max_retries = max_retries,
-            retry_delay = retry_delay,
-            replace_default_tmp = replace_default_tmp,
             restart_errored = restart_errored,
         )
 
+        # run_experiment_windows(
+        #     exp_cfg = exp_cfg, 
+        #     save_frequency = save_frequency, 
+        #     cleanup_frequency = cleanup_frequency, 
+        #     max_concurrent = max_concurrent,
+        #     should_resume = should_resume,
+        #     max_retries = max_retries,
+        #     retry_delay = retry_delay,
+        #     replace_default_tmp = replace_default_tmp,
+        #     restart_errored = restart_errored,
+        # )
     

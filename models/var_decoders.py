@@ -98,9 +98,11 @@ class SigmaGaussVarDecoder(nn.Module):
         # shape = (b, d, 2)
         genm_dist_params = genm_dist_params.view(-1, self.output_dim, self.n_dist_params).squeeze()
 
-        # transform variance-related parameter for stability, interpret as std sigma.
+        ###--- transform variance-related parameter for stability, interpret as std sigma. ---###
         mean = genm_dist_params[..., 0]
         var_param = genm_dist_params[..., 1]
         
-        sigma = softplus(var_param)
+        # softplus guarantees smaller positive values, addition of small stability factor avoids log(0) = -inf 
+        sigma = softplus(var_param) + 1e-6
+
         return torch.stack([mean, sigma], dim=-1).squeeze()

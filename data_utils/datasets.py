@@ -11,7 +11,7 @@ from pathlib import Path
 from collections import namedtuple
 from dataclasses import dataclass, field
 
-from .alignment import Alignment
+from .alignment import Alignment, AlignmentTS
 from .info import identifier_col
 
 """
@@ -22,7 +22,7 @@ NOTE: Not tested & requires custom collate function to work with pytorch dataloa
 """
 class TimeSeriesDataset(Dataset):
 
-    def __init__(self, alignment: Alignment):
+    def __init__(self, alignment: AlignmentTS):
 
         self.alignment = alignment
 
@@ -30,6 +30,7 @@ class TimeSeriesDataset(Dataset):
         self.ts_dir = data_dir / 'timeseries'
 
         self.metadata_df = pd.read_csv(data_dir / 'metadata.csv', low_memory = False)
+
         # Arrange metadata_df rows to match index_map order
         index_order = [self.alignment.index_map[i] for i in sorted(self.alignment.index_map.keys())]
         self.metadata_df.set_index(identifier_col, inplace=True)

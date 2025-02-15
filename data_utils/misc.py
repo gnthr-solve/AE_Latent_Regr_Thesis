@@ -131,7 +131,7 @@ def build_dataset_segment_dataframe(dataset: TensorDataset, indices: list[int], 
 Data Helper Tools - tensor to df
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def X_tensor_to_df(X_data: Tensor, alignment, metadata: pd.DataFrame) -> pd.DataFrame:
+def X_tensor_to_df(X_data: Tensor, alignment: Alignment, metadata: pd.DataFrame) -> pd.DataFrame:
 
     index_map = alignment.index_map
     col_map = alignment.X_col_map

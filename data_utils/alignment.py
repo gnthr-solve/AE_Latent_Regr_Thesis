@@ -15,31 +15,21 @@ from dataclasses import dataclass, field
 from helper_tools.data_hts import map_loader
 
 """
-DataSets - Alignment
+DataSets - Alignment for TimeSeriesDataset
 -------------------------------------------------------------------------------------------------------------------------------------------
-Previous dataclass-based Alignment implementation.
 """
 @dataclass(slots=True)
-class AlignmentPrev:
+class AlignmentTS:
 
     index_map: dict[int, str] = field(default_factory = {})
 
-    X_col_map: dict[int, str] = field(default_factory = {})
-    y_col_map: dict[int, str] = field(default_factory = {})
-
-    X_cols: list[str] = field(init=False)
-    y_cols: list[str] = field(init=False)
-
-    def __post_init__(self):
-
-        self.X_cols = list(self.X_col_map.values())
-        self.y_cols = list(self.y_col_map.values())
+    
 
 
 
 
 """
-DataSets - Alignment
+DataSets - TensorDataset Alignment
 -------------------------------------------------------------------------------------------------------------------------------------------
 Mapping container class incorporated into TensorDataset.
 """
