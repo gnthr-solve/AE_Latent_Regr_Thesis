@@ -56,6 +56,17 @@ Trainables - Deep Regression
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
+    """
+    Trainable for the direct deep-regression model training routine.
+
+    Args:
+    --------
+        config: dict
+            Config containing all hyperparameters choices for this trial.
+        dataset: TensorDataset
+        exp_cfg: ExperimentConfig
+            Experiment config for access to optim_loss and eval_metrics.
+    """
 
     ###--- Experiment Meta ---###
     optim_loss = exp_cfg.optim_loss

@@ -24,8 +24,24 @@ Ray Callbacks - PeriodicSaveCallback
 Saves the results of all previous trials as a pandas dataframe.
 """
 class PeriodicSaveCallback(Callback):
+    """
+    tune.Callback subclass to periodically save Trial results to csv file.
+    """
+    def __init__(self, save_frequency: int, experiment_name: str, tracked_metrics: list[str], results_dir: Path):
+        """
+        Init method.
 
-    def __init__(self, save_frequency, experiment_name, tracked_metrics: list[str], results_dir):
+        Args:
+        --------
+            save_frequency: int
+                Number of terminated trials after which to save intermediate results.
+            experiment_name: str
+                Name of experiment, used for csv file name. 
+            tracked_metrics: list[str]
+                Names of (reported) metrics to include in intermediate results.
+            results_dir: Path
+                Directory where to save csv.
+        """
         self.experiment_name = experiment_name
         self.tracked_metrics = tracked_metrics
         
@@ -37,7 +53,13 @@ class PeriodicSaveCallback(Callback):
 
 
     def on_trial_complete(self, iteration, trials: list[Trial], trial: Trial, **info):
-
+        """
+        Concrete implementation of template method.
+        Increments a counter for completed trials. 
+        If counter is multiple of save_frequency:
+            - retrieves results of previously terminated or errored trials (avoid incomplete trials)
+            - exports results as csv 
+        """
         self.trial_counter += 1
 
         if self.trial_counter % self.save_frequency == 0:
@@ -45,9 +67,9 @@ class PeriodicSaveCallback(Callback):
             results = []
             for t in trials:
 
+                # 'trials' argument corresponds to all trials, including currently running ones --> limit to completed
                 if t.status in [t.TERMINATED, t.ERROR]:
                     result = t.last_result.copy()
-                    #print(result)
                     result_data = {metric: result.get(metric, None) for metric in self.tracked_metrics}
                     result_data.update(result.get('config', {}))
 
@@ -70,9 +92,26 @@ Transfers the currently best models from the checkpoint directory to the results
 Deletes model checkpoints from previous trials at a determined frequency.
 """
 class GlobalBestModelSaver(Callback):
+    """
+    tune.Callback subclass to store the state-dict of currently best performing model (or models for e.g. composite)
+    in the experiment directory.
+    """
+    def __init__(self, tracked_metric: str, mode: str, cleanup_frequency: int, results_dir: Path):
+        """
+        Init method.
 
-    def __init__(self, tracked_metric: str, mode: str, cleanup_frequency: int, experiment_name: str, results_dir: Path):
-        self.experiment_name = experiment_name
+        Args:
+        --------
+            tracked_metric: str
+                Name of optimised metric by which to evaluate/compare model performance.
+            mode: str
+                Optimisation mode ('min' or 'max').
+            cleanup_frequency: int
+                Number of completed trials after which to remove model checkpoints from Tune Trial directory,
+                to save on memory (model-state can be large and quickly add up).
+            results_dir: Path
+                Experiment directory where to store best performing model checkpoint.
+        """
         
         self.tracked_metric = tracked_metric
         self.mode = mode 
@@ -96,7 +135,15 @@ class GlobalBestModelSaver(Callback):
     
 
     def on_trial_complete(self, iteration, trials: list[Trial], trial: Trial, **info):
+        """
+        Concrete implementation of template method.
+        Increments a counter for completed trials.
 
+        If the performance of the Trial, that reports completion, is better than previously seen Trials,
+        method moves all '.pt' files from Tune Trial Checkpoint directory to experiment directory.
+        
+        If counter is a multiple of cleanup_frequency, all checkpoints are deleted from Tune Trial directories.
+        """
         self.trial_counter += 1
         
         last_result = trial.last_result
@@ -141,7 +188,16 @@ class GlobalBestModelSaver(Callback):
     
 
     def _cleanup_checkpoints(self, trials: list[Trial], exclude_trial: Trial):
+        """
+        Removes old trial checkpoints from completed trials (terminated or errored) for reduced memory usage.
         
+        Args:
+        --------
+            trials: list[Trial]
+                List of all currently registered Trial's.
+            exclude_trial: Trial
+                Trial to be excluded from deletion that just reported completion.
+        """
         for t in trials:
 
             if t.status not in [t.TERMINATED, t.ERROR]:

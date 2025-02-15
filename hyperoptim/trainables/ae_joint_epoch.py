@@ -58,7 +58,17 @@ Trainables - AE Linear Joint Epoch
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
-    
+    """
+    Trainable for the autoencoder-linear model composition and joint-epoch training routine.
+
+    Args:
+    --------
+        config: dict
+            Config containing all hyperparameters choices for this trial.
+        dataset: TensorDataset
+        exp_cfg: ExperimentConfig
+            Experiment config for access to optim_loss and eval_metrics.
+    """
     ###--- Experiment Meta ---###
     optim_loss = exp_cfg.optim_loss
 
@@ -257,7 +267,17 @@ Trainables - AE Deep Joint Epoch
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
+    """
+    Trainable for the autoencoder-deep model composition and joint-epoch training routine.
     
+    Args:
+    --------
+        config: dict
+            Config containing all hyperparameters choices for this trial.
+        dataset: TensorDataset
+        exp_cfg: ExperimentConfig
+            Experiment config for access to optim_loss and eval_metrics.
+    """
     ###--- Experiment Meta ---###
     optim_loss = exp_cfg.optim_loss
 
@@ -481,7 +501,18 @@ Trainables - AE Linear Joint Epoch EXPERIMENT
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def AE_linear_joint_epoch_prime(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
-    logger = logging.getLogger(__name__)
+    """
+    Trainable for the autoencoder-linear model composition and joint-epoch training routine.
+    For experiments.
+
+    Args:
+    --------
+        config: dict
+            Config containing all hyperparameters choices for this trial.
+        dataset: TensorDataset
+        exp_cfg: ExperimentConfig
+            Experiment config for access to optim_loss and eval_metrics.
+    """
     ###--- Experiment Meta ---###
     optim_loss = exp_cfg.optim_loss
 
@@ -610,16 +641,13 @@ def AE_linear_joint_epoch_prime(config, dataset: TensorDataset, exp_cfg: Experim
             Z_batch, X_hat_batch = ae_model(X_batch)
             y_hat_batch = regressor(Z_batch)
 
-            try:
-                loss_ete_weighted = ete_loss(
-                    X_batch = X_batch, 
-                    X_hat_batch = X_hat_batch,
-                    y_batch = y_batch, 
-                    y_hat_batch = y_hat_batch,
-                )
-            except Exception as e:
-                logger.error(f"Error in composite loss: \n{e}")
-                raise e
+            loss_ete_weighted = ete_loss(
+                X_batch = X_batch, 
+                X_hat_batch = X_hat_batch,
+                y_batch = y_batch, 
+                y_hat_batch = y_hat_batch,
+            )
+            
             
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
@@ -629,7 +657,7 @@ def AE_linear_joint_epoch_prime(config, dataset: TensorDataset, exp_cfg: Experim
         
         #--- Model Checkpoints & Report ---#
         reporter.report(epoch = epoch, ae_model = ae_model, regressor = regressor)
-        print(reporter.current_losses)
+        
         scheduler.step()
 
 

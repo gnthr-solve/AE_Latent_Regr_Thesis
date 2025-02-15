@@ -153,8 +153,7 @@ def run_experiment_windows(
     global_best_model_callback = GlobalBestModelSaver(
         tracked_metric = exp_cfg.optim_loss,   
         mode = exp_cfg.optim_mode,              
-        cleanup_frequency = cleanup_frequency,       
-        experiment_name = exp_cfg.experiment_name,
+        cleanup_frequency = cleanup_frequency,
         results_dir = results_dir,
     )
 
@@ -377,8 +376,7 @@ def run_experiment(
     global_best_model_callback = GlobalBestModelSaver(
         tracked_metric = exp_cfg.optim_loss,   
         mode = exp_cfg.optim_mode,              
-        cleanup_frequency = cleanup_frequency,       
-        experiment_name = exp_cfg.experiment_name,
+        cleanup_frequency = cleanup_frequency,
         results_dir = results_dir,
     )
 

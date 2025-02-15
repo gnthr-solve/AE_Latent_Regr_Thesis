@@ -55,7 +55,20 @@ Main Functions - Training
 """
 
 def VAE_iso(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
-    
+    """
+    Trainable for VAE training routine.
+    iso == model trained in isolation, i.e. only to optimise reconstruction.
+    Mainly for VAE tests.
+
+    Args:
+    --------
+        config: dict
+            Config containing all hyperparameters choices for this trial.
+        dataset: TensorDataset
+        exp_cfg: ExperimentConfig
+            Experiment config for access to optim_loss and eval_metrics.
+    """
+
     ###--- Experiment Meta ---###
     optim_loss = exp_cfg.optim_loss
 
