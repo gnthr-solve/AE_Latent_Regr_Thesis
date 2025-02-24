@@ -23,7 +23,9 @@ Ray Helper Tools - Loss Reporter
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 class RayTuneLossReporter:
-
+    """
+    Implementation for the idea to use CompositeLossTerm callback mechanism for reporting losses and creating checkpoints.
+    """
     def __init__(self, checkpoint_condition: Callable[[int], bool]):
         self.checkpoint_condition = checkpoint_condition
         self.current_losses: dict[str, float] = {}

@@ -34,69 +34,30 @@ class LossVisitor(EvaluationVisitor):
     
 
 """
-Loss Visitors - ReconstrLossVisitor
+Loss Visitors - LossTermVisitorS
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-class ReconstrLossVisitor(LossVisitor):
+class LossTermVisitorS(LossVisitor):
 
     def __init__(self, loss_term: LossTerm, loss_name: str, eval_cfg: EvalConfig):
         super().__init__(eval_cfg = eval_cfg)
 
         self.loss_term = loss_term
         self.loss_name = loss_name
-        
+
 
     def visit(self, eval: Evaluation):
         """
-        Calculates reconstruction losses for AE model outputs via a LossTerm instance.
+        Calculates losses for a single LossTerm
 
         Produces both the complete loss batch, inscribed in losses, and the mean loss, inscribed in metrics.
         """
         eval_results = eval.results
-
-        data = self._get_data(eval)
+        tensors = self._get_data(eval)
 
         with torch.no_grad():
-
-            X_batch = data['X_batch']
-            X_hat_batch = data['X_hat_batch']
-
-            loss_batch = self.loss_term(X_batch = X_batch, X_hat_batch = X_hat_batch)
-
-            eval_results.losses[self.loss_name] = loss_batch
-            eval_results.metrics[self.loss_name] = loss_batch.mean().item()
-
-
-
-
-
-"""
-Loss Visitors - RegrLossVisitor
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-class RegrLossVisitor(LossVisitor):
-
-    def __init__(self, loss_term: LossTerm, loss_name: str, eval_cfg: EvalConfig):
-        super().__init__(eval_cfg = eval_cfg)
-
-        self.loss_term = loss_term
-        self.loss_name = loss_name
-    
-    def visit(self, eval: Evaluation):
-        """
-        Calculates losses for regression model outputs via a LossTerm instance.
-
-        Produces both the complete loss batch, inscribed in losses, and the mean loss, inscribed in metrics.
-        """
-        eval_results = eval.results
-
-        data = self._get_data(eval)
-        y_batch = data['y_batch']
-        y_hat_batch = data['y_hat_batch']
-        
-        with torch.no_grad():
-
-            loss_batch = self.loss_term(y_batch = y_batch, y_hat_batch = y_hat_batch)
+            
+            loss_batch = self.loss_term(**tensors)
 
             eval_results.losses[self.loss_name] = loss_batch
             eval_results.metrics[self.loss_name] = loss_batch.mean().item()
@@ -108,7 +69,6 @@ class RegrLossVisitor(LossVisitor):
 Loss Visitors - Generalisation Attempt
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-
 class LossTermVisitor(LossVisitor):
 
     def __init__(self, loss_terms: dict[str, LossTerm], eval_cfg: EvalConfig):
@@ -134,5 +94,6 @@ class LossTermVisitor(LossVisitor):
 
                 eval_results.losses[name] = loss_batch
                 eval_results.metrics[name] = loss_batch.mean().item()
+
 
 

@@ -44,7 +44,7 @@ from loss.adapters import AEAdapter, RegrAdapter
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
     AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor, LossTermVisitor
+    LossTermVisitor
 )
 
 from helper_tools.setup import create_eval_metric

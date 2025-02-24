@@ -9,7 +9,8 @@ from pathlib import Path
 
 
 ###--- Custom Imports ---###
-from data_utils import TimeSeriesDataset, AlignmentTS, custom_collate_fn
+from data_utils import DatasetBuilder, TimeSeriesDataset, AlignmentTS, custom_collate_fn
+from data_utils.data_filters import filter_by_machine
 
 from models.encoders import (
     LinearEncoder,
@@ -25,6 +26,8 @@ from models.regressors import LinearRegr, ProductRegr, FunnelDNNRegr
 from models import AE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
+from models.transformer_ae.positional_encoding import PositionalEncoding
+
 from loss import (
     Loss,
     CompositeLossTerm,
@@ -35,7 +38,7 @@ from loss import (
 )
 
 from helper_tools import map_loader
-
+from helper_tools.setup import create_normaliser
 
 """
 Test Functions - Module
@@ -154,6 +157,35 @@ def test_DNN_layout():
 
 
 
+"""
+Test Functions - TensorDataset tests 
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def test_TensorDataset():
+    dataset_kind = 'key'
+    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+    normaliser_kind = 'min_max'
+    filter_condition = filter_by_machine('M_A')
+
+
+    ###--- Dataset ---###
+    normaliser = create_normaliser(normaliser_kind)
+
+    dataset_builder = DatasetBuilder(
+        kind = dataset_kind,
+        normaliser = normaliser,
+        #exclude_columns = exclude_columns,
+        filter_condition = filter_condition,
+        #exclude_const_columns = False,
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    print(f'Dataset size: {len(dataset)}')
+    print(dataset.alignm.X_col_map)
+    
+
+
+
 
 """
 Test Functions - Hyperparam configs
@@ -179,6 +211,18 @@ def test_hyperop_cfg():
 Test Functions - Transformer Approach Testing
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
+def positional_encoding_test():
+    max_len = 1000
+    d_model = 6
+
+    pos_encoding = PositionalEncoding(d_model=d_model, max_len=max_len)
+    print(
+        f'Positional encoding for max_len = {max_len}, d_model = {d_model}: \n'
+        f'{pos_encoding.pe[:10]}\n'
+    )
+
+
+
 def transformer_approach():
 
     index_map = map_loader(Path('data/alignment_info/index_id_map.json'))
@@ -186,16 +230,34 @@ def transformer_approach():
 
     ts_dataset = TimeSeriesDataset(alignment = alignment_ts)
 
-    sample = ts_dataset[5]
-    print(
-        f'Sample properties: \n'
-        f'---------------------------------------------------------------\n'
-        f'Type: \n{type(sample)}\n'
-        f'Length: \n{len(sample)}\n'
-        f'Shape: \n{sample.shape}\n'
-        f'---------------------------------------------------------------\n'
-        f'First 10 entries: \n{sample[:10]}\n'
+    # sample = ts_dataset[5]
+    # print(
+    #     f'Sample properties: \n'
+    #     f'---------------------------------------------------------------\n'
+    #     f'Type: \n{type(sample)}\n'
+    #     f'Length: \n{len(sample)}\n'
+    #     f'Shape: \n{sample.shape}\n'
+    #     f'---------------------------------------------------------------\n'
+    #     f'First 5 entries: \n{sample[:5]}\n'
+    # )
+
+    # Create DataLoader with collate function
+    batch_size = 4
+    loader = DataLoader(
+        ts_dataset,
+        batch_size=batch_size,
+        collate_fn=custom_collate_fn,
+        shuffle=True
     )
+
+    for batch_idx, (padded_sequences, lengths) in enumerate(loader):
+        print(f"Batch {batch_idx+1}")
+        print(f"Padded sequences shape: {padded_sequences.shape}")
+        print(f"Lengths tensor: {lengths}")
+        print(f"Sample sequence (first in batch):\n{padded_sequences[0, :10]}")
+        
+        if batch_idx == 1:
+            break
 
 
 
@@ -218,10 +280,15 @@ if __name__=="__main__":
     #test_DNN_layout()
 
 
+    ###--- TensorDataset ---###
+    test_TensorDataset()
+
+
     ###--- Hyperparameter Opt. Cfgs ---###
     #test_hyperop_cfg()
 
 
     ###--- Transformer build Tests ---###
-    transformer_approach()
+    #positional_encoding_test()
+    #transformer_approach()
     

@@ -56,3 +56,18 @@ def get_valid_batch_size(tensor: Tensor):
 
     return valid_batch_size
 
+
+
+
+"""
+Torch General - Constant Mask
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def constant_mask(tensor: Tensor, axis: int):
+
+    min_vals = tensor.min(dim=axis, keepdim=True).values
+    max_vals = tensor.max(dim=axis, keepdim=True).values
+
+    constant_mask = (min_vals == max_vals).squeeze(axis)
+    
+    return constant_mask

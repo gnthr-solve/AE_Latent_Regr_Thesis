@@ -36,7 +36,7 @@ from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
     AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor, LossTermVisitor
+    LossTermVisitor
 )
 
 from visualisation import *
@@ -1262,7 +1262,7 @@ def eval_model_ae_linear_lim_dim():
     
 def eval_model_ae_deep():
 
-    results_dir = Path('./results/')
+    results_dir = Path('./results_experiments/')
 
     experiment_names = [
         'AE_linear_joint_epoch_key_raw',
@@ -1294,8 +1294,8 @@ def eval_model_ae_deep():
 
 
     ###--- Plot B ---###
-    save_path = '../Thesis/assets/figures/results/ae_regr/deep_true_v_pred_KEY_unn.pdf'
-    plot_actual_v_predicted_separate(evaluation=evaluation, outputs_key='ae_regr', save_path = save_path)
+    #save_path = '../Thesis/assets/figures/results/ae_regr/deep_true_v_pred_KEY_unn.pdf'
+    #plot_actual_v_predicted_separate(evaluation=evaluation, outputs_key='ae_regr', save_path = save_path)
 
 
 """
@@ -1307,8 +1307,8 @@ if __name__=="__main__":
     
     #eval_model_dnn()
     
-    eval_model_ae_linear()
+    #eval_model_ae_linear()
     #eval_model_ae_linear_lim_dim()
-    #eval_model_ae_deep()
+    eval_model_ae_deep()
 
     pass

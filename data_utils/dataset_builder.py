@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from preprocessing.normalisers import MinMaxNormaliser, ZScoreNormaliser
+from helper_tools import constant_mask
 
 from .datasets import TensorDataset
 from .alignment import Alignment, load_init_alignment
@@ -43,6 +44,7 @@ class DatasetBuilder:
         normaliser: MinMaxNormaliser | ZScoreNormaliser = None,
         exclude_columns: list[str] = [],
         filter_condition: Callable[[pd.DataFrame], pd.Series] = None,
+        exclude_const_columns: bool = True,
         ):
 
         data_dir = Path(f"./data")
@@ -51,6 +53,7 @@ class DatasetBuilder:
         self.normaliser = normaliser
         self.exclude_columns = exclude_columns
         self.filter_condition = filter_condition
+        self.exclude_const_columns = exclude_const_columns
 
         self.alignment = load_init_alignment(kind = kind)
 
@@ -94,6 +97,21 @@ class DatasetBuilder:
         self.y_data = self.y_data[data_mask]
 
 
+    def remove_constant_features(self):
+        """
+        Removes constant columns and then updates alignment.
+        """
+        with torch.no_grad():
+
+            X_data_const_mask = constant_mask(tensor = self.X_data, axis = 0)
+            const_indices = torch.where(X_data_const_mask)[0].tolist()
+            print(const_indices)
+
+            self.X_data = self.X_data[:, ~X_data_const_mask]
+            
+        self.alignment.filter_col_map(filter_out_values = const_indices, by_key = False)
+
+
     def normalise(self):
         """
         Normalises the input data, using the normaliser attribute, first, then updates alignment.
@@ -116,15 +134,19 @@ class DatasetBuilder:
         Applies normalisation and filter operations if applicable, then instantiates and returns
         the TensorDataset.
         """
+        if self.filter_condition is not None:
+            self.filter_rows_by_metadata()
+
         if self.exclude_columns:
             self.exclude_columns_and_update_mapping()
+
+        if self.exclude_const_columns:
+            self.remove_constant_features()
 
         if self.normaliser is not None:
             self.normalise()
 
-        if self.filter_condition is not None:
-            self.filter_rows_by_metadata()
-
+        
         dataset = TensorDataset(self.X_data, self.y_data, self.metadata_df, alignment = self.alignment)
 
         return dataset

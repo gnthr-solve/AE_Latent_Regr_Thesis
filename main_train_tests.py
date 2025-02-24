@@ -51,11 +51,13 @@ from training.procedure_joint import JointEpochTrainingProcedure
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
     AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor, LossTermVisitor,
+    LossTermVisitorS, LossTermVisitor,
     LatentPlotVisitor, LatentDistributionVisitor,
+    LossStatisticsVisitor,
 )
 
-from helper_tools.setup import create_normaliser 
+from helper_tools.setup import create_normaliser
+from helper_tools import dict_str
 from visualisation.general_plot_funcs import (
     plot_loss_tensor,
     plot_agg_training_losses,
@@ -180,13 +182,13 @@ def AE_iso_training_procedure():
         models = {'AE_model': model},
     )
 
-    eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso', loss_name = 'rel_L2_loss')
+    eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso')
 
     ae_output_visitor = VAEOutputVisitor(eval_cfg = eval_cfg) if model_type == 'VAE' else AEOutputVisitor(eval_cfg = eval_cfg)
     dist_vis_visitor = LatentPlotVisitor(eval_cfg = eval_cfg) if latent_dim == 3 else LatentDistributionVisitor(eval_cfg = eval_cfg)
     visitors = [
         ae_output_visitor,
-        ReconstrLossVisitor(test_reconstr_term, eval_cfg = eval_cfg),
+        LossTermVisitorS(test_reconstr_term, loss_name = 'rel_L2_loss', eval_cfg = eval_cfg),
         dist_vis_visitor,
     ]
 
@@ -585,11 +587,11 @@ def train_joint_seq_VAE():
 
     visitors = [
         VAEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, loss_name = 'L2_norm', eval_cfg = eval_cfg_reconstr),
+        LossTermVisitorS(reconstr_loss_term, loss_name = 'L2_norm', eval_cfg = eval_cfg_reconstr),
 
         VAEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, loss_name = 'Huber', eval_cfg = eval_cfg_comp),
+        LossTermVisitorS(regr_loss_term, loss_name = 'Huber', eval_cfg = eval_cfg_comp),
         LatentPlotVisitor(eval_cfg = eval_cfg_comp)
     ]
 
@@ -793,11 +795,11 @@ def train_seq_AE():
 
     visitors = [
         AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, 'L2_norm', eval_cfg = eval_cfg_reconstr),
+        LossTermVisitorS(reconstr_loss_term, 'L2_norm', eval_cfg = eval_cfg_reconstr),
 
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, 'Huber', eval_cfg = eval_cfg_comp),
+        LossTermVisitorS(regr_loss_term, 'Huber', eval_cfg = eval_cfg_comp),
         LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name ='Huber')
     ]
 
@@ -1067,7 +1069,7 @@ def AE_joint_epoch_procedure():
 
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
-        normaliser = normaliser,
+        #normaliser = normaliser,
         exclude_columns = exclude_columns,
         #filter_condition = filter_condition,
     )
@@ -1081,7 +1083,7 @@ def AE_joint_epoch_procedure():
 
     ae_train_ds = train_subsets['unlabelled']
     regr_train_ds = train_subsets['labelled']
-
+    
 
     ###--- DataLoader ---###
     dataloader_ae = DataLoader(ae_train_ds, batch_size = batch_size, shuffle = True)
@@ -1115,27 +1117,22 @@ def AE_joint_epoch_procedure():
 
 
     ###--- Losses ---###
-    reconstr_loss_term = AEAdapter(LpNorm(p = 2))
-    regr_loss_term = RegrAdapter(Huber(delta = 1))
-
-    # ete_loss_terms = {
-    #     'Reconstr': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
-    #     'Regr': Weigh(regr_loss_term, weight = ete_regr_weight),
-    # }
-    ete_loss_terms = {
-        'Reconstr': reconstr_loss_term, 
-        'Regr': regr_loss_term,
+    ae_loss_name = 'L2_reconstr'
+    regr_loss_name = 'huber_regr'
+    loss_terms = {
+        ae_loss_name: AEAdapter(LpNorm(p = 2)), 
+        regr_loss_name: RegrAdapter(Huber(delta = 1)),
     }
 
     ete_clt = CompositeLossTerm(
-        loss_terms = ete_loss_terms,
-        callbacks = {name: [observer_callback] for name in ete_loss_terms.keys()}
+        loss_terms = loss_terms,
+        callbacks = {name: [observer_callback] for name in loss_terms.keys()}
     )
 
-    ete_clt = WeightedCompositeLoss(composite_lt=ete_clt, weights={'Reconstr': 1 - ete_regr_weight, 'Regr': ete_regr_weight})
+    ete_clt = WeightedCompositeLoss(composite_lt=ete_clt, weights={ae_loss_name: 1 - ete_regr_weight, regr_loss_name: ete_regr_weight})
 
     ete_loss = Loss(ete_clt)
-    ae_loss = Loss(reconstr_loss_term)
+    ae_loss = Loss(loss_terms[ae_loss_name])
     
 
     ###--- Optimizer & Scheduler ---###
@@ -1220,18 +1217,19 @@ def AE_joint_epoch_procedure():
 
     visitors = [
         AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, 'L2_norm', eval_cfg = eval_cfg_reconstr),
+        LossTermVisitorS(loss_terms[ae_loss_name], ae_loss_name, eval_cfg = eval_cfg_reconstr),
 
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, 'Huber', eval_cfg = eval_cfg_comp),
-        #LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name ='Huber')
+        LossTermVisitorS(loss_terms[regr_loss_name], regr_loss_name, eval_cfg = eval_cfg_comp),
+        #LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name ='Huber'),
+        LossStatisticsVisitor(loss_name = regr_loss_name, eval_cfg = eval_cfg_comp)
     ]
 
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
-    loss_reconstr = results.metrics['L2_norm']
-    loss_regr = results.metrics['Huber']
+    loss_reconstr = results.metrics[ae_loss_name]
+    loss_regr = results.metrics[regr_loss_name]
 
     print(
         f"Autoencoder:\n"
@@ -1242,7 +1240,11 @@ def AE_joint_epoch_procedure():
         f"Regression End-To-End:\n"
         f"---------------------------------------------------------------\n"
         f"After {epochs} epochs with {len(dataloader_regr)} iterations each\n"
-        f"Avg. Loss on labelled testing subset: {loss_regr}\n"
+        f"Avg. Loss on labelled testing subset: {loss_regr}\n\n"
+
+        f"All Metrics:\n"
+        f"---------------------------------------------------------------\n"
+        f"{dict_str(results.metrics)}\n"
     )
 
     # if latent_dim == 3:
@@ -1462,11 +1464,11 @@ def VAE_joint_epoch_procedure():
 
     visitors = [
         VAEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, loss_name = 'L2_error_reconstr', eval_cfg = eval_cfg_reconstr),
+        LossTermVisitorS(reconstr_loss_term, loss_name = 'L2_error_reconstr', eval_cfg = eval_cfg_reconstr),
 
         VAEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, loss_name = 'L2_error_regr', eval_cfg = eval_cfg_comp),
+        LossTermVisitorS(regr_loss_term, loss_name = 'L2_error_regr', eval_cfg = eval_cfg_comp),
         LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name = 'L2_error_regr')
     ]
 
@@ -1789,7 +1791,7 @@ def train_deep_regr():
     eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso', loss_name = 'Huber')
     visitors = [
         RegrOutputVisitor(eval_cfg = eval_cfg),
-        RegrLossVisitor(regr_loss_term, eval_cfg = eval_cfg),
+        LossTermVisitorS(regr_loss_term, eval_cfg = eval_cfg),
     ]
 
     evaluation.accept_sequence(visitors = visitors)
@@ -1976,11 +1978,11 @@ def AE_regr_loss_tests():
 
     visitors = [
         AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        ReconstrLossVisitor(reconstr_loss_term, loss_name='L2_norm', eval_cfg = eval_cfg_reconstr),
+        LossTermVisitorS(reconstr_loss_term, loss_name='L2_norm', eval_cfg = eval_cfg_reconstr),
 
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        RegrLossVisitor(regr_loss_term, loss_name = 'Huber', eval_cfg = eval_cfg_comp),
+        LossTermVisitorS(regr_loss_term, loss_name = 'Huber', eval_cfg = eval_cfg_comp),
         LatentPlotVisitor(eval_cfg = eval_cfg_comp)
     ]
 
@@ -2030,8 +2032,8 @@ if __name__=="__main__":
     #train_seq_AE()
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
-    #AE_joint_epoch_procedure()
-    VAE_joint_epoch_procedure()
+    AE_joint_epoch_procedure()
+    #VAE_joint_epoch_procedure()
 
 
     ###--- Baseline ---###

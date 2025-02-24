@@ -43,7 +43,7 @@ from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
     AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor, LossTermVisitor
+    LossTermVisitor
 )
 
 from helper_tools.setup import create_eval_metric
