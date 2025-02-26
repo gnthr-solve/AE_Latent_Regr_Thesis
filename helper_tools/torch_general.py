@@ -64,7 +64,10 @@ Torch General - Constant Mask
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def constant_mask(tensor: Tensor, axis: int):
-
+    """
+    Creates a mask for a tensor along a specified dimension, 
+    that is True where the tensor is constant along that dimension and False otherwise.
+    """
     min_vals = tensor.min(dim=axis, keepdim=True).values
     max_vals = tensor.max(dim=axis, keepdim=True).values
 

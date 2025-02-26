@@ -34,6 +34,7 @@ from loss import (
     RelativeLpNorm,
     Huber,
     RelativeHuber,
+    KMeansLoss,
 )
 
 from loss.clt_callbacks import LossTrajectoryObserver
@@ -1222,7 +1223,7 @@ def AE_joint_epoch_procedure():
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
         LossTermVisitorS(loss_terms[regr_loss_name], regr_loss_name, eval_cfg = eval_cfg_comp),
-        #LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name ='Huber'),
+        #LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name = regr_loss_name),
         LossStatisticsVisitor(loss_name = regr_loss_name, eval_cfg = eval_cfg_comp)
     ]
 
@@ -1814,6 +1815,7 @@ def AE_regr_loss_tests():
     batch_size = 100
     latent_dim = 3
 
+    ae_model_type = 'NVAE'
     n_layers_e = 5
     n_layers_d = 5
     activation = 'Softplus'
@@ -1823,6 +1825,7 @@ def AE_regr_loss_tests():
     regr_lr = 1e-2
     scheduler_gamma = 0.9
 
+    ae_base_weight = 0.5
     ete_regr_weight = 0.95
 
     dataset_kind = 'key'
@@ -1859,37 +1862,64 @@ def AE_regr_loss_tests():
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
 
-    # encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
-    # decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = 4)
+    if ae_model_type == 'AE':
+        encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e, activation = activation)
+        decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d, activation = activation)
+        
+        ae_model = AE(encoder = encoder, decoder = decoder)
 
-    encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
-    decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
+    elif ae_model_type == 'NVAE':
+        encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
+        decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
 
-    ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
-    #ae_model = AE(encoder = encoder, decoder = decoder)
-
+        ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+    
+    else:
+        raise ValueError('Model not supported or specified')
+    
     regressor = LinearRegr(latent_dim = latent_dim)
 
 
     ###--- Observation Test Setup ---###
-    dataset_size_ae = len(ae_train_ds)
-    dataset_size_ete = len(regr_train_ds)
+    observer_callback = LossTrajectoryObserver()
 
-    
+
     ###--- Losses ---###
-    reconstr_loss_term = AEAdapter(LpNorm(p = 2))
-    topo_loss = Topological(p = 2)
-
-    regr_loss_term = RegrAdapter(Huber(delta = 1))
-
-    ete_loss_terms = {
-        'Reconstr': Weigh(reconstr_loss_term, weight = 1 - ete_regr_weight), 
-        'Regr': Weigh(regr_loss_term, weight = ete_regr_weight),
+    loss_terms = {
+        'L2': AEAdapter(LpNorm(p = 2)),
+        'topo': Topological(p = 2),
+        'kmeans': KMeansLoss(n_clusters = 5, latent_dim = latent_dim),
+        'Huber': RegrAdapter(Huber(delta = 1)),
     }
 
-    ete_loss = Loss(CompositeLossTerm(loss_terms = ete_loss_terms))
-    
-    reconstr_loss = Loss(loss_term = reconstr_loss_term)
+    ae_loss_base_name = 'L2'
+    ae_loss_extra_name = 'topo'
+    #ae_loss_extra_name = 'kmeans'
+    regr_loss_name = 'Huber'
+
+    ae_clt = CompositeLossTerm(
+        loss_terms = {ae_loss_base_name: loss_terms[ae_loss_base_name], ae_loss_extra_name: loss_terms[ae_loss_extra_name]}
+    )
+
+    ae_clt = WeightedCompositeLoss(
+        composite_lt = ae_clt, 
+        weights={ae_loss_base_name: ae_base_weight, ae_loss_extra_name: 1 - ae_base_weight}
+    )
+    ae_clt.add_callback(name = 'ALL', callback = observer_callback)
+
+    ete_loss_terms = {
+        'ae_loss': ae_clt,
+        'regr_loss': loss_terms[regr_loss_name],
+    }
+
+    ete_clt = CompositeLossTerm(loss_terms = ete_loss_terms)
+    ete_clt = WeightedCompositeLoss(
+        composite_lt=ete_clt, 
+        weights={'ae_loss': 1 - ete_regr_weight, regr_loss_name: ete_regr_weight}
+    )
+
+    ete_loss = Loss(ete_clt)
+    ae_iso_loss = Loss(ae_clt)
     
 
     ###--- Optimizer & Scheduler ---###
@@ -1915,17 +1945,12 @@ def AE_regr_loss_tests():
             
             Z_batch, X_hat_batch = ae_model(X_batch)
 
-            loss_reconstr = reconstr_loss(
+            loss_ae = ae_iso_loss(
                 X_batch = X_batch,
-                X_hat_batch = X_hat_batch,
+                X_hat_batch = X_hat_batch, 
+                Z_batch = Z_batch,
             )
-            loss_topo = topo_loss(X_batch = X_batch, Z_batch = Z_batch)
-            print(
-                f'Loss Reconstr: {loss_reconstr.item()}\n'
-                f'Loss Topological: {loss_topo.item()}'
-            )
-            loss_ae = loss_reconstr + loss_topo
-
+            
             #--- Backward Pass ---#
             loss_ae.backward()
 
@@ -1947,6 +1972,7 @@ def AE_regr_loss_tests():
             loss_ete_weighted = ete_loss(
                 X_batch = X_batch,
                 X_hat_batch = X_hat_batch,
+                Z_batch = Z_batch,
                 y_batch = y_batch,
                 y_hat_batch = y_hat_batch,
             )
@@ -1960,8 +1986,11 @@ def AE_regr_loss_tests():
 
 
     ###--- Plot Observations ---###
-    #plot_loss_tensor(observed_losses = ae_loss_obs.losses)
-    #loss_observer.plot_agg_results()
+    observed_losses_dict = observer_callback.get_history(concat = True)
+    plot_agg_training_losses(
+        training_losses = observed_losses_dict,
+        epochs = epochs,
+    )
 
 
     ###--- Test Loss ---###
@@ -1978,18 +2007,18 @@ def AE_regr_loss_tests():
 
     visitors = [
         AEOutputVisitor(eval_cfg = eval_cfg_reconstr),
-        LossTermVisitorS(reconstr_loss_term, loss_name='L2_norm', eval_cfg = eval_cfg_reconstr),
+        LossTermVisitorS(loss_terms[ae_loss_base_name], loss_name= ae_loss_base_name, eval_cfg = eval_cfg_reconstr),
 
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
-        LossTermVisitorS(regr_loss_term, loss_name = 'Huber', eval_cfg = eval_cfg_comp),
-        LatentPlotVisitor(eval_cfg = eval_cfg_comp)
+        LossTermVisitorS(loss_terms[regr_loss_name], loss_name = regr_loss_name, eval_cfg = eval_cfg_comp),
+        LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name = regr_loss_name)
     ]
 
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
-    loss_reconstr = results.metrics['L2_norm']
-    loss_regr = results.metrics['Huber']
+    loss_reconstr = results.metrics[ae_loss_base_name]
+    loss_regr = results.metrics[regr_loss_name]
 
     print(
         f"Autoencoder:\n"
@@ -2032,7 +2061,7 @@ if __name__=="__main__":
     #train_seq_AE()
     #train_joint_epoch_wise_VAE()
     #train_joint_epoch_wise_VAE_recon()
-    AE_joint_epoch_procedure()
+    #AE_joint_epoch_procedure()
     #VAE_joint_epoch_procedure()
 
 
@@ -2042,6 +2071,6 @@ if __name__=="__main__":
 
 
     ###--- Testing ---###
-    #AE_regr_loss_tests()
+    AE_regr_loss_tests()
 
     pass

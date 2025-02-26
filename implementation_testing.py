@@ -29,13 +29,20 @@ from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 from models.transformer_ae.positional_encoding import PositionalEncoding
 
 from loss import (
-    Loss,
     CompositeLossTerm,
     LpNorm,
     RelativeLpNorm,
     Huber,
     RelativeHuber,
+    KMeansLoss,
 )
+
+from loss.clt_callbacks import LossTrajectoryObserver
+from loss.topology_term import Topological
+from loss.decorators import Loss, Weigh, WeightedCompositeLoss, Observe
+from loss.adapters import AEAdapter, RegrAdapter
+from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
+from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from helper_tools import map_loader
 from helper_tools.setup import create_normaliser
@@ -204,6 +211,50 @@ def test_hyperop_cfg():
 
     print(linear_regr_iso_cfg)
 
+
+
+"""
+Test Functions - Loss Term Composition
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def loss_term_composition():
+    ae_base_weight = 0.5
+    ete_regr_weight = 0.95
+
+
+    loss_terms = {
+        'L2': AEAdapter(LpNorm(p = 2)),
+        'topo': Topological(p = 2),
+        'kmeans': KMeansLoss(n_clusters = 5, latent_dim = 2),
+        'Huber': RegrAdapter(Huber(delta = 1)),
+    }
+
+    ae_loss_base_name = 'L2'
+    ae_loss_extra_name = 'topo'
+    regr_loss_name = 'Huber'
+
+    ae_clt = CompositeLossTerm(
+        loss_terms = {ae_loss_base_name: loss_terms[ae_loss_base_name], ae_loss_extra_name: loss_terms[ae_loss_extra_name]}
+    )
+
+    ae_clt = WeightedCompositeLoss(
+        composite_lt = ae_clt, 
+        weights={ae_loss_base_name: ae_base_weight, ae_loss_extra_name: 1 - ae_base_weight}
+    )
+
+    ete_loss_terms = {
+        'ae_loss': ae_clt,
+        'regr_loss': loss_terms[regr_loss_name],
+    }
+
+    ete_clt = CompositeLossTerm(loss_terms = ete_loss_terms)
+    ete_clt = WeightedCompositeLoss(
+        composite_lt=ete_clt, 
+        weights={'ae_loss': 1 - ete_regr_weight, regr_loss_name: ete_regr_weight}
+    )
+
+    ete_loss = Loss(ete_clt)
+    ae_iso_loss = Loss(ae_clt)
 
 
 

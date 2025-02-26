@@ -105,7 +105,6 @@ class DatasetBuilder:
 
             X_data_const_mask = constant_mask(tensor = self.X_data, axis = 0)
             const_indices = torch.where(X_data_const_mask)[0].tolist()
-            print(const_indices)
 
             self.X_data = self.X_data[:, ~X_data_const_mask]
             

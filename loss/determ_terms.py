@@ -125,29 +125,37 @@ Loss Functions - KMeansLoss
 """
 class KMeansLoss(LossTerm):
 
-    def __init__(self, n_clusters: int, latent_dim: int, alpha: float = 0.9):
+    def __init__(self, n_clusters: int, latent_dim: int, alpha: float = 0.9, device: str = 'cpu'):
         self.n_clusters = n_clusters
         self.latent_dim = latent_dim
         self.alpha = alpha
-        self.cluster_centers = torch.randn(n_clusters, latent_dim)
-
+        self.next_cluster_centers = torch.randn(n_clusters, latent_dim, device = device)
+        self.cluster_centers = None
+        
 
     def __call__(self, Z_batch: Tensor, **tensors: Tensor) -> Tensor:
+
+        self.cluster_centers = self.next_cluster_centers.clone()
 
         distances = torch.cdist(Z_batch, self.cluster_centers)
         min_distances, min_indices = distances.min(dim=1)
 
-        # Update cluster centers using a running average
-        for i in range(self.n_clusters):
-
-            mask = (min_indices == i).float().unsqueeze(1)
-
-            if mask.sum() > 0:
-                new_center = (mask * Z_batch).sum(dim=0) / mask.sum()
-                self.cluster_centers[i] = self.alpha * self.cluster_centers[i] + (1 - self.alpha) * new_center
-
+        self._next_cluster_centers(Z_batch = Z_batch, min_indices = min_indices)
+        
         return min_distances
     
 
+    def _next_cluster_centers(self, Z_batch: Tensor, min_indices: Tensor):
+
+        # Update cluster centers using a running average
+        with torch.no_grad():
+            
+            for i in range(self.n_clusters):
+
+                mask = (min_indices == i).float().unsqueeze(1)
+
+                if mask.sum() > 0:
+                    new_center = (mask * Z_batch).sum(dim=0) / (mask.sum() + 1e-10)
+                    self.next_cluster_centers[i] = self.alpha * self.cluster_centers[i] + (1 - self.alpha) * new_center
 
 

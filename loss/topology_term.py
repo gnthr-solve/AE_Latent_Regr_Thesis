@@ -5,6 +5,7 @@ import numpy as np
 
 from torch import Tensor
 from torch import nn
+from numpy import ndarray
 
 from .loss_term_classes import LossTerm
 
@@ -14,6 +15,8 @@ Topology - Topology Helper Classes
 -------------------------------------------------------------------------------------------------------------------------------------------
 Taken from the repository of:
 Moor, Horn, Rieck, and Borgwardt "Topological Autoencoders" arXiv:1906.00722 (2020)
+
+Modified to match repository design.
 """
 class UnionFind:
     '''
@@ -65,7 +68,7 @@ class UnionFind:
 
 
 class PersistentHomologyCalculation:
-    def __call__(self, matrix):
+    def __call__(self, matrix: ndarray):
 
         n_vertices = matrix.shape[0]
         uf = UnionFind(n_vertices)
@@ -78,8 +81,7 @@ class PersistentHomologyCalculation:
         # 2nd dimension: 'target' vertex index of edge
         persistence_pairs = []
 
-        for edge_index, edge_weight in \
-                zip(edge_indices, edge_weights[edge_indices]):
+        for edge_index, edge_weight in zip(edge_indices, edge_weights[edge_indices]):
 
             u = triu_indices[0][edge_index]
             v = triu_indices[1][edge_index]
@@ -106,121 +108,6 @@ class PersistentHomologyCalculation:
 
 
 
-class TopologicalSignatureDistanceOrg(nn.Module):
-    """Topological signature."""
-
-    def __init__(self, match_edges=None):
-        """Topological signature computation.
-
-        """
-        super().__init__()
-
-        self.match_edges = match_edges
-
-        self.signature_calculator = PersistentHomologyCalculation()
-
-
-    def _get_pairings(self, distances):
-        pairs_0 = self.signature_calculator(
-            distances.detach().cpu().numpy())
-
-        return pairs_0
-
-
-    def _select_distances_from_pairs(self, distance_matrix, pairs):
-        
-        selected_distances = distance_matrix[(pairs[:, 0], pairs[:, 1])]
-
-        return selected_distances
-
-
-    @staticmethod
-    def sig_error(signature1, signature2):
-        """Compute distance between two topological signatures."""
-        return ((signature1 - signature2)**2).sum(dim=-1)
-
-
-    @staticmethod
-    def _count_matching_pairs(pairs1, pairs2):
-        def to_set(array):
-            return set(tuple(elements) for elements in array)
-        return float(len(to_set(pairs1).intersection(to_set(pairs2))))
-
-
-    def forward(self, distances_X, distances_Z):
-        """Return topological distance of two pairwise distance matrices.
-
-        Args:
-            distances1: Distance matrix in space 1
-            distances2: Distance matrix in space 2
-
-        Returns:
-            distance, dict(additional outputs)
-        """
-        pairs_X = self._get_pairings(distances_X)
-        pairs_Z = self._get_pairings(distances_Z)
-
-        distance_components = {
-            'metrics.matched_pairs_0D': self._count_matching_pairs(
-                pairs_X, pairs_Z)
-        }
-        
-        if self.match_edges is None:
-            sig_X = self._select_distances_from_pairs(distances_X, pairs_X)
-            sig_Z = self._select_distances_from_pairs(distances_Z, pairs_Z)
-            distance = self.sig_error(sig_X, sig_Z)
-
-        elif self.match_edges == 'symmetric':
-            sig_X = self._select_distances_from_pairs(distances_X, pairs_X)
-            sig_Z = self._select_distances_from_pairs(distances_Z, pairs_Z)
-            # Selected pairs of 1 on distances of 2 and vice versa
-            sigX_Z = self._select_distances_from_pairs(distances_Z, pairs_X)
-            sigZ_X = self._select_distances_from_pairs(distances_X, pairs_Z)
-
-            distanceX_Z = self.sig_error(sig_X, sigX_Z)
-            distanceZ_X = self.sig_error(sig_Z, sigZ_X)
-
-            distance_components['metrics.distanceX-Z'] = distanceX_Z
-            distance_components['metrics.distanceZ-X'] = distanceZ_X
-
-            distance = distanceX_Z + distanceZ_X
-
-        elif self.match_edges == 'random':
-            # Create random selection in oder to verify if what we are seeing
-            # is the topological constraint or an implicit latent space prior
-            # for compactness
-            n_instances = len(pairs_X[0])
-            pairs_X = torch.cat([
-                torch.randperm(n_instances)[:, None],
-                torch.randperm(n_instances)[:, None]
-            ], dim=1)
-            pairs_Z = torch.cat([
-                torch.randperm(n_instances)[:, None],
-                torch.randperm(n_instances)[:, None]
-            ], dim=1)
-
-            sigX_X = self._select_distances_from_pairs(
-                distances_X, (pairs_X, None))
-            sigX_Z = self._select_distances_from_pairs(
-                distances_Z, (pairs_X, None))
-
-            sigZ_Z = self._select_distances_from_pairs(
-                distances_Z, (pairs_Z, None))
-            sigZ_X = self._select_distances_from_pairs(
-                distances_X, (pairs_Z, None))
-
-            distanceX_Z = self.sig_error(sigX_X, sigX_Z)
-            distanceZ_X = self.sig_error(sigZ_X, sigZ_Z)
-            distance_components['metrics.distanceX-Z'] = distanceX_Z
-            distance_components['metrics.distanceZ-X'] = distanceZ_X
-
-            distance = distanceX_Z + distanceZ_X
-
-        return distance, distance_components
-
-
-
-
 class TopologicalSignatureDistance:
     """Topological signature."""
 
@@ -235,11 +122,12 @@ class TopologicalSignatureDistance:
         self.signature_calculator = PersistentHomologyCalculation()
 
 
-    def _get_pairings(self, distances):
-        #print(distances.shape)
+    def _get_pairings(self, distances: Tensor):
+        
         pairs = self.signature_calculator(
-            distances.detach().cpu().numpy())
-        #print(pairs.shape)
+            distances.detach().cpu().numpy()
+        )
+        
         return pairs
 
 
@@ -264,12 +152,12 @@ class TopologicalSignatureDistance:
         return float(len(to_set(pairs1).intersection(to_set(pairs2))))
 
 
-    def __call__(self, distances_X, distances_Z):
+    def __call__(self, distances_X: Tensor, distances_Z: Tensor):
         """Return topological distance of two pairwise distance matrices.
 
         Args:
-            distances1: Distance matrix in space 1
-            distances2: Distance matrix in space 2
+            distances_X: Distance matrix in input space
+            distances_Z: Distance matrix in latent space
 
         Returns:
             distance, dict(additional outputs)
