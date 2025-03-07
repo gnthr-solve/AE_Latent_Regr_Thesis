@@ -2,49 +2,31 @@
 import os
 import tempfile
 import torch
-import ray
-import logging
 
-from ray import train, tune
+from ray import train
 from ray.train import Checkpoint
 
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 
-from pathlib import Path
-
 from data_utils import TensorDataset, SplitSubsetFactory
 
-from models import (
-    LinearEncoder,
-    LinearDecoder,
-    VarEncoder,
-    VarDecoder,
-)
-
-from models.regressors import LinearRegr, DNNRegr
-from models import AE, VAE, GaussVAE, EnRegrComposite
-from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
+from models.regressors import LinearRegr
 
 from loss import (
-    CompositeLossTerm,
     LpNorm,
     RelativeLpNorm,
     Huber,
     RelativeHuber,
 )
 
-from loss.decorators import Loss, Weigh, Observe
-from loss.adapters import AEAdapter, RegrAdapter
-from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
+from loss.decorators import Loss
+from loss.adapters import RegrAdapter
 
 from evaluation import Evaluation, EvalConfig
-from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    LossTermVisitor
-)
+from evaluation.eval_visitors import RegrOutputVisitor, LossTermVisitor
+
 
 from helper_tools.setup import create_eval_metric
 

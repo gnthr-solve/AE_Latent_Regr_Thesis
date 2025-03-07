@@ -2,8 +2,6 @@
 ###--- Libraries ---###
 import torch
 import pandas as pd
-import random
-import matplotlib.pyplot as plt
 
 from pathlib import Path
 from torch import Tensor
@@ -23,13 +21,13 @@ def read_experiment_results(experiment_names: list[str], results_dir: Path = Non
             List of experiment names, determining the subdirectories in which to find the respective results.
         results_dir: Path = None
             Path to results directory containing the experiment results.
-            If not specified assume the directory is './results/'
+            If not specified assume the directory is './results_hyperopt/'
 
     Returns:
         experiment_results: dict[str, pd.DataFrame]
             Dictionary with experiment names as keys and hyperparameter optimisation results dataframe as values.
     """
-    results_dir = results_dir or Path('./results')
+    results_dir = results_dir or Path('./results_hyperopt')
 
     experiment_results: dict[str, pd.DataFrame] = {}
     for experiment_name in experiment_names:

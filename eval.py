@@ -1,9 +1,6 @@
 
-import os
-import tempfile
 import torch
 import pandas as pd
-import logging
 
 from pathlib import Path
 
@@ -30,14 +27,9 @@ from loss import (
 
 from loss.decorators import Loss, Weigh, Observe
 from loss.adapters import AEAdapter, RegrAdapter
-from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from evaluation import Evaluation, EvalConfig
-from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    LossTermVisitor
-)
+from evaluation.eval_visitors import AEOutputVisitor, RegrOutputVisitor, LossTermVisitor
 
 from visualisation import *
 
@@ -65,6 +57,56 @@ TRAINING_PARAMS = [
 ]
 
 EVAL_METRICS = ['Rel_L2-norm','L1-norm']
+
+
+def extract_best_model_params(experiment_dir: Path) -> dict[str, Any]:
+    """
+    Loads the final_results DataFrame produced by a complete hyperparameter optimisation run and
+        - identifies the best result by L2-error
+        - prints the result metrics, training hyperparameters and model parameters
+        - returns the model parameters
+    
+    Args
+    ----------
+        experiment_dir: Path
+            Directory of the hyperparameter optimisation results.
+    
+    Returns
+    ----------
+        best_model_params: dict
+            Dictionary of best model hyperparameters.
+    """
+    ###--- Load hyperopt results and sort by L2 ---###
+    results_path = experiment_dir / 'final_results.csv'
+    results_df = pd.read_csv(results_path, low_memory = False)
+
+    # Drop rows containing NaN (trials that errored or were terminated by scheduler)
+    results_df.dropna(axis = 0, how = 'any', inplace = True)
+
+    best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
+
+
+    ###--- Extract Params ---###
+    best_result_values = {name: val for name, val in best_entry.items() if name in METRICS}
+    best_training_params = {name: val for name, val in best_entry.items() if name in TRAINING_PARAMS}
+    best_model_params = {name: val for name, val in best_entry.items() if name not in set([*METRICS, *TRAINING_PARAMS])}
+    
+
+    ###--- Print best result parameters ---###
+    print(
+        f'Best entry:\n'
+        f'-------------------------------------\n'
+        f'Best metrics: \n{best_result_values}\n'
+        f'-------------------------------------\n'
+        f'Best training params: \n{best_training_params}\n'
+        f'-------------------------------------\n'
+        f'Best model params: \n{best_model_params}\n'
+        f'-------------------------------------\n'
+    )
+
+    return best_model_params
+
+
 
 """
 Plotting Functions
@@ -314,7 +356,6 @@ def tsne_exp(evaluation: Evaluation, outputs_key: str, title: str = None, save_p
         x_label = 't-SNE x-dim',
         y_label = 't-SNE y-dim',
         color_label = '$L_2$-error',
-        #title = 'True vs. Predicted Downstack',
     )
 
     for n, (name, X_feature) in enumerate(X_features.items(), 1):
@@ -329,7 +370,6 @@ def tsne_exp(evaluation: Evaluation, outputs_key: str, title: str = None, save_p
             x_label = 't-SNE x-dim',
             y_label = 't-SNE y-dim',
             color_label = name,
-            #title = 'True vs. Predicted Downstack',
         )
 
 
@@ -396,7 +436,6 @@ def plot_latent_w_attribute(evaluation: Evaluation, outputs_key: str, title: str
             y_label = '$z_2$',
             color_label = name,
         )
-
 
 
     plot_matrix.add_plot_dict(plot_dict)
@@ -635,14 +674,10 @@ def calculate_metrics(evaluation: Evaluation, outputs_key: str, title: str = Non
 Eval Specific Functions
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def linear_regr_results(results_dir: Path, experiment_name: str, data_kind: str, normaliser_kind: str):
+def linear_regr_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str) -> Evaluation:
 
-    ###--- Paths ---###
-    experiment_dir = results_dir / experiment_name
-    
-    results_path = experiment_dir / 'final_results.csv'
-    model_paths = {model_path.stem: model_path for model_path in list(experiment_dir.glob("*.pt"))} 
-    #print(model_paths)
+    model_paths = {model_path.stem: model_path for model_path in list(model_dir.glob("*.pt"))} 
+    print(model_paths)
 
 
     ###--- Dataset Setup ---###
@@ -655,25 +690,9 @@ def linear_regr_results(results_dir: Path, experiment_name: str, data_kind: str,
     dataset = dataset_builder.build_dataset()
     input_dim = dataset.X_dim - 1
     print(f"Input_dim: {input_dim}")
-    
 
-    ###--- Load Results, identify best ---###
-    results_df = pd.read_csv(results_path, low_memory = False)
-    drop_cols = [col for col in TRAINING_PARAMS if col in results_df.columns]
-    results_df.drop(columns = drop_cols, inplace = True)
 
-    best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
-    best_result_values = {name: val for name, val in best_entry.items() if name == 'L2_norm' or name in ADD_METRICS}
-    best_result_params = {name: val for name, val in best_entry.items() if name != 'L2_norm' and name not in ADD_METRICS}
-    print(
-        f'Best entry dict: \n{best_entry}\n'
-        f'-------------------------------------\n'
-        f'Best metrics: \n{best_result_values}\n'
-        f'-------------------------------------\n'
-        f'Best params: \n{best_result_params}\n'
-        f'-------------------------------------\n'
-    )
-
+    ###--- Model Setup ---###
     regressor = LinearRegr(latent_dim = input_dim)
 
     regressor.load_state_dict(torch.load(model_paths['regressor']))
@@ -709,29 +728,14 @@ def linear_regr_results(results_dir: Path, experiment_name: str, data_kind: str,
     ]
 
     evaluation.accept_sequence(visitors = visitors)
-    calculate_metrics(evaluation=evaluation, outputs_key='regr_iso')
 
-    # title = 'Predictions on unn. KEY dataset'
-    # save_path = experiment_dir / 'pred_linear_key_unn.pdf'
-    # plot_predicted_w_losses(evaluation=evaluation, outputs_key='regr_iso', title = title, save_path = save_path)
-
-
-    title = None
-    #title = 'Predictions on unn. KEY dataset'
-    #save_path = '../Thesis/assets/figures/results/linear/true_v_pred_lin_KEY.pdf'
-    save_path = '../Thesis/assets/figures/results/linear/true_v_pred_lin_MAX.pdf'
-    plot_actual_v_predicted_separate(evaluation=evaluation, outputs_key='regr_iso', title = title, save_path=save_path)
+    return evaluation
     
 
-    
 
-def dnn_regr_results(results_dir: Path, experiment_name: str, data_kind: str, normaliser_kind: str):
+def dnn_regr_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict) -> Evaluation:
 
-    ###--- Paths ---###
-    experiment_dir = results_dir / experiment_name
-    
-    results_path = experiment_dir / 'final_results.csv'
-    model_paths = {model_path.stem: model_path for model_path in list(experiment_dir.glob("*.pt"))} 
+    model_paths = {model_path.stem: model_path for model_path in list(model_dir.glob("*.pt"))} 
     print(model_paths)
 
 
@@ -747,27 +751,10 @@ def dnn_regr_results(results_dir: Path, experiment_name: str, data_kind: str, no
     print(f"Input_dim: {input_dim}")
     
 
-    ###--- Load Results, identify best ---###
-    results_df = pd.read_csv(results_path, low_memory = False)
-    drop_cols = [col for col in TRAINING_PARAMS if col in results_df.columns]
-    results_df.drop(columns = drop_cols, inplace = True)
-
-    best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
-    best_result_values = {name: val for name, val in best_entry.items() if name == 'L2_norm' or name in ADD_METRICS}
-    best_result_params = {name: val for name, val in best_entry.items() if name != 'L2_norm' and name not in ADD_METRICS}
-    print(
-        f'Best entry dict: \n{best_entry}\n'
-        f'-------------------------------------\n'
-        f'Best metrics: \n{best_result_values}\n'
-        f'-------------------------------------\n'
-        f'Best params: \n{best_result_params}\n'
-        f'-------------------------------------\n'
-    )
-
     regressor = DNNRegr(
         input_dim = input_dim,
         output_dim = 2,
-        **best_result_params,
+        **best_model_params,
     )
 
     regressor.load_state_dict(torch.load(model_paths['regressor']))
@@ -803,22 +790,13 @@ def dnn_regr_results(results_dir: Path, experiment_name: str, data_kind: str, no
     ]
 
     evaluation.accept_sequence(visitors = visitors)
-    calculate_metrics(evaluation=evaluation, outputs_key='regr_iso')
-
-
-    plot_predicted_w_losses(evaluation=evaluation, outputs_key='regr_iso')
-    #plot_true_predicted_w_losses(evaluation=evaluation, outputs_key='regr_iso')
-    #plot_actual_v_predicted_separate(evaluation=evaluation, outputs_key='regr_iso')
+    
+    return evaluation
     
 
 
 
-def ae_linear_results(
-        model_dir: Path, 
-        data_kind: str, 
-        normaliser_kind: str,
-        best_model_params: dict,
-    ):
+def ae_linear_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict) -> Evaluation:
 
     ###--- Model Paths ---###
 
@@ -919,15 +897,9 @@ def ae_linear_results(
 
 
 
-def ae_deep_results(results_dir: Path, experiment_name: str, data_kind: str, normaliser_kind: str):
+def ae_deep_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict) -> Evaluation:
 
-    ###--- Paths ---###
-    experiment_dir = results_dir / experiment_name
-    
-    
-    results_path = experiment_dir / 'final_results.csv'
-
-    model_paths = {model_path.stem: model_path for model_path in list(experiment_dir.glob("*.pt"))} 
+    model_paths = {model_path.stem: model_path for model_path in list(model_dir.glob("*.pt"))} 
     print(model_paths)
 
 
@@ -943,31 +915,14 @@ def ae_deep_results(results_dir: Path, experiment_name: str, data_kind: str, nor
     print(f"Input_dim: {input_dim}")
     
 
-    ###--- Load Results, identify best ---###
-    results_df = pd.read_csv(results_path, low_memory = False)
-    drop_cols = [col for col in TRAINING_PARAMS if col in results_df.columns]
-    results_df.drop(columns = drop_cols, inplace = True)
-
-    best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
-    best_result_values = {name: val for name, val in best_entry.items() if name == 'L2_norm' or name in ADD_METRICS}
-    best_result_params = {name: val for name, val in best_entry.items() if name != 'L2_norm' and name not in ADD_METRICS}
-    print(
-        f'Best entry dict: \n{best_entry}\n'
-        f'-------------------------------------\n'
-        f'Best metrics: \n{best_result_values}\n'
-        f'-------------------------------------\n'
-        f'Best params: \n{best_result_params}\n'
-        f'-------------------------------------\n'
-    )
-
     ###--- Best Parameters ---###
-    latent_dim = best_result_params['latent_dim']
+    latent_dim = best_model_params['latent_dim']
     
-    n_layers = best_result_params['n_layers']
-    n_fixed_layers = best_result_params['n_fixed_layers']
-    fixed_layer_size = best_result_params['fixed_layer_size']
-    n_funnel_layers = best_result_params['n_funnel_layers']
-    activation = best_result_params['activation']
+    n_layers = best_model_params['n_layers']
+    n_fixed_layers = best_model_params['n_fixed_layers']
+    fixed_layer_size = best_model_params['fixed_layer_size']
+    n_funnel_layers = best_model_params['n_funnel_layers']
+    activation = best_model_params['activation']
 
 
     ###--- Instantiate Model ---###
@@ -1046,7 +1001,7 @@ Call Specific Evals
 """
 def eval_model_linear():
 
-    results_dir = Path('./results/')
+    results_dir = Path('./results_hyperopt/')
 
     #data_kind = 'key'
     data_kind = 'max'
@@ -1054,19 +1009,38 @@ def eval_model_linear():
     normaliser_kind = 'min_max'
     experiment_name = f'linear_regr_iso_{data_kind}_{normaliser_kind}'
 
-    linear_regr_results(
-        results_dir=results_dir, 
-        experiment_name=experiment_name, 
-        data_kind=data_kind, 
-        normaliser_kind=normaliser_kind
+
+    ###--- Get best model parameters and evaluate ---###
+    experiment_dir = results_dir / experiment_name
+    
+    _ = extract_best_model_params(experiment_dir = experiment_dir)
+
+    evaluation = linear_regr_evaluation(
+        model_dir = experiment_dir,
+        data_kind = data_kind, 
+        normaliser_kind = normaliser_kind,
     )
 
 
+    ###--- Evaluation ---###
+    calculate_metrics(evaluation=evaluation, outputs_key='regr_iso')
+
+    # title = 'Predictions on unn. KEY dataset'
+    # save_path = experiment_dir / 'pred_linear_key_unn.pdf'
+    # plot_predicted_w_losses(evaluation=evaluation, outputs_key='regr_iso', title = title, save_path = save_path)
+
+
+    title = None
+    #title = 'Predictions on unn. KEY dataset'
+    #save_path = '../Thesis/assets/figures/results/linear/true_v_pred_lin_KEY.pdf'
+    save_path = '../Thesis/assets/figures/results/linear/true_v_pred_lin_MAX.pdf'
+    plot_actual_v_predicted_separate(evaluation=evaluation, outputs_key='regr_iso', title = title, save_path=save_path)
+    
 
 
 def eval_model_dnn():
 
-    results_dir = Path('./results/')
+    results_dir = Path('./results_hyperopt/')
 
     data_kind = 'key'
     #data_kind = 'max'
@@ -1075,19 +1049,32 @@ def eval_model_dnn():
 
     experiment_name = f'deep_NN_regr_{data_kind}_{normaliser_kind}'
 
-    dnn_regr_results(
-        results_dir=results_dir, 
-        experiment_name=experiment_name, 
+    ###--- Get best model parameters and evaluate ---###
+    experiment_dir = results_dir / experiment_name
+    
+    best_model_params = extract_best_model_params(experiment_dir = experiment_dir)
+
+    evaluation = dnn_regr_evaluation(
+        model_dir=experiment_dir, 
         data_kind=data_kind, 
-        normaliser_kind=normaliser_kind
+        normaliser_kind=normaliser_kind,
+        best_model_params=best_model_params,
     )
+
+    ###--- Evaluation ---###
+    calculate_metrics(evaluation=evaluation, outputs_key='regr_iso')
+
+
+    plot_predicted_w_losses(evaluation=evaluation, outputs_key='regr_iso')
+    #plot_true_predicted_w_losses(evaluation=evaluation, outputs_key='regr_iso')
+    #plot_actual_v_predicted_separate(evaluation=evaluation, outputs_key='regr_iso')
 
 
 
 
 def eval_model_ae_linear():
 
-    results_dir = Path('./results/')
+    results_dir = Path('./results_hyperopt/')
 
     experiment_names = [
         'AE_linear_joint_epoch_key_raw',
@@ -1103,61 +1090,14 @@ def eval_model_ae_linear():
 
     experiment_name = f'AE_linear_joint_epoch_{data_kind}_{normaliser_kind}'
 
-    ###--- Paths Load ---###
+
+    ###--- Get best model parameters and evaluate ---###
     experiment_dir = results_dir / experiment_name
     
-    results_path = experiment_dir / 'final_results.csv'
-    results_df = pd.read_csv(results_path, low_memory = False)
+    best_model_params = extract_best_model_params(experiment_dir = experiment_dir)
 
-    #results_df = results_df.dropna(subset=['L2_norm', 'L2-norm_reconstr']).copy()
-
-    ###--- Conditions ---###
-    # conditions = {
-    #     'best': None,
-    #     'latent_2': (lambda df: df['latent_dim'] == 2),
-    #     'latent_less_3': (lambda df: df['latent_dim'] <=3),
-    # }
-    
-    # condition_choice = 'best'
-    # #condition_choice = 'latent_2'
-    # condition = conditions[condition_choice]
-
-
-    ###--- Maybe Filter & Identify best ---###
-    # if condition:
-    #     model_dir = experiment_dir / ('models_'+ condition_choice)
-
-    #     results_df: pd.DataFrame = results_df[condition(results_df)].copy()
-
-    #     best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
-
-    # else:
-    #     model_dir = experiment_dir
-
-    #     best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
-
-
-    model_dir = experiment_dir
-    best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
-
-
-    ###--- Extract Params ---###
-    best_result_values = {name: val for name, val in best_entry.items() if name in METRICS}
-    best_training_params = {name: val for name, val in best_entry.items() if name in TRAINING_PARAMS}
-    best_model_params = {name: val for name, val in best_entry.items() if name not in set([*METRICS, *TRAINING_PARAMS])}
-    print(
-        f'Best entry:\n'
-        f'-------------------------------------\n'
-        f'Best metrics: \n{best_result_values}\n'
-        f'-------------------------------------\n'
-        f'Best training params: \n{best_training_params}\n'
-        f'-------------------------------------\n'
-        f'Best model params: \n{best_model_params}\n'
-        f'-------------------------------------\n'
-    )
-
-    evaluation = ae_linear_results(
-        model_dir = model_dir, 
+    evaluation = ae_linear_evaluation(
+        model_dir = experiment_dir, 
         data_kind = data_kind, 
         normaliser_kind = normaliser_kind,
         best_model_params = best_model_params,
@@ -1189,7 +1129,7 @@ def eval_model_ae_linear():
 
 def eval_model_ae_linear_lim_dim():
 
-    results_dir = Path('./results/')
+    results_dir = Path('./results_hyperopt/')
 
     experiment_names = [
         'AE_linear_joint_epoch_l2_key_min_max',
@@ -1203,36 +1143,14 @@ def eval_model_ae_linear_lim_dim():
 
     experiment_name = f'AE_linear_joint_epoch_l2_{data_kind}_{normaliser_kind}'
 
-    ###--- Paths Load ---###
+
+    ###--- Get best model parameters and evaluate ---###
     experiment_dir = results_dir / experiment_name
     
-    results_path = experiment_dir / 'final_results.csv'
-    results_df = pd.read_csv(results_path, low_memory = False)
+    best_model_params = extract_best_model_params(experiment_dir = experiment_dir)
 
-    #results_df = results_df.dropna(subset=['L2_norm', 'L2-norm_reconstr']).copy()
-
-
-    model_dir = experiment_dir
-    best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
-
-
-    ###--- Extract Params ---###
-    best_result_values = {name: val for name, val in best_entry.items() if name in METRICS}
-    best_training_params = {name: val for name, val in best_entry.items() if name in TRAINING_PARAMS}
-    best_model_params = {name: val for name, val in best_entry.items() if name not in set([*METRICS, *TRAINING_PARAMS])}
-    print(
-        f'Best entry:\n'
-        f'-------------------------------------\n'
-        f'Best metrics: \n{best_result_values}\n'
-        f'-------------------------------------\n'
-        f'Best training params: \n{best_training_params}\n'
-        f'-------------------------------------\n'
-        f'Best model params: \n{best_model_params}\n'
-        f'-------------------------------------\n'
-    )
-
-    evaluation = ae_linear_results(
-        model_dir = model_dir, 
+    evaluation = ae_linear_evaluation(
+        model_dir = experiment_dir, 
         data_kind = data_kind, 
         normaliser_kind = normaliser_kind,
         best_model_params = best_model_params,
@@ -1262,7 +1180,7 @@ def eval_model_ae_linear_lim_dim():
     
 def eval_model_ae_deep():
 
-    results_dir = Path('./results_experiments/')
+    results_dir = Path('./results_hyperopt/')
 
     experiment_names = [
         'AE_linear_joint_epoch_key_raw',
@@ -1277,11 +1195,17 @@ def eval_model_ae_deep():
 
     experiment_name = f'AE_deep_joint_epoch_{data_kind}_{normaliser_kind}'
 
-    evaluation = ae_deep_results(
-        results_dir=results_dir, 
-        experiment_name=experiment_name, 
-        data_kind=data_kind, 
-        normaliser_kind=normaliser_kind
+
+    ###--- Get best model parameters and evaluate ---###
+    experiment_dir = results_dir / experiment_name
+    
+    best_model_params = extract_best_model_params(experiment_dir = experiment_dir)
+
+    evaluation = ae_deep_evaluation(
+        model_dir= experiment_dir, 
+        data_kind = data_kind, 
+        normaliser_kind = normaliser_kind,
+        best_model_params = best_model_params,
     )
 
     ###--- Calculate Metrics ---###

@@ -29,7 +29,6 @@ from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
     CompositeLossTerm,
-    CompositeLossTermPrime,
     LpNorm,
     RelativeLpNorm,
     Huber,
@@ -580,7 +579,7 @@ def AE_linear_joint_epoch_prime(config, dataset: TensorDataset, exp_cfg: Experim
     reconstr_loss_term = AEAdapter(LpNorm(p = 2))
     regr_loss_term = RegrAdapter(LpNorm(p = 2))
 
-    base_composite = CompositeLossTermPrime(
+    base_composite = CompositeLossTerm(
         loss_terms={
             'L2-norm_reconstr': reconstr_loss_term,
             optim_loss: regr_loss_term,

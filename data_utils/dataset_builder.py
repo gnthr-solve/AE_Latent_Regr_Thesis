@@ -44,7 +44,7 @@ class DatasetBuilder:
         normaliser: MinMaxNormaliser | ZScoreNormaliser = None,
         exclude_columns: list[str] = [],
         filter_condition: Callable[[pd.DataFrame], pd.Series] = None,
-        exclude_const_columns: bool = True,
+        exclude_const_columns: bool = False,
         ):
 
         data_dir = Path(f"./data")

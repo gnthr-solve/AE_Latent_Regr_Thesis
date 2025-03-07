@@ -2,7 +2,6 @@
 import os
 import torch
 import pandas as pd
-import logging
 
 from pathlib import Path
 
@@ -27,7 +26,6 @@ from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
     CompositeLossTerm,
-    CompositeLossTermObs,
     LpNorm,
     RelativeLpNorm,
     Huber,
@@ -36,14 +34,9 @@ from loss import (
 
 from loss.decorators import Loss, Weigh, Observe
 from loss.adapters import AEAdapter, RegrAdapter
-from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from evaluation import Evaluation, EvalConfig
-from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    LossTermVisitor
-)
+from evaluation.eval_visitors import AEOutputVisitor, RegrOutputVisitor, LossTermVisitor
 
 from visualisation import *
 
