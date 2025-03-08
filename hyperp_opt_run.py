@@ -1,6 +1,4 @@
 
-import os
-import ray
 import logging
 
 from pathlib import Path
@@ -66,7 +64,7 @@ if __name__=="__main__":
 
     ###--- Experiments to Run ---###
     experiment_cfgs = [
-        #linear_regr_iso_cfg, 
+        linear_regr_iso_cfg, 
         #deep_NN_regr_cfg,
         #shallow_NN_regr_cfg,
         #vae_iso_cfg, 
@@ -75,7 +73,7 @@ if __name__=="__main__":
         #ae_deep_joint_epoch_cfg,
         #nvae_deep_joint_epoch_cfg,
 
-        ae_linear_joint_epoch_prime_cfg
+        #ae_linear_joint_epoch_prime_cfg
     ]
 
 
@@ -89,7 +87,7 @@ if __name__=="__main__":
             max_concurrent = max_concurrent,
             should_resume = should_resume,
             scheduler_kwargs = scheduler_kwargs,
-            max_retries = max_retries,
+            replace_default_tmp = replace_default_tmp,
             restart_errored = restart_errored,
         )
 

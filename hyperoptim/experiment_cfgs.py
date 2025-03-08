@@ -17,7 +17,7 @@ Concrete Configs - Data
 """
 data_cfg = DatasetConfig(
     dataset_kind = 'key',
-    #normaliser_kind = 'min_max',
+    normaliser_kind = 'min_max',
     #exclude_columns = ['Time_ptp', 'Time_ps1_ptp', 'Time_ps5_ptp', 'Time_ps9_ptp'],
 )
 

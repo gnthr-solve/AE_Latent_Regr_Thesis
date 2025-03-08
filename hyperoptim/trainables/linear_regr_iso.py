@@ -134,9 +134,9 @@ def linear_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
                 )
                 checkpoint = Checkpoint.from_directory(temp_checkpoint_dir)
 
-                train.report({optim_loss: loss_regr.item()}, checkpoint=checkpoint)
+                train.report({optim_loss: loss_regr.item(), 'training_completed': False}, checkpoint=checkpoint)
         else:
-            train.report({optim_loss: loss_regr.item()})
+            train.report({optim_loss: loss_regr.item(), 'training_completed': False})
 
         scheduler.step()
 
@@ -162,6 +162,11 @@ def linear_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
     
-    train.report(results.metrics)
-    
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        checkpoint = None
+        
+        torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
 
+        checkpoint = Checkpoint.from_directory(tmp_dir)
+        
+        train.report({**results.metrics, 'training_completed': True}, checkpoint=checkpoint)

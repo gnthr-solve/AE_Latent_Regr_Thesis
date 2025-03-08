@@ -2,17 +2,13 @@
 import os
 import tempfile
 import torch
-import ray
-import logging
 
-from ray import train, tune
+from ray import train
 from ray.train import Checkpoint
 
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
-
-from pathlib import Path
 
 from data_utils import TensorDataset, SplitSubsetFactory
 
@@ -24,7 +20,7 @@ from models import (
 )
 
 from models.regressors import LinearRegr, DNNRegr
-from models import AE, VAE, GaussVAE, EnRegrComposite
+from models import AE
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
 from loss import (
@@ -37,14 +33,9 @@ from loss import (
 
 from loss.decorators import Loss, Weigh, WeightedCompositeLoss
 from loss.adapters import AEAdapter, RegrAdapter
-from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
-from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from evaluation import Evaluation, EvalConfig
-from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    LossTermVisitor
-)
+from evaluation.eval_visitors import AEOutputVisitor, RegrOutputVisitor, LossTermVisitor
 
 from helper_tools.setup import create_eval_metric
 from helper_tools.ray_optim import RayTuneLossReporter
@@ -208,9 +199,9 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
 
                 checkpoint = Checkpoint.from_directory(tmp_dir)
 
-                train.report({optim_loss: regr_component.item()}, checkpoint=checkpoint)
+                train.report({optim_loss: regr_component.item(), 'training_completed': False}, checkpoint=checkpoint)
         else:
-            train.report({optim_loss: regr_component.item()})
+            train.report({optim_loss: regr_component.item(), 'training_completed': False})
 
 
         scheduler.step()
@@ -253,10 +244,9 @@ def AE_linear_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentCon
         torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
         torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
 
-
         checkpoint = Checkpoint.from_directory(tmp_dir)
 
-        train.report(results.metrics, checkpoint=checkpoint)
+        train.report({**results.metrics, 'training_completed': True}, checkpoint=checkpoint)
 
 
 
@@ -440,9 +430,9 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
 
                 checkpoint = Checkpoint.from_directory(tmp_dir)
 
-                train.report({optim_loss: regr_component.item()}, checkpoint=checkpoint)
+                train.report({optim_loss: regr_component.item(), 'training_completed': False}, checkpoint=checkpoint)
         else:
-            train.report({optim_loss: regr_component.item()})
+            train.report({optim_loss: regr_component.item(), 'training_completed': False})
 
 
 
@@ -486,10 +476,9 @@ def AE_deep_joint_epoch(config, dataset: TensorDataset, exp_cfg: ExperimentConfi
         torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
         torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
 
-
         checkpoint = Checkpoint.from_directory(tmp_dir)
 
-        train.report(results.metrics, checkpoint=checkpoint)
+        train.report({**results.metrics, 'training_completed': True}, checkpoint=checkpoint)
 
 
 
@@ -700,7 +689,7 @@ def AE_linear_joint_epoch_prime(config, dataset: TensorDataset, exp_cfg: Experim
 
         checkpoint = Checkpoint.from_directory(tmp_dir)
 
-        train.report(results.metrics, checkpoint=checkpoint)
+        train.report({**results.metrics, 'training_completed': True}, checkpoint=checkpoint)
 
 
 

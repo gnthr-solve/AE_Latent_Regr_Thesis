@@ -12,40 +12,23 @@ from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 
-from pathlib import Path
-
 from data_utils import TensorDataset, SplitSubsetFactory
 
-from preprocessing.normalisers import MinMaxNormaliser, MinMaxEpsNormaliser, ZScoreNormaliser, RobustScalingNormaliser
-
-from models import (
-    LinearEncoder,
-    LinearDecoder,
-    VarEncoder,
-    VarDecoder,
-)
-
-from models.regressors import LinearRegr, FunnelDNNRegr, DNNRegr
-from models import AE, VAE, GaussVAE, EnRegrComposite
-from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
+from models.regressors import FunnelDNNRegr, DNNRegr
 
 from loss import (
-    CompositeLossTerm,
     LpNorm,
     RelativeLpNorm,
     Huber,
     RelativeHuber,
 )
 
-from loss.decorators import Loss, Weigh, Observe
-from loss.adapters import AEAdapter, RegrAdapter
+from loss.decorators import Loss
+from loss.adapters import RegrAdapter
 
 
 from evaluation import Evaluation, EvalConfig
-from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    LossTermVisitor
-)
+from evaluation.eval_visitors import RegrOutputVisitor, LossTermVisitor
 
 from helper_tools.setup import create_eval_metric
 
@@ -164,9 +147,9 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
                 )
                 checkpoint = Checkpoint.from_directory(temp_checkpoint_dir)
 
-                train.report({optim_loss: loss_regr.item()}, checkpoint=checkpoint)
+                train.report({optim_loss: loss_regr.item(), 'training_completed': False}, checkpoint=checkpoint)
         else:
-            train.report({optim_loss: loss_regr.item()})
+            train.report({optim_loss: loss_regr.item(), 'training_completed': False})
 
         #--- Scheduler Step ---#
         scheduler.step()
@@ -193,5 +176,12 @@ def deep_regr(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
     
-    train.report(results.metrics)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        checkpoint = None
+        
+        torch.save(regressor.state_dict(), os.path.join(tmp_dir, f"regressor.pt"))
+
+        checkpoint = Checkpoint.from_directory(tmp_dir)
+
+        train.report({**results.metrics, 'training_completed': True}, checkpoint=checkpoint)
     

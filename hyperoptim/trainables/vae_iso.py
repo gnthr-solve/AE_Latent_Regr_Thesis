@@ -1,30 +1,22 @@
 import os
 import tempfile
 import torch
-import ray
-import logging
 
-from ray import train, tune
+from ray import train
 from ray.train import Checkpoint
 
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 
-from pathlib import Path
-
 from data_utils import TensorDataset, SplitSubsetFactory
 
 from models import (
-    LinearEncoder,
-    LinearDecoder,
     VarEncoder,
     VarDecoder,
 )
 
-from models.regressors import LinearRegr, ProductRegr, DNNRegr
-from models import AE, VAE, GaussVAE, EnRegrComposite
-from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
+from models import VAE, GaussVAE
 
 from loss import (
     CompositeLossTerm,
@@ -34,16 +26,13 @@ from loss import (
     RelativeHuber,
 )
 
-from loss.decorators import Loss, Weigh, Observe
-from loss.adapters import AEAdapter, RegrAdapter
+from loss.decorators import Loss, Weigh
+from loss.adapters import AEAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from evaluation import Evaluation, EvalConfig
-from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    ReconstrLossVisitor, RegrLossVisitor, LossTermVisitor
-)
+from evaluation.eval_visitors import VAEOutputVisitor, LossTermVisitor
 
 from helper_tools.setup import create_eval_metric
 
@@ -156,13 +145,12 @@ def VAE_iso(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
                 
                 torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
 
-
                 checkpoint = Checkpoint.from_directory(tmp_dir)
 
-                #NOTE: This reporting needs to be adjusted because the ETE loss is not the same as the regression loss
-                train.report({optim_loss: loss_ae.item()}, checkpoint=checkpoint)
+                train.report({optim_loss: loss_ae.item(), 'training_completed': False}, checkpoint=checkpoint)
+
         else:
-            train.report({optim_loss: loss_ae.item()})
+            train.report({optim_loss: loss_ae.item(), 'training_completed': False})
 
         scheduler.step()
 
@@ -190,5 +178,13 @@ def VAE_iso(config, dataset: TensorDataset, exp_cfg: ExperimentConfig):
     evaluation.accept_sequence(visitors = visitors)
     results = evaluation.results
 
-    train.report(results.metrics)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        checkpoint = None
+        
+        torch.save(ae_model.state_dict(), os.path.join(tmp_dir, "ae_model.pt"))
+
+        checkpoint = Checkpoint.from_directory(tmp_dir)
+
+        train.report({**results.metrics, 'training_completed': True}, checkpoint=checkpoint)
+
 
