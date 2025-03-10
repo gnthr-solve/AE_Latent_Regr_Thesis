@@ -80,9 +80,15 @@ def extract_best_model_params(experiment_dir: Path) -> dict[str, Any]:
     results_path = experiment_dir / 'final_results.csv'
     results_df = pd.read_csv(results_path, low_memory = False)
 
-    # Drop rows containing NaN (trials that errored or were terminated by scheduler)
-    results_df.dropna(axis = 0, how = 'any', inplace = True)
+    #--- Drop rows of trials that errored or were terminated by scheduler ---#
+    if 'training_completed' in results_df.columns: # indicated by training_completed in later version
+        results_df = results_df[results_df['training_completed']]
+        results_df.drop(columns=['training_completed'], inplace=True)
 
+    else: # indicated by NaN metrics in earlier trials
+        results_df.dropna(axis = 0, how = 'any', inplace = True)
+
+    #sort, select best entry, convert to dict
     best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
 
 
@@ -674,7 +680,7 @@ def calculate_metrics(evaluation: Evaluation, outputs_key: str, title: str = Non
 Eval Specific Functions
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def linear_regr_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str) -> Evaluation:
+def linear_regr_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, **kwargs) -> Evaluation:
 
     model_paths = {model_path.stem: model_path for model_path in list(model_dir.glob("*.pt"))} 
     print(model_paths)
@@ -733,7 +739,7 @@ def linear_regr_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str
     
 
 
-def dnn_regr_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict) -> Evaluation:
+def dnn_regr_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict, **kwargs) -> Evaluation:
 
     model_paths = {model_path.stem: model_path for model_path in list(model_dir.glob("*.pt"))} 
     print(model_paths)
@@ -796,7 +802,7 @@ def dnn_regr_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, b
 
 
 
-def ae_linear_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict) -> Evaluation:
+def ae_linear_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict, **kwargs) -> Evaluation:
 
     ###--- Model Paths ---###
 
@@ -897,7 +903,7 @@ def ae_linear_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, 
 
 
 
-def ae_deep_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict) -> Evaluation:
+def ae_deep_evaluation(model_dir: Path, data_kind: str, normaliser_kind: str, best_model_params: dict, **kwargs) -> Evaluation:
 
     model_paths = {model_path.stem: model_path for model_path in list(model_dir.glob("*.pt"))} 
     print(model_paths)

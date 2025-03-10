@@ -34,10 +34,7 @@ from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from evaluation import Evaluation, EvalConfig
-from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
-    LossTermVisitor
-)
+from evaluation.eval_visitors import RegrOutputVisitor, LossTermVisitor
 
 from visualisation import *
 
@@ -153,89 +150,7 @@ def calculate_metrics(evaluation: Evaluation, outputs_key: str, title: str = Non
 
 
 
-"""
-Eval Specific Functions Multiple
--------------------------------------------------------------------------------------------------------------------------------------------
-"""
-def dnn_regr_results(results_dir: Path, experiment_name: str, data_kind: str, normaliser_kind: str, print_out: bool = False):
 
-    ###--- Paths ---###
-    experiment_dir = results_dir / experiment_name
-    
-    results_path = experiment_dir / 'final_results.csv'
-    model_paths = {model_path.stem: model_path for model_path in list(experiment_dir.glob("*.pt"))} 
-    
-    if print_out:
-        print(model_paths)
-
-
-    ###--- Dataset Setup ---###
-    normaliser = create_normaliser(normaliser_kind)
-    dataset_builder = DatasetBuilder(
-        kind = data_kind,
-        normaliser = normaliser,
-    )
-    
-    dataset = dataset_builder.build_dataset()
-    input_dim = dataset.X_dim - 1
-    
-    if print_out:
-        print(f"Input_dim: {input_dim}")
-    
-
-    ###--- Load Results, identify best ---###
-    results_df = pd.read_csv(results_path, low_memory = False)
-    drop_cols = [col for col in TRAINING_PARAMS if col in results_df.columns]
-    results_df.drop(columns = drop_cols, inplace = True)
-
-    best_entry = results_df.sort_values(by = 'L2_norm').iloc[0].to_dict()
-    best_result_values = {name: val for name, val in best_entry.items() if name == 'L2_norm' or name in ADD_METRICS}
-    best_result_params = {name: val for name, val in best_entry.items() if name != 'L2_norm' and name not in ADD_METRICS}
-    
-    if print_out:
-        print(
-            f'Best entry dict: \n{best_entry}\n'
-            f'-------------------------------------\n'
-            f'Best metrics: \n{best_result_values}\n'
-            f'-------------------------------------\n'
-            f'Best params: \n{best_result_params}\n'
-            f'-------------------------------------\n'
-        )
-
-    regressor = DNNRegr(
-        input_dim = input_dim,
-        output_dim = 2,
-        **best_result_params,
-    )
-
-    regressor.load_state_dict(torch.load(model_paths['regressor']))
-    regressor.eval()
-
-
-    ###--- Evaluation ---###
-    labelled_subset = get_subset_by_label_status(dataset = dataset, labelled = True)
-
-    evaluation = Evaluation(
-        dataset = dataset,
-        subsets = {'labelled': labelled_subset},
-        models = {'regressor': regressor},
-    )
-
-    eval_metrics = {
-        name: create_eval_metric(name)
-        for name in ['L2-norm', 'Rel_L2-norm', 'L1-norm', 'Rel_L1-norm']
-    }
-
-    eval_cfg = EvalConfig(data_key = 'labelled', output_name = 'regr_iso', mode = 'iso')
-
-    visitors = [
-        RegrOutputVisitor(eval_cfg = eval_cfg),
-        LossTermVisitor(loss_terms = eval_metrics, eval_cfg = eval_cfg)
-    ]
-
-    evaluation.accept_sequence(visitors = visitors)
-
-    return evaluation
     
 
 
@@ -245,38 +160,62 @@ Call Specific Evals
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 
-def eval_dnn_models():
+def eval_models():
 
+    from experiment_eval import linear_regr_evaluation, dnn_regr_evaluation, ae_linear_evaluation, extract_best_model_params
     results_dir = Path('./results_hyperopt/')
 
     experiment_names = [
+        'linear_regr_iso_key_raw', 
+        'linear_regr_iso_key_min_max', 
+
         'deep_NN_regr_key_raw',
         'deep_NN_regr_key_min_max',
-        'deep_NN_regr_max_raw', 
-        'deep_NN_regr_max_min_max',
-        'shallow_NN_regr_key_raw',
+   
+        'AE_linear_joint_epoch_key_raw',
+        'AE_linear_joint_epoch_key_min_max',
+
+        # 'linear_regr_iso_max_raw', 
+        # 'linear_regr_iso_max_min_max',
+
+        # 'deep_NN_regr_max_raw', 
+        # 'deep_NN_regr_max_min_max',
+
+        # 'AE_linear_joint_epoch_max_raw',
+        # 'AE_linear_joint_epoch_max_min_max',
     ]
 
-    experiment_title_map = {
-        'deep_NN_regr_key_raw': r'Deep on KEY unn.',
-        'deep_NN_regr_key_min_max': r'Deep on KEY Min-Max',
-        'deep_NN_regr_max_raw': r'Deep on MAX unn.',
-        'deep_NN_regr_max_min_max': r'Deep on MAX Min-Max',
-        'shallow_NN_regr_key_raw': r'Shallow on KEY unn.',
-    }
+    # experiment_title_map = {
+    #     'deep_NN_regr_key_raw': r'Deep on KEY unn.',
+    #     'deep_NN_regr_key_min_max': r'Deep on KEY Min-Max',
+    #     'deep_NN_regr_max_raw': r'Deep on MAX unn.',
+    #     'deep_NN_regr_max_min_max': r'Deep on MAX Min-Max',
+    #     'shallow_NN_regr_key_raw': r'Shallow on KEY unn.',
+    # }
 
-    experiment_evals = {}
+    experiment_evals: dict[str, Evaluation] = {}
     for name in experiment_names:
+        
+        experiment_dir = results_dir / name
 
         data_kind = 'key' if 'key' in name else 'max'
         normaliser_kind = 'raw' if name.endswith('raw') else 'min_max'
 
-        experiment_evals[name] = dnn_regr_results(
-            results_dir=results_dir, 
-            experiment_name=name, 
-            data_kind=data_kind, 
-            normaliser_kind=normaliser_kind,
-        )
+        if name.startswith('linear'):
+            eval_func = linear_regr_evaluation
+        elif 'deep_NN' in name:
+            eval_func = dnn_regr_evaluation
+        elif 'AE' in name:
+            eval_func = ae_linear_evaluation
+        
+        best_model_params = extract_best_model_params(experiment_dir = experiment_dir)
+
+        experiment_evals[name] = eval_func(
+            model_dir = experiment_dir, 
+            data_kind = data_kind, 
+            normaliser_kind = normaliser_kind,
+            best_model_params = best_model_params,
+        )       
 
     
     eval_metrics = {name: evaluation.results.metrics for name, evaluation in experiment_evals.items()}
@@ -321,7 +260,7 @@ def eval_dnn_models():
 """
 if __name__=="__main__":
     
-    eval_dnn_models()
+    eval_models()
     
 
     pass

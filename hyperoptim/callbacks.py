@@ -43,7 +43,7 @@ class PeriodicSaveCallback(Callback):
                 Directory where to save csv.
         """
         self.experiment_name = experiment_name
-        self.tracked_metrics = tracked_metrics
+        self.tracked_metrics = [*tracked_metrics, 'training_completed']
         
         self.save_frequency = save_frequency
         self.trial_counter = 0

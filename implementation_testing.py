@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ###--- Custom Imports ---###
-from data_utils import DatasetBuilder, TimeSeriesDataset, AlignmentTS, custom_collate_fn
+from data_utils import DatasetBuilder, TimeSeriesDataset, AlignmentTS, custom_collate_fn, get_subset_by_label_status
 from data_utils.data_filters import filter_by_machine
 
 from models.encoders import (
@@ -182,16 +182,39 @@ def test_TensorDataset():
         kind = dataset_kind,
         normaliser = normaliser,
         #exclude_columns = exclude_columns,
-        filter_condition = filter_condition,
+        #filter_condition = filter_condition,
         #exclude_const_columns = False,
     )
     
     dataset = dataset_builder.build_dataset()
-    print(f'Dataset size: {len(dataset)}')
-    print(dataset.alignm.X_col_map)
+    #print(f'Dataset size: {len(dataset)}')
+    #print(dataset.alignm.X_col_map)
     
+    labelled_subset = get_subset_by_label_status(dataset = dataset, labelled = True)
+    indices = labelled_subset.indices
+            
+    y_data = dataset.y_data[indices, 1:]
+    y_mean = y_data.mean(dim = 0, keepdim=True)
 
+    y_deviation = (y_data - y_mean)
+    l1_batch = torch.sum(torch.abs(y_deviation), dim = 1)
+    l2_batch = torch.sqrt(torch.sum(y_deviation**2, dim = 1))
 
+    l1_bar = torch.mean(l1_batch)
+    l2_bar = torch.mean(l2_batch)
+
+    mae_dim = torch.mean(torch.abs(y_deviation), dim = 0)
+    mae = torch.mean(mae_dim)
+
+    mse_dim = torch.mean(y_deviation**2, dim = 0)
+    mse = torch.mean(mse_dim)
+
+    print(
+        f'L1_bar: {l1_bar}\n'
+        f'L2_bar: {l2_bar}\n'
+        f'MAE: {mae}\n'
+        f'MSE: {mse}\n'
+    )
 
 
 """

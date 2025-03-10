@@ -34,7 +34,17 @@ def read_experiment_results(experiment_names: list[str], results_dir: Path = Non
 
         experiment_dir = results_dir / experiment_name
 
-        experiment_results[experiment_name] = pd.read_csv(experiment_dir / 'final_results.csv', low_memory = False)
+        results_df = pd.read_csv(experiment_dir / 'final_results.csv', low_memory = False)
+
+        #--- Drop rows of trials that errored or were terminated by scheduler ---#
+        if 'training_completed' in results_df.columns: # indicated by training_completed in later version
+            results_df = results_df[results_df['training_completed']]
+            results_df.drop(columns=['training_completed'], inplace=True)
+
+        else: # indicated by NaN metrics in earlier trials
+            results_df.dropna(axis = 0, how = 'any', inplace = True)
+
+        experiment_results[experiment_name] = results_df
 
     return experiment_results
 
