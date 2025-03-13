@@ -516,7 +516,7 @@ if __name__=="__main__":
     dataset_builder = DatasetBuilder(
         kind = kind,
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        #exclude_columns = exclude_columns,
     )
     
     dataset = dataset_builder.build_dataset()

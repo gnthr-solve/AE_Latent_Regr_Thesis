@@ -1,6 +1,7 @@
 
 from ray import train, tune
 
+from data_utils.info import exclude_columns
 from .config import ExperimentConfig, DatasetConfig
 from .trainables import (
     linear_regr,
@@ -18,7 +19,7 @@ Concrete Configs - Data
 data_cfg = DatasetConfig(
     dataset_kind = 'key',
     normaliser_kind = 'min_max',
-    #exclude_columns = ['Time_ptp', 'Time_ps1_ptp', 'Time_ps5_ptp', 'Time_ps9_ptp'],
+    #exclude_columns = exclude_columns,
 )
 
 

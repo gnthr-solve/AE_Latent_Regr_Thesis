@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 ###--- Custom Imports ---###
 from data_utils import DatasetBuilder, SplitSubsetFactory, retrieve_metadata
-from data_utils.info import time_col
+from data_utils.info import time_col, exclude_columns
 from data_utils.data_filters import filter_by_machine
 
 from models import (
@@ -73,7 +73,9 @@ Main Functions - Training
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
 def AE_iso_training_procedure():
-    
+    """
+    Train deterministic or NVAE Autoencoder in isolation.
+    """
     ###--- Meta ---###
     epochs = 3
     batch_size = 50
@@ -100,7 +102,7 @@ def AE_iso_training_procedure():
     dataset_builder = DatasetBuilder(
         kind = dataset_kind,
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        #exclude_columns = exclude_columns,
     )
     
     dataset = dataset_builder.build_dataset()
@@ -212,7 +214,9 @@ def AE_iso_training_procedure():
 
 
 def train_joint_seq_AE():
-
+    """
+    Train autoencoder first in isolation, then encoder-regressor composition.
+    """
     ###--- Meta ---###
     epochs = 4
     batch_size = 50
@@ -227,7 +231,7 @@ def train_joint_seq_AE():
     dataset_builder = DatasetBuilder(
         kind = 'max',
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        #exclude_columns = exclude_columns,
     )
     
     dataset = dataset_builder.build_dataset()
@@ -383,7 +387,9 @@ def train_joint_seq_AE():
 
 
 def train_joint_seq_VAE():
-
+    """
+    Train VAE autoencoder first in isolation, then encoder-regressor composition.
+    """
     ###--- Meta ---###
     epochs = 2
     batch_size = 100
@@ -401,7 +407,6 @@ def train_joint_seq_VAE():
     ete_regr_weight = 0.95
 
     dataset_kind = 'key'
-    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     normaliser_kind = 'min_max'
 
 
@@ -617,7 +622,9 @@ def train_joint_seq_VAE():
 
 
 def train_seq_AE():
-
+    """
+    Train autoencoder first in isolation, then autoencoder-regressor composition (including decoder).
+    """
     ###--- Meta ---###
     epochs = 2
     batch_size = 50
@@ -634,7 +641,6 @@ def train_seq_AE():
     scheduler_gamma = 0.9
 
     dataset_kind = 'key'
-    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     normaliser_kind = 'min_max'
     filter_condition = filter_by_machine('M_A')
 
@@ -825,7 +831,11 @@ def train_seq_AE():
 
 
 def train_joint_epoch_wise_VAE_recon():
-
+    """
+    Joint epoch training
+    1. VAE on ELBO
+    2. VAE-Regressor on reconstruction and regression loss.
+    """
     ###--- Meta ---###
     epochs = 2
     batch_size = 50
@@ -840,7 +850,7 @@ def train_joint_epoch_wise_VAE_recon():
     dataset_builder = DatasetBuilder(
         kind = 'max',
         normaliser = normaliser,
-        exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
+        #exclude_columns = exclude_columns,
     )
     
     dataset = dataset_builder.build_dataset()
@@ -1041,7 +1051,11 @@ def train_joint_epoch_wise_VAE_recon():
 
 
 def AE_joint_epoch_procedure():
-
+    """
+    Joint epoch training
+    1. AE/NVAE on reconstruction loss
+    2. AE-Regressor composition on reconstruction and regression loss.
+    """
     ###--- Meta ---###
     epochs = 2
     batch_size = 50
@@ -1060,7 +1074,6 @@ def AE_joint_epoch_procedure():
     ete_regr_weight = 0.95
 
     dataset_kind = 'key'
-    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     normaliser_kind = 'min_max'
     filter_condition = filter_by_machine('M_A')
 
@@ -1266,7 +1279,11 @@ def AE_joint_epoch_procedure():
 
 
 def VAE_joint_epoch_procedure():
-
+    """
+    Joint epoch training
+    1. VAE on ELBO
+    2. VAE-Regressor composition on ELBO and regression loss.
+    """
     ###--- Meta ---###
     epochs = 5
     batch_size = 100
@@ -1285,7 +1302,6 @@ def VAE_joint_epoch_procedure():
     ete_regr_weight = 0.95
 
     dataset_kind = 'key'
-    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     #normaliser_kind = 'min_max'
     normaliser_kind = None
     filter_condition = filter_by_machine('M_A')
@@ -1494,7 +1510,9 @@ def VAE_joint_epoch_procedure():
 
 
 def train_linear_regr():
-
+    """
+    Train direct linear model. Plot regression weights.
+    """
     ###--- Meta ---###
     epochs = 100
     batch_size = 20
@@ -1503,7 +1521,6 @@ def train_linear_regr():
     scheduler_gamma = 0.99
 
     dataset_kind = 'key'
-    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
 
     observe_loss_dev = False
     normaliser_kind = 'min_max'
@@ -1673,7 +1690,9 @@ def train_linear_regr():
 
 
 def train_deep_regr():
-
+    """
+    Train direct DNN model.
+    """
     ###--- Meta ---###
     epochs = 5
     batch_size = 30
@@ -1685,7 +1704,6 @@ def train_deep_regr():
     scheduler_gamma = 0.9
 
     dataset_kind = 'key'
-    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
     normaliser_kind = 'min_max'
 
 
@@ -1809,7 +1827,13 @@ def train_deep_regr():
 
 
 def AE_regr_loss_tests():
-
+    """
+    Joint epoch training with additional weighted loss compositions.
+    1. AE/NVAE on 
+    AE loss = weighted sum of (reconstruction loss, topological loss | clustering loss).
+    2. AE-Regressor composition on 
+    ETE loss = weighted sum of (AE loss,  regression loss).
+    """
     ###--- Meta ---###
     epochs = 2
     batch_size = 100
@@ -1830,7 +1854,6 @@ def AE_regr_loss_tests():
 
     dataset_kind = 'key'
     normaliser_kind = 'min_max'
-    exclude_columns = ["Time_ptp", "Time_ps1_ptp", "Time_ps5_ptp", "Time_ps9_ptp"]
 
 
     ###--- Dataset ---###

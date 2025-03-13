@@ -190,6 +190,7 @@ def test_TensorDataset():
     #print(f'Dataset size: {len(dataset)}')
     #print(dataset.alignm.X_col_map)
     
+    ###--- Get trivial 'model' results ---###
     labelled_subset = get_subset_by_label_status(dataset = dataset, labelled = True)
     indices = labelled_subset.indices
             
