@@ -60,7 +60,7 @@ Below is an overview of the current repository structure:
 | `implementation_testing.py`    | File for executing small unit tests of components. |
 
 
-## Excluded Files
+## Excluded Files and Directories
 Due to the confidentiality of both the data and the details of feature names and metadata, 
 the following files are excluded from the repository:
 
@@ -78,6 +78,10 @@ the following files are excluded from the repository:
     - Used by `DatasetBuilder` as masks to create dataset instances filtered by metadata.
     - Currently only contains a closure for a by-machine filter.
 
+Furthermore the directories
+- `data`
+- `results_hyperopt`
+were excluded for preserving the data privacy in case of `data` and because of the size of the results directory.
 
 ## Usage
 All primary execution files contain or import functions for experiment runs or tests and an execution section.
