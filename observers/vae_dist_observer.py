@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from .training_observer import IterObserver
+from .iter_observer import IterObserver
 
 """
 VAELatentObserver

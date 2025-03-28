@@ -43,4 +43,5 @@ class MultiHeadAttention(nn.Module):
         
         # Reshape and project back
         output = output.transpose(1, 2).contiguous().view(batch_size, -1, self.d_model)
+        
         return self.W_o(output)

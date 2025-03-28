@@ -414,7 +414,15 @@ def plot_latent_w_attribute(evaluation: Evaluation, outputs_key: str, title: str
         i = n // 2
         j = n % 2
         
-        plot_dict[(i,j)] = ColoredScatterPlot(
+        # plot_dict[(i,j)] = ColoredScatterPlot(
+        #     x_data = Z_batch[:, 0],
+        #     y_data = Z_batch[:, 1],
+        #     color_data = X_feature,
+        #     x_label = '$z_1$',
+        #     y_label = '$z_2$',
+        #     color_label = name,
+        # )
+        plot_dict[(j,i)] = ColoredScatterPlot(
             x_data = Z_batch[:, 0],
             y_data = Z_batch[:, 1],
             color_data = X_feature,
@@ -426,7 +434,8 @@ def plot_latent_w_attribute(evaluation: Evaluation, outputs_key: str, title: str
 
     plot_matrix.add_plot_dict(plot_dict)
 
-    plot_matrix.draw(fontsize = 14, figsize = (14, 6))
+    #plot_matrix.draw(fontsize = 14, figsize = (14, 6))
+    plot_matrix.draw(fontsize = 18, figsize = (11, 14))
 
 
 
@@ -575,8 +584,61 @@ def plot_latent_w_true_and_pred(evaluation: Evaluation, outputs_key: str, title:
 
 
 
+def plot_latent_pred(evaluation: Evaluation, outputs_key: str, title: str = None, save_path: Path = None):
 
-def plot_analyse_weights(regressor: LinearRegr, dataset: TensorDataset, experiment_dir: Path):
+    results = evaluation.results
+    losses = results.losses
+    metrics = results.metrics
+
+
+    # extract X_batch and Z_batch from eval
+    y_batch = evaluation.test_data['labelled']['y_batch']
+    y_hat_batch = evaluation.model_outputs[outputs_key].y_hat_batch
+
+    y_batch = normalise_tensor(y_batch)
+    y_hat_batch = normalise_tensor(y_hat_batch)
+
+    Z_batch = evaluation.model_outputs[outputs_key].Z_batch
+    
+
+    ###--- Plotting ---###
+    if title:
+        plot_matrix = PlotMatrix(title=title, save_path=save_path)
+    else:
+        plot_matrix = PlotMatrix(save_path=save_path)
+
+    plot_dict = {}
+
+    plot_dict[(0,0)] = ColoredScatterPlot(
+        x_data = Z_batch[:, 0],
+        y_data = Z_batch[:, 1],
+        color_data = y_hat_batch[:, 0],
+        x_label = '$z_1$',
+        y_label = '$z_2$',
+        color_label = 'Predicted Upstack Values',
+    )
+
+    plot_dict[(1,0)] = ColoredScatterPlot(
+        x_data = Z_batch[:, 0],
+        y_data = Z_batch[:, 1],
+        color_data = y_hat_batch[:, 1],
+        x_label = '$z_1$',
+        y_label = '$z_2$',
+        color_label = 'Predicted Downstack Values',
+    )
+
+    plot_matrix.add_plot_dict(plot_dict)
+
+    plot_matrix.draw(fontsize = 18, figsize = (11, 14))
+
+
+
+
+def plot_analyse_weights(evaluation: Evaluation, save_path_csv: bool = None, save_dir_fig: Path = None):
+
+    regressor: LinearRegr = evaluation.models['regressor']
+    dataset: TensorDataset = evaluation.dataset
+
     ###--- Weights ---###
     weights_1, weights_2 = regressor.regr_map.weight.detach().unbind(dim = 0)
     bias_1, bias_2 = regressor.regr_map.bias.detach().unbind(dim = 0)
@@ -604,7 +666,10 @@ def plot_analyse_weights(regressor: LinearRegr, dataset: TensorDataset, experime
         )
 
         weight_df.drop(columns = ['Absolute Weight'], inplace = True)
-        weight_df.to_csv(experiment_dir/ f'regr_weights_{label}.csv', index = False)
+
+        if save_path_csv:
+            weight_df.to_csv(save_path_csv, index = False)
+
         n_top_features = 15
         top_features_df = weight_df.head(n_top_features)
 
@@ -614,19 +679,20 @@ def plot_analyse_weights(regressor: LinearRegr, dataset: TensorDataset, experime
         plt.xlabel('Coefficient Value', fontsize = 14)
         plt.tick_params(axis='y', labelsize = 16)
         plt.tick_params(axis='x', labelsize = 12)
-        plt.title(f'Top {n_top_features} Feature Weights on MAX for {label}', fontsize=14)
-        #plt.title(f'Top {n_top_features} Feature Weights on KEY for {label}', fontsize=14)
+        #plt.title(f'Top {n_top_features} Feature Weights on MAX for {label}', fontsize=14)
+        plt.title(f'Top {n_top_features} Feature Weights on KEY for {label}', fontsize=14)
 
         plt.tight_layout(pad=1.5)
         plt.gca().invert_yaxis()  # Most important features on top
         plt.grid(True, which = 'major')
 
-        plt.savefig(
-            experiment_dir/ f'top{n_top_features}_weights_{label}.png',
-            dpi=200,
-            bbox_inches='tight',
-            #pad_inches=0.5
-        )
+        if save_dir_fig:
+            plt.savefig(
+                save_dir_fig / f'top_15_w_key_{label}.pdf',
+                #dpi=200,
+                bbox_inches='tight',
+                #pad_inches=0.5
+            )
         
         plt.show()
 
@@ -665,8 +731,8 @@ def eval_model_linear():
 
     results_dir = Path('./results_hyperopt/')
 
-    #data_kind = 'key'
-    data_kind = 'max'
+    data_kind = 'key'
+    #data_kind = 'max'
     #normaliser_kind = 'raw'
     normaliser_kind = 'min_max'
     experiment_name = f'linear_regr_iso_{data_kind}_{normaliser_kind}'
@@ -687,16 +753,19 @@ def eval_model_linear():
     ###--- Evaluation ---###
     calculate_metrics(evaluation=evaluation, outputs_key='regr_iso')
 
+    save_path = Path('../Presentation/assets/figures/results/linear/')
+    plot_analyse_weights(evaluation=evaluation, save_dir_fig=save_path)
+    
     # title = 'Predictions on unn. KEY dataset'
     # save_path = experiment_dir / 'pred_linear_key_unn.pdf'
     # plot_predicted_w_losses(evaluation=evaluation, outputs_key='regr_iso', title = title, save_path = save_path)
 
-
+    
     title = None
     #title = 'Predictions on unn. KEY dataset'
     #save_path = '../Thesis/assets/figures/results/linear/true_v_pred_lin_KEY.pdf'
-    save_path = '../Thesis/assets/figures/results/linear/true_v_pred_lin_MAX.pdf'
-    plot_actual_v_predicted_separate(evaluation=evaluation, outputs_key='regr_iso', title = title, save_path=save_path)
+    # save_path = '../Thesis/assets/figures/results/linear/true_v_pred_lin_MAX.pdf'
+    # plot_actual_v_predicted_separate(evaluation=evaluation, outputs_key='regr_iso', title = title, save_path=save_path)
     
 
 
@@ -825,8 +894,8 @@ def eval_model_ae_linear_lim_dim():
 
     ###--- Plot A ---###
     #save_path = '../Thesis/assets/figures/results/ae_regr/latent2_ae_lin_KEY_n_consumables.pdf'
-    save_path = None
-    plot_latent_w_attribute(evaluation=evaluation, outputs_key='ae_regr', save_path=save_path)
+    #save_path = None
+    #plot_latent_w_attribute(evaluation=evaluation, outputs_key='ae_regr', save_path=save_path)
 
 
     ###--- Plot B ---###
@@ -834,13 +903,22 @@ def eval_model_ae_linear_lim_dim():
     # plot_latent_w_true_and_pred(evaluation=evaluation, outputs_key='ae_regr', save_path = save_path)
 
 
-    ###--- Plot B ---###
+    ###--- Plot C ---###
     # save_path = '../Thesis/assets/figures/results/ae_regr/latent2_ae_lin_KEY_n_consumables.pdf'
     # plot_latent_w_true_and_attribute(evaluation=evaluation, outputs_key='ae_regr', save_path = save_path)
 
 
+    ###--- Plot D ---###
+    save_path = '../Presentation/assets/figures/results/ae_regr/latent2_pred_KEY.pdf'
+    plot_latent_pred(evaluation=evaluation, outputs_key='ae_regr', save_path = save_path)
 
-    
+    ###--- Plot E ---###
+    save_path = '../Presentation/assets/figures/results/ae_regr/latent2_features.pdf'
+    plot_latent_w_attribute(evaluation=evaluation, outputs_key='ae_regr', save_path = save_path)
+
+
+
+
 def eval_model_ae_deep():
 
     results_dir = Path('./results_hyperopt/')

@@ -81,6 +81,7 @@ the following files are excluded from the repository:
 Furthermore the directories
 - `data`
 - `results_hyperopt`
+
 were excluded for preserving the data privacy in case of `data` and because of the size of the results directory.
 
 ## Usage

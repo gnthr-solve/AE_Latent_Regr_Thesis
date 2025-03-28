@@ -45,6 +45,7 @@ from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
+from observers.latent_visualiser import LatentSpaceVisualiser
 
 from training.procedure_iso import AEIsoTrainingProcedure
 from training.procedure_joint import JointEpochTrainingProcedure
@@ -1835,9 +1836,9 @@ def AE_regr_loss_tests():
     ETE loss = weighted sum of (AE loss,  regression loss).
     """
     ###--- Meta ---###
-    epochs = 2
+    epochs = 5
     batch_size = 100
-    latent_dim = 3
+    latent_dim = 2
 
     ae_model_type = 'NVAE'
     n_layers_e = 5
@@ -1905,6 +1906,10 @@ def AE_regr_loss_tests():
 
     ###--- Observation Test Setup ---###
     observer_callback = LossTrajectoryObserver()
+    latent_visualiser = LatentSpaceVisualiser(
+        output_dir = './results/AE_regr_loss_tests/latent_frames',
+        iter_label = 'iter'
+    )
 
 
     ###--- Losses ---###
@@ -1955,6 +1960,11 @@ def AE_regr_loss_tests():
     scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
+    ###--- Checkpoint condition ---###
+    n_interim_checkpoints = 40
+    epoch_modulo = len(dataloader_ae) * epochs // n_interim_checkpoints
+    checkpoint_condition = lambda epoch: (epoch % epoch_modulo == 0) or (epoch == epochs)
+
     ###--- Training Procedure ---###
     for epoch in range(epochs):
         
@@ -1974,6 +1984,9 @@ def AE_regr_loss_tests():
                 Z_batch = Z_batch,
             )
             
+            if checkpoint_condition(iter_idx):
+                latent_visualiser(latent_vectors = Z_batch, iteration = iter_idx, loss = loss_ae)
+
             #--- Backward Pass ---#
             loss_ae.backward()
 
@@ -2015,6 +2028,7 @@ def AE_regr_loss_tests():
         epochs = epochs,
     )
 
+    latent_visualiser.finalize('./results/AE_regr_loss_tests/latent_evolution.mp4')
 
     ###--- Test Loss ---###
     test_datasets = subset_factory.retrieve(kind = 'test')
@@ -2035,7 +2049,7 @@ def AE_regr_loss_tests():
         AEOutputVisitor(eval_cfg = eval_cfg_comp),
         RegrOutputVisitor(eval_cfg = eval_cfg_comp),
         LossTermVisitorS(loss_terms[regr_loss_name], loss_name = regr_loss_name, eval_cfg = eval_cfg_comp),
-        LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name = regr_loss_name)
+        #LatentPlotVisitor(eval_cfg = eval_cfg_comp, loss_name = regr_loss_name)
     ]
 
     evaluation.accept_sequence(visitors = visitors)
