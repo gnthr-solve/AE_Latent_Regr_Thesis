@@ -9,7 +9,11 @@ from torch import Tensor
 from typing import Optional, Tuple
 
 
-class LatentSpaceVisualiser:
+"""
+LatentSpaceVisualiser
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class LatentSpaceVisualiserLive:
     def __init__(
         self,
         output_dir: str = "./latent_frames",
@@ -133,6 +137,153 @@ class LatentSpaceVisualiser:
         os.rmdir(self.output_dir)
         
         plt.close(self.fig)
+        cv2.destroyAllWindows()
+
+        print(f"Video saved to {output_path}")
+
+
+
+
+"""
+LatentSpaceVisualiser
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class LatentSpaceVisualiser:
+    def __init__(
+        self,
+        output_dir: str = "./latent_frames",
+        frame_width: int = 1280,
+        frame_height: int = 720,
+        fps: int = 3,
+        dpi: int = 300,
+        title: str = 'Latent Space Evolution',
+        iter_label: str = 'Epoch',
+    ):
+        
+        self.output_dir = output_dir
+        self.frame_size = (frame_width, frame_height)
+        self.fps = fps
+        self.dpi = dpi
+
+        self.title = title
+        self.iter_label = iter_label
+
+        self.frame_count = 0
+        
+        self.latent_history: dict[int, Tensor] = {}
+        self.loss_history: dict[int, float] = {}
+
+        # Set up directory structure
+        os.makedirs(self.output_dir, exist_ok=True)
+
+
+    def __call__(
+        self,
+        latent_tensors: Tensor,
+        iteration: Optional[int] = None,
+        loss: Optional[Tensor] = None,
+    ):
+        
+        self.latent_history[iteration] = latent_tensors.detach().clone()
+        self.loss_history[iteration] = loss.detach().item() if loss is not None else None
+
+
+    def create_frames(self):
+
+        self.setup_plot()
+
+        latent_history = {k: lt.numpy() for k, lt in self.latent_history.items()}
+
+        for iteration, latent_vectors in latent_history.items():
+
+            loss = self.loss_history.get(iteration, None)
+
+            self.ax.clear()
+            
+            self.ax.scatter(
+                latent_vectors[:, 0],
+                latent_vectors[:, 1],
+                c='blue',
+                s = 40,
+                alpha=0.7,
+                edgecolors='w',
+                linewidths=0.2
+            )
+
+            # Add annotations
+            title = self.title
+            if iteration is not None:
+                title += f" | {self.iter_label}: {iteration}"
+            if loss is not None:
+                title += f" | Loss: {loss:.4f}"
+            self.ax.set_title(title, fontdict={'fontsize': 8})
+            
+            self.ax.set_xlabel("$z_1$")
+            self.ax.set_ylabel("$z_2$")
+            self.ax.grid(True, alpha=0.3)
+
+            self.ax.set_xlim(self.xlim[0], self.xlim[1])
+            self.ax.set_ylim(self.ylim[0], self.ylim[1])
+
+            # Save frame
+            frame_path = os.path.join(self.output_dir, f"frame_{iteration:04d}.png")
+            self.fig.savefig(frame_path, bbox_inches='tight')
+        
+        plt.close(self.fig)
+
+
+    def setup_plot(self):
+
+        # Initialize plot style
+        plt.style.use('bmh')
+        frame_width, frame_height = self.frame_size
+        self.fig = plt.figure(figsize=(frame_width/100, frame_height/100), dpi=self.dpi)
+        self.ax = self.fig.add_subplot(111)
+
+        all_latent = torch.cat([lt for lt in self.latent_history.values()], dim = 0)
+        
+        xlim = (all_latent[:, 0].min(), all_latent[:, 0].max())
+        ylim = (all_latent[:, 1].min(), all_latent[:, 1].max())
+        
+        buffer_x = 0.1 * (xlim[1] - xlim[0])
+        buffer_y = 0.1 * (ylim[1] - ylim[0])
+        
+        self.xlim = (xlim[0]-buffer_x, xlim[1]+buffer_x)
+        self.ylim = (ylim[0]-buffer_y, ylim[1]+buffer_y)
+        
+
+
+    def finalize(self, output_path: str = "latent_space_evolution.mp4"):
+        """Compile frames into video and clean up"""
+
+        self.create_frames()
+        iterations = list(self.latent_history.keys())
+
+        video = cv2.VideoWriter(
+            output_path,
+            cv2.VideoWriter_fourcc(*'MJPG'),
+            self.fps,
+            self.frame_size
+        )
+
+        # Read frames in order
+        for frame_num in iterations:
+
+            frame_path = os.path.join(self.output_dir, f"frame_{frame_num:04d}.png")
+
+            frame = cv2.imread(frame_path)
+            frame = cv2.resize(frame, self.frame_size)
+
+            video.write(frame)
+
+        video.release()
+        
+        # Cleanup
+        for frame_num in iterations:
+            os.remove(os.path.join(self.output_dir, f"frame_{frame_num:04d}.png"))
+
+        os.rmdir(self.output_dir)
+        
         cv2.destroyAllWindows()
 
         print(f"Video saved to {output_path}")

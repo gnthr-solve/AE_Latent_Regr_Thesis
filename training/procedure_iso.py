@@ -9,7 +9,7 @@ from torch import nn
 
 from tqdm import trange, tqdm
 
-from observers.training_observer import Subject
+from observers.iter_observer import Subject
 
 from models.vae import VAE
 from models.autoencoders import AE

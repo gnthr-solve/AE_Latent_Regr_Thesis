@@ -14,20 +14,16 @@ Simple Training Observer
 """
 class TrainingObserver:
     
-    def __init__(self, store_batches: bool = False, device: str = 'cpu'):
-        self.store_batches = store_batches
+    def __init__(self, device: str = 'cpu'):
         self.device = device
         self.history = defaultdict(list)
         
 
-    def __call__(self, name: str, loss_batch: Tensor):
+    def __call__(self, name: str, tensor_batch: Tensor):
         
-        detached = loss_batch.detach().to(self.device)
+        detached = tensor_batch.detach().to(self.device)
 
-        if self.store_batches:
-            self.history[name].append(detached)
+        self.history[name].append(detached)
 
-        else:
-            self.history[name].append(detached.mean().item())
             
 
