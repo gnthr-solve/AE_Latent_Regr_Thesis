@@ -44,6 +44,6 @@ if __name__=="__main__":
 
     ###--- Testing ---###
     #AE_regr_loss_tests()
-    AE_regr_loss_tests2()
+    AE_regr_loss_effect_visualisation()
 
     pass

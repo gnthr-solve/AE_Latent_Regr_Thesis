@@ -149,10 +149,6 @@ def AE_regr_loss_tests():
 
     ###--- Observation Test Setup ---###
     observer_callback = LossTrajectoryObserver()
-    latent_visualiser = LatentSpaceVisualiserLive(
-        output_dir = './results/AE_regr_loss_tests/latent_frames',
-        iter_label = 'iter'
-    )
 
 
     ###--- Losses ---###
@@ -203,11 +199,6 @@ def AE_regr_loss_tests():
     scheduler = ExponentialLR(optimiser, gamma = scheduler_gamma)
 
 
-    ###--- Checkpoint condition ---###
-    n_interim_checkpoints = 40
-    epoch_modulo = len(dataloader_ae) * epochs // n_interim_checkpoints
-    checkpoint_condition = lambda epoch: (epoch % epoch_modulo == 0) or (epoch == epochs)
-
     ###--- Training Procedure ---###
     for epoch in range(epochs):
         
@@ -226,9 +217,6 @@ def AE_regr_loss_tests():
                 X_hat_batch = X_hat_batch, 
                 Z_batch = Z_batch,
             )
-            
-            if checkpoint_condition(iter_idx):
-                latent_visualiser(latent_vectors = Z_batch, iteration = iter_idx, loss = loss_ae)
 
             #--- Backward Pass ---#
             loss_ae.backward()
@@ -271,7 +259,6 @@ def AE_regr_loss_tests():
         epochs = epochs,
     )
 
-    latent_visualiser.finalize('./results/AE_regr_loss_tests/latent_evolution.mp4')
 
     ###--- Test Loss ---###
     test_datasets = subset_factory.retrieve(kind = 'test')
@@ -314,7 +301,11 @@ def AE_regr_loss_tests():
 
 
 
-def AE_regr_loss_tests2():
+"""
+Training Functions - Joint Epoch Loss Experiments - 2D Latent visualisation
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def AE_regr_loss_effect_visualisation():
     """
     Joint epoch training with additional weighted loss compositions.
     1. AE/NVAE on 
@@ -405,7 +396,7 @@ def AE_regr_loss_tests2():
     loss_terms = {
         'L2': AEAdapter(LpNorm(p = 2)),
         'topo': Topological(p = 2),
-        'kmeans': KMeansLoss(n_clusters = 5, latent_dim = latent_dim),
+        'kmeans': KMeansLoss(n_clusters = 6, latent_dim = latent_dim),
         'Huber': RegrAdapter(Huber(delta = 1)),
     }
 
@@ -422,6 +413,7 @@ def AE_regr_loss_tests2():
         composite_lt = ae_clt, 
         weights={ae_loss_base_name: ae_base_weight, ae_loss_extra_name: 1 - ae_base_weight}
     )
+
     ae_clt.add_callback(name = 'ALL', callback = observer_callback)
 
     ete_loss_terms = {
@@ -521,7 +513,7 @@ def AE_regr_loss_tests2():
     #     epochs = epochs,
     # )
 
-    latent_visualiser.finalize('./results/AE_regr_loss_tests/latent_evolution_kmeans.mp4')
+    latent_visualiser.finalize('./results/AE_regr_loss_tests/latent_evolution_kmeans6.mp4')
 
     ###--- Test Loss ---###
     test_datasets = subset_factory.retrieve(kind = 'test')

@@ -9,4 +9,4 @@ from .vae_joint_epoch_tp import VAE_joint_epoch_procedure, train_joint_epoch_wis
 
 from .direct_regr_tp import train_deep_regr, train_linear_regr
 
-from .joint_epoch_loss_tests import AE_regr_loss_tests, AE_regr_loss_tests2
+from .joint_epoch_loss_tests import AE_regr_loss_tests, AE_regr_loss_effect_visualisation

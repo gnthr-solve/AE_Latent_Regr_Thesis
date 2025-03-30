@@ -118,7 +118,8 @@ When efficiency is an issue the decorator can easily be commented out.
 class TimingDecorator:
 
     def __init__(self):
-        self._timed_methods = {}
+
+        self._timed_methods: dict[int, MethodTimingDescriptor] = {}
 
 
     def __call__(self, func):
