@@ -31,6 +31,17 @@ class TensorBuffer:
         growth_factor: int | float = 2.0,       
         known_size: int | None = None,
     ):
+        """
+        Initialise a TensorBuffer.
+        
+        Args:
+            tensor_shape: Shared shape of the stored tensors
+            dtype: Shared dtype of the stored tensors
+            device: Device to store tensors on
+            initial_capacity: Initial size of the buffer
+            growth_factor: Factor by which capacity is increased if exhausted
+            known_size: If given, preallocates memory for known capacity
+        """
         self.tensor_shape = tensor_shape # Shape of individual tensors (excluding batch dim)
         self.dtype = dtype # PyTorch data type 
         self.device = device # PyTorch device

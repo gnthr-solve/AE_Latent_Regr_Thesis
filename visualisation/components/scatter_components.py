@@ -387,3 +387,52 @@ class DimReducedScatterPlot(AxesComponent):
             ax.set_title(self.title, fontsize=fontsize + 2)
 
         ax.grid(True)
+
+
+
+
+class MultiScatterPlot(AxesComponent):
+
+    def __init__(
+            self, 
+            tensor_data: dict[str | int, Tensor], 
+            x_label: str,
+            y_label: str,
+            title: str = None
+        ):
+        
+        self.tensor_data = tensor_data
+
+        self.x_label = x_label
+        self.y_label = y_label
+
+        self.title = title
+
+
+    def draw(self, ax: plt.Axes, fontsize: int = 10):
+        """
+        Draws the latent space scatterplot with color-coded errors on the given Axes.
+
+        Args:
+            ax (plt.Axes): The matplotlib Axes to draw on.
+            fontsize (int, optional): Font size for title. Defaults to 10.
+        """
+        
+        for i, (label, tensor) in enumerate(self.tensor_data.items()):
+
+            ax.scatter(
+                tensor[:, 0],  
+                tensor[:, 1],
+                c=self.error_tensor,
+                alpha=0.7,
+                edgecolors='w',
+                s=50,
+                label = label,
+            )
+        
+        # Set labels and title
+        ax.set_xlabel(self.x_label, fontsize=fontsize)
+        ax.set_ylabel(self.y_label, fontsize=fontsize)
+        ax.set_title(self.title, fontsize=fontsize + 2)
+        
+        ax.grid(True)

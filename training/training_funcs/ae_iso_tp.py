@@ -44,14 +44,14 @@ from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
-from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
+from observers.training_observer import TrainingObserver
 from observers.latent_visualiser import LatentSpaceVisualiser
 
 from ..procedure_iso import AEIsoTrainingProcedure
 
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
-    AEOutputVisitor, VAEOutputVisitor, RegrOutputVisitor,
+    AEOutputVisitor, VAEOutputVisitor,
     LossTermVisitorS, LossTermVisitor,
     LatentPlotVisitor, LatentDistributionVisitor,
     LossStatisticsVisitor,
@@ -59,13 +59,9 @@ from evaluation.eval_visitors import (
 
 from helper_tools.setup import create_normaliser
 from helper_tools import dict_str
-from visualisation.general_plot_funcs import (
-    plot_loss_tensor,
-    plot_agg_training_losses,
-    plot_3Dlatent_with_error, 
-    plot_3Dlatent_with_attribute,
-)
 
+from visualisation.eval_plot_funcs import plot_3Dlatent_with_error, plot_3Dlatent_with_attribute
+from visualisation.training_history_plots import plot_agg_training_losses, plot_loss_tensor
 
 
 """
@@ -210,3 +206,147 @@ def AE_iso_training_procedure():
     #         title = title
     #     )
 
+
+
+
+"""
+Training Functions - AE/NVAE Iso - Observer testing
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def AE_iso_observer_testing():
+    """
+    Train deterministic or NVAE Autoencoder in isolation.
+    """
+    ###--- Meta ---###
+    epochs = 3
+    batch_size = 50
+    latent_dim = 2
+    lr = 1e-3
+    gamma = 0.9
+    print(f"Learning rates: {[lr * gamma**epoch for epoch in range(epochs)]}")
+
+    dataset_kind = 'key'
+
+    n_layers_e = 5
+    n_layers_d = 5
+    activation = 'PReLU'
+
+    model_kind = 'AE'
+    #model_kind = 'NVAE'
+
+    normaliser_kind = 'min_max'
+
+
+    ###--- Dataset ---###
+    normaliser = create_normaliser(normaliser_kind)
+
+    dataset_builder = DatasetBuilder(
+        kind = dataset_kind,
+        normaliser = normaliser,
+        #exclude_columns = exclude_columns,
+    )
+    
+    dataset = dataset_builder.build_dataset()
+    
+    ###--- DataLoader ---###
+    subset_factory = SplitSubsetFactory(dataset = dataset, train_size = 0.9)
+    train_dataset = subset_factory.retrieve(kind = 'train', combine = True)
+
+    dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
+
+
+    ###--- Model ---###
+    input_dim = dataset.X_dim - 1
+    print(f"Input_dim: {input_dim}")
+
+    if model_kind == 'AE':
+
+        encoder = LinearEncoder(input_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_e, activation = activation)
+        decoder = LinearDecoder(output_dim = input_dim, latent_dim = latent_dim, n_layers = n_layers_d, activation = activation)
+
+        ae_model = AE(encoder = encoder, decoder = decoder)
+
+    elif model_kind == 'NVAE':
+
+        encoder = VarEncoder(input_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_e, activation = activation)
+        decoder = VarDecoder(output_dim = input_dim, latent_dim = latent_dim, n_dist_params = 2, n_layers = n_layers_d, activation = activation)
+
+        ae_model = NaiveVAE_Sigma(encoder = encoder, decoder = decoder)
+    
+
+    ###--- Observers ---###
+    n_iterations = len(dataloader)
+    dataset_size = len(train_dataset)
+    observer = TrainingObserver(
+        n_epochs = epochs,
+        iterations_per_epoch = n_iterations,
+    )
+    
+    ###--- Loss ---###
+    reconstr_term = AEAdapter(LpNorm(p = 2))
+    loss_terms = {'Reconstruction': reconstr_term}
+    
+    ae_loss = Loss(CompositeLossTerm(loss_terms = loss_terms))
+    test_reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
+
+
+    ###--- Optimiser & Scheduler ---###
+    optimiser = Adam(ae_model.parameters(), lr = lr)
+    scheduler = ExponentialLR(optimiser, gamma = gamma)
+
+
+    ###--- Training Procedure ---###
+    pbar = tqdm(range(epochs))
+
+    for epoch in pbar:
+        
+        ###--- Training Loop AE---###
+        for iter_idx, (X_batch, _) in enumerate(dataloader):
+            
+            X_batch = X_batch[:, 1:]
+
+            #--- Forward Pass ---#
+            optimiser.zero_grad()
+            
+            Z_batch, X_hat_batch = ae_model(X_batch)
+
+            loss_ae = ae_loss(
+                X_batch = X_batch,
+                X_hat_batch = X_hat_batch,
+            )
+
+            observer(latent_vars = Z_batch, loss = loss_ae)
+
+            #--- Backward Pass ---#
+            loss_ae.backward()
+            optimiser.step()
+
+        scheduler.step()
+
+
+    ###--- Handle Observations ---###
+    observations = observer.convert_to_history()
+
+
+    ###--- Test Loss ---###
+    test_dataset = subset_factory.retrieve(kind = 'test', combine = True)
+    
+    evaluation = Evaluation(
+        dataset = dataset,
+        subsets = {'joint': test_dataset},
+        models = {'AE_model': ae_model},
+    )
+
+    eval_cfg = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso')
+
+    visitors = [
+        AEOutputVisitor(eval_cfg = eval_cfg),
+        LossTermVisitorS(test_reconstr_term, loss_name = 'rel_L2_loss', eval_cfg = eval_cfg),
+    ]
+
+    evaluation.accept_sequence(visitors = visitors)
+    results = evaluation.results
+    print(
+        f"After {epochs} epochs with {n_iterations} iterations each\n"
+        f"Avg. Loss on testing subset: {results.metrics[eval_cfg.loss_name]}\n"
+    )

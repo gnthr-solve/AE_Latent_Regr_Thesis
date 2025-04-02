@@ -41,12 +41,9 @@ from evaluation.eval_visitors import (
 
 from helper_tools.setup import create_normaliser
 from helper_tools import dict_str
-from visualisation.general_plot_funcs import (
-    plot_loss_tensor,
-    plot_agg_training_losses,
-    plot_3Dlatent_with_error, 
-    plot_3Dlatent_with_attribute,
-)
+
+from visualisation.eval_plot_funcs import plot_3Dlatent_with_error, plot_3Dlatent_with_attribute
+from visualisation.training_history_plots import plot_agg_training_losses
 
 
 
@@ -166,7 +163,9 @@ def train_linear_regr():
     
     ###--- Plot Observations ---###
     if observe_loss_dev:
-        plot_loss_tensor(observed_losses = loss_obs.losses)
+        plot_agg_training_losses(
+            observed_losses = {'Loss': loss_obs.losses},
+        )
 
 
     ###--- Test Loss ---###
@@ -340,7 +339,9 @@ def train_deep_regr():
 
     
     ###--- Plot Observations ---###
-    plot_loss_tensor(observed_losses = loss_obs.losses)
+    plot_agg_training_losses(
+        observed_losses = {'Loss': loss_obs.losses},
+    )
 
 
     ###--- Test Loss ---###
