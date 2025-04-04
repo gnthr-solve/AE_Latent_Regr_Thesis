@@ -61,7 +61,7 @@ from helper_tools.setup import create_normaliser
 from helper_tools import dict_str
 
 from visualisation.eval_plot_funcs import plot_3Dlatent_with_error, plot_3Dlatent_with_attribute
-from visualisation.training_history_plots import plot_agg_training_losses, plot_loss_tensor
+from visualisation.training_history_plots import plot_agg_training_losses, plot_2Dlatent_by_epoch
 
 
 """
@@ -218,7 +218,7 @@ def AE_iso_observer_testing():
     Train deterministic or NVAE Autoencoder in isolation.
     """
     ###--- Meta ---###
-    epochs = 3
+    epochs = 2
     batch_size = 50
     latent_dim = 2
     lr = 1e-3
@@ -325,7 +325,18 @@ def AE_iso_observer_testing():
 
 
     ###--- Handle Observations ---###
-    observations = observer.convert_to_history()
+    observations = observer.convert_to_history(tensor_name='latent_vars', epochs = epochs, batch_size = batch_size)
+    
+    batch_agg_observations = {
+        e: torch.cat([torch.mean(batch, dim = 0, keepdim = True) for batch in batches], dim = 0)
+        for e, batches in observations.items()
+    }
+    # batch_agg_observations = {
+    #     (e, i): batch
+    #     for e, batches in observations.items()
+    #     for i, batch in enumerate(batches)
+    # }
+    plot_2Dlatent_by_epoch(latent_observations = batch_agg_observations)
 
 
     ###--- Test Loss ---###
@@ -348,5 +359,5 @@ def AE_iso_observer_testing():
     results = evaluation.results
     print(
         f"After {epochs} epochs with {n_iterations} iterations each\n"
-        f"Avg. Loss on testing subset: {results.metrics[eval_cfg.loss_name]}\n"
+        f"Avg. Loss on testing subset: {results.metrics['rel_L2_loss']}\n"
     )

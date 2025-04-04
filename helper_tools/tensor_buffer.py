@@ -120,6 +120,7 @@ class TensorBuffer:
         """
         # Handle tensor batch (first dimension is batch size)
         if isinstance(tensors, torch.Tensor) and len(tensors.shape) > 0:
+
             batch_tensor = tensors.detach()
             batch_size = batch_tensor.shape[0]
             

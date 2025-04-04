@@ -19,6 +19,7 @@ if __name__=="__main__":
 
     ###--- AE in isolation ---###
     #AE_iso_training_procedure()
+    AE_iso_observer_testing()
     
 
     ###--- VAE in isolation ---###
@@ -44,6 +45,6 @@ if __name__=="__main__":
 
     ###--- Testing ---###
     #AE_regr_loss_tests()
-    AE_regr_loss_effect_visualisation()
+    #AE_regr_loss_effect_visualisation()
 
     pass

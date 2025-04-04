@@ -19,7 +19,7 @@ from helper_tools.transform_observations import transform_to_epoch_sample
 
 from .plot_matrix import PlotMatrix, PlotMosaic
 from .components.line_components import SingleTrajectoryPlot, TrajectoryPlotFill
-
+from .components.scatter_components import MultiScatterPlot
 
 """
 Plotting Functions - Plot iteration loss development for (multiple) loss(es)
@@ -89,14 +89,14 @@ def plot_agg_training_losses(
 Plotting Functions - Plot iteration loss development for (multiple) loss(es)
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def plot_2Dlatent_by_epoch(latent_observations: Tensor, n_epochs: int, title: str = None, save_path: Path = None):
+def plot_2Dlatent_by_epoch(latent_observations: dict[int,Tensor], title: str = None, save_path: Path = None):
     """
     Args:
         latent_observations: Tensor
             Assumed shape (n_epochs * n_samples, z1, z2)
     """
     
-
+    
     ###--- Plotting ---###
     if title:
         plot_matrix = PlotMatrix(title=title, save_path=save_path)
@@ -104,10 +104,15 @@ def plot_2Dlatent_by_epoch(latent_observations: Tensor, n_epochs: int, title: st
         plot_matrix = PlotMatrix(save_path=save_path)
 
 
-    dim_red_scatter = None
+    latent_scatter = MultiScatterPlot(
+        tensor_data = latent_observations,
+        x_label = '$z_1$',
+        y_label = '$z_2$',
+        cmap = 'viridis',
+    )
 
     plot_matrix.add_plot_dict({
-        (0,0): dim_red_scatter,
+        (0,0): latent_scatter,
     })
 
     plot_matrix.draw(fontsize = 14, figsize = (10, 8))

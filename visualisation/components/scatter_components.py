@@ -391,6 +391,7 @@ class DimReducedScatterPlot(AxesComponent):
 
 
 
+
 class MultiScatterPlot(AxesComponent):
 
     def __init__(
@@ -398,13 +399,19 @@ class MultiScatterPlot(AxesComponent):
             tensor_data: dict[str | int, Tensor], 
             x_label: str,
             y_label: str,
-            title: str = None
+            title: str = None,
+            cmap: str = None,
         ):
         
         self.tensor_data = tensor_data
 
         self.x_label = x_label
         self.y_label = y_label
+
+        if isinstance(cmap, str):
+            self.cmap = cm.get_cmap(cmap)
+        else:
+            self.cmap = cmap
 
         self.title = title
 
@@ -417,16 +424,19 @@ class MultiScatterPlot(AxesComponent):
             ax (plt.Axes): The matplotlib Axes to draw on.
             fontsize (int, optional): Font size for title. Defaults to 10.
         """
-        
+        n_data = len(self.tensor_data)
         for i, (label, tensor) in enumerate(self.tensor_data.items()):
+            
+            color_val = i / max(1, n_data - 1)
+            color = self.cmap(color_val)
 
             ax.scatter(
                 tensor[:, 0],  
                 tensor[:, 1],
-                c=self.error_tensor,
-                alpha=0.7,
-                edgecolors='w',
-                s=50,
+                color = color,
+                alpha = 0.7,
+                edgecolors = 'w',
+                s = 50,
                 label = label,
             )
         
