@@ -44,8 +44,7 @@ from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
-from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
-from observers.latent_visualiser import LatentSpaceVisualiser, LatentSpaceVisualiserLive
+from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver
 
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
@@ -381,12 +380,12 @@ def AE_regr_loss_effect_visualisation():
 
     ###--- Observation Test Setup ---###
     observer_callback = LossTrajectoryObserver()
-    latent_visualiser = LatentSpaceVisualiser(
-        output_dir = './results/AE_regr_loss_tests/latent_frames',
-        iter_label = 'iter',
-        fps = 5,
-        dpi = 300,
-    )
+    # latent_visualiser = LatentSpaceVisualiser(
+    #     output_dir = './results/AE_regr_loss_tests/latent_frames',
+    #     iter_label = 'iter',
+    #     fps = 5,
+    #     dpi = 300,
+    # )
 
 
     ###--- Losses ---###
@@ -461,7 +460,7 @@ def AE_regr_loss_effect_visualisation():
             )
             
         
-            latent_visualiser(latent_tensors = Z_batch, iteration = iteration, loss = loss_ae)
+            # latent_visualiser(latent_tensors = Z_batch, iteration = iteration, loss = loss_ae)
 
             #--- Backward Pass ---#
             loss_ae.backward()
@@ -491,7 +490,7 @@ def AE_regr_loss_effect_visualisation():
                 y_hat_batch = y_hat_batch,
             )
 
-            latent_visualiser(latent_tensors = Z_batch, iteration = iteration)
+            # latent_visualiser(latent_tensors = Z_batch, iteration = iteration)
 
             #--- Backward Pass ---#
             loss_ete_weighted.backward()
@@ -510,7 +509,7 @@ def AE_regr_loss_effect_visualisation():
     #     epochs = epochs,
     # )
 
-    latent_visualiser.finalize('./results/AE_regr_loss_tests/latent_evolution_kmeans6.mp4')
+    #latent_visualiser.finalize('./results/AE_regr_loss_tests/latent_evolution_kmeans6.mp4')
 
     ###--- Test Loss ---###
     test_datasets = subset_factory.retrieve(kind = 'test')

@@ -44,8 +44,7 @@ from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
-from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
-from observers.latent_visualiser import LatentSpaceVisualiser
+from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver
 
 from evaluation import Evaluation, EvalConfig
 from evaluation.eval_visitors import (
@@ -378,10 +377,10 @@ def AE_regr_loss_tests():
 
     ###--- Observation Test Setup ---###
     observer_callback = LossTrajectoryObserver()
-    latent_visualiser = LatentSpaceVisualiser(
-        output_dir = './results/AE_regr_loss_tests/latent_frames',
-        iter_label = 'iter'
-    )
+    # latent_visualiser = LatentSpaceVisualiser(
+    #     output_dir = './results/AE_regr_loss_tests/latent_frames',
+    #     iter_label = 'iter'
+    # )
 
 
     ###--- Losses ---###
@@ -456,8 +455,8 @@ def AE_regr_loss_tests():
                 Z_batch = Z_batch,
             )
             
-            if checkpoint_condition(iter_idx):
-                latent_visualiser(latent_vectors = Z_batch, iteration = iter_idx, loss = loss_ae)
+            # if checkpoint_condition(iter_idx):
+            #     latent_visualiser(latent_vectors = Z_batch, iteration = iter_idx, loss = loss_ae)
 
             #--- Backward Pass ---#
             loss_ae.backward()
@@ -500,7 +499,7 @@ def AE_regr_loss_tests():
         epochs = epochs,
     )
 
-    latent_visualiser.finalize('./results/AE_regr_loss_tests/latent_evolution.mp4')
+    #latent_visualiser.finalize('./results/AE_regr_loss_tests/latent_evolution.mp4')
 
     ###--- Test Loss ---###
     test_datasets = subset_factory.retrieve(kind = 'test')

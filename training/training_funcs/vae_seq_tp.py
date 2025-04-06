@@ -39,8 +39,7 @@ from loss.adapters import AEAdapter, RegrAdapter
 from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
-from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver, VAELatentObserver
-from observers.latent_visualiser import LatentSpaceVisualiser
+from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver
 
 
 from evaluation import Evaluation, EvalConfig

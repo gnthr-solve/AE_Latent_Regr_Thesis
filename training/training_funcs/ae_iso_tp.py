@@ -45,7 +45,7 @@ from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from observers.training_observer import TrainingObserver
-from observers.latent_visualiser import LatentSpaceVisualiser
+from observers.observations_converter import TrainingObsConverter
 
 from ..procedure_iso import AEIsoTrainingProcedure
 
@@ -61,6 +61,7 @@ from helper_tools.setup import create_normaliser
 from helper_tools import dict_str
 
 from visualisation.eval_plot_funcs import plot_3Dlatent_with_error, plot_3Dlatent_with_attribute
+from visualisation.training_history_vids import LatentSpace2DVisualiser
 from visualisation.training_history_plots import plot_agg_training_losses, plot_2Dlatent_by_epoch
 
 
@@ -325,18 +326,18 @@ def AE_iso_observer_testing():
 
 
     ###--- Handle Observations ---###
-    observations = observer.convert_to_history(tensor_name='latent_vars', epochs = epochs, batch_size = batch_size)
-    
-    batch_agg_observations = {
-        e: torch.cat([torch.mean(batch, dim = 0, keepdim = True) for batch in batches], dim = 0)
-        for e, batches in observations.items()
-    }
-    # batch_agg_observations = {
-    #     (e, i): batch
-    #     for e, batches in observations.items()
-    #     for i, batch in enumerate(batches)
-    # }
+    observations = observer.get_tensor(name = 'latent_vars')
+    # observations = observer.convert_to_history(
+    #     tensor_name='latent_vars', 
+    #     epochs = epochs, 
+    #     batch_size = batch_size
+    # )
+    converter = TrainingObsConverter(observations)
+    batch_agg_observations = converter.to_dict_by_epoch_batch_split(n_epochs = epochs, batch_size = batch_size)
     plot_2Dlatent_by_epoch(latent_observations = batch_agg_observations)
+    # latent_history = {e: [chunk[i] for i in range(len(chunk))] for e, chunk in observations.items()}
+    # latent_dev_visualiser = LatentSpace2DVisualiser(latent_history, output_dir= './results/AE_iso_obs_tests/latent_frames')
+    # latent_dev_visualiser.finalize()
 
 
     ###--- Test Loss ---###
