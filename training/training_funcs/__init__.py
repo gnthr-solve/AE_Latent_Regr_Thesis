@@ -3,7 +3,7 @@ from .ae_iso_tp import AE_iso_training_procedure, AE_iso_observer_testing
 from .ae_joint_epoch_tp import AE_joint_epoch_procedure
 from .ae_seq_tp import train_joint_seq_AE, train_seq_AE
 
-from .VAE_iso_tp import VAE_iso
+from .VAE_iso_tp import VAE_iso, VAE_iso_observer_testing
 from .vae_seq_tp import train_joint_seq_VAE
 from .vae_joint_epoch_tp import VAE_joint_epoch_procedure, train_joint_epoch_wise_VAE_recon
 

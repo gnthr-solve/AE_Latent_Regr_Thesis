@@ -26,7 +26,7 @@ from models.regressors import LinearRegr, ProductRegr, FunnelDNNRegr
 from models import AE, GaussVAE, EnRegrComposite
 from models.naive_vae import NaiveVAE_LogVar, NaiveVAE_Sigma, NaiveVAE_LogSigma
 
-from models.transformer_ae.positional_encoding import PositionalEncoding
+from models.transformer_ae import PositionalEncoding, SelfAttentionHead, FFN
 
 from loss import (
     CompositeLossTerm,
@@ -325,13 +325,60 @@ def transformer_approach():
         shuffle=True
     )
 
-    for batch_idx, (padded_sequences, lengths) in enumerate(loader):
-        print(f"Batch {batch_idx+1}")
-        print(f"Padded sequences shape: {padded_sequences.shape}")
-        print(f"Lengths tensor: {lengths}")
-        print(f"Sample sequence (first in batch):\n{padded_sequences[0, :10]}")
+    max_len = 1000
+    d_model = 108
+    d_inner = 50
+    d_k = 20
+
+    pos_encoding = PositionalEncoding(d_model=d_model, max_len=max_len)
+    attention_head = SelfAttentionHead(d_model = d_model, d_k = d_k)
+    ffn = FFN(d_model = d_model, d_inner = d_inner)
+
+    for batch_idx, (X_seq_batch, lengths) in enumerate(loader):
+
+        print(
+            f'Batch {batch_idx+1}: \n'
+            f'------------------------------------------------------------\n'
+            f'Padded sequences shape: {X_seq_batch.shape}\n'
+            f'Lengths tensor:\n {lengths}\n'
+            f'Sample sequence (first in batch):\n{X_seq_batch[0, :5, :5]}\n'
+            f'------------------------------------------------------------\n\n'
+        )
         
-        if batch_idx == 1:
+        ###--- Positional Encoding ---###
+        X_seq_batch = pos_encoding(X_seq_batch)
+
+        print(
+            f'Batch {batch_idx+1} after PE: \n'
+            f'------------------------------------------------------------\n'
+            f'Encoded sequences shape: {X_seq_batch.shape}\n'
+            f'Sample sequence (first in batch):\n{X_seq_batch[0, :5, :5]}\n'
+            f'------------------------------------------------------------\n\n'
+        )
+
+        ###--- Attention Head Residual Connection ---###
+        X_seq_batch = X_seq_batch + attention_head(input = X_seq_batch, lengths = lengths)
+
+        print(
+            f'Batch {batch_idx+1} after Attention Head:\n'
+            f'------------------------------------------------------------\n'
+            f'X_seq_batch shape: {X_seq_batch.shape}\n'
+            f'Sample sequence (first in batch):\n{X_seq_batch[0, :5, :5]}\n'
+            f'------------------------------------------------------------\n\n'
+        )
+
+        ###--- FFN pass ---###
+        X_seq_batch = ffn(X_seq_batch)
+
+        print(
+            f'Batch {batch_idx+1} after FFN:\n'
+            f'------------------------------------------------------------\n'
+            f'X_seq_batch shape: {X_seq_batch.shape}\n'
+            f'Sample sequence (first in batch):\n{X_seq_batch[0, :5, :5]}\n'
+            f'------------------------------------------------------------\n\n'
+        )
+
+        if batch_idx == 0:
             break
 
 
@@ -356,7 +403,7 @@ if __name__=="__main__":
 
 
     ###--- TensorDataset ---###
-    test_TensorDataset()
+    #test_TensorDataset()
 
 
     ###--- Hyperparameter Opt. Cfgs ---###
@@ -365,5 +412,5 @@ if __name__=="__main__":
 
     ###--- Transformer build Tests ---###
     #positional_encoding_test()
-    #transformer_approach()
+    transformer_approach()
     

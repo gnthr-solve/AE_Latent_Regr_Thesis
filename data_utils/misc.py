@@ -200,7 +200,7 @@ def combine_subsets(subset_l: Subset, subset_ul: Subset) -> Subset:
 Data Helper Tools - Custom Collate for TimeSeriesDataset
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def custom_collate_fn(batch: list[Tensor]):
+def custom_collate_fn(batch: list[Tensor]) -> tuple[Tensor, Tensor]:
     """
     Returns padded sequences and original lengths for timeseries for batching
     """

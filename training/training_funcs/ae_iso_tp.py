@@ -45,7 +45,6 @@ from loss.vae_kld import GaussianAnaKLDiv, GaussianMCKLDiv
 from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from observers.training_observer import TrainingObserver
-from observers.observations_converter import TrainingObsConverter
 
 from ..procedure_iso import AEIsoTrainingProcedure
 
@@ -332,9 +331,7 @@ def AE_iso_observer_testing():
     #     epochs = epochs, 
     #     batch_size = batch_size
     # )
-    converter = TrainingObsConverter(observations)
-    batch_agg_observations = converter.to_dict_by_epoch_batch_split(n_epochs = epochs, batch_size = batch_size)
-    plot_2Dlatent_by_epoch(latent_observations = batch_agg_observations)
+    plot_2Dlatent_by_epoch(latent_observations = observations, n_epochs = epochs, batch_size = batch_size)
     # latent_history = {e: [chunk[i] for i in range(len(chunk))] for e, chunk in observations.items()}
     # latent_dev_visualiser = LatentSpace2DVisualiser(latent_history, output_dir= './results/AE_iso_obs_tests/latent_frames')
     # latent_dev_visualiser.finalize()

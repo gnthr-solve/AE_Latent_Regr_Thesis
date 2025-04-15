@@ -13,17 +13,31 @@ from ..evaluation import Evaluation
 """
 Plotting Visitors - LatentPlotVisitor
 -------------------------------------------------------------------------------------------------------------------------------------------
-Plots the latent Z in a 3D plot, if latent_dim = 3. Either with or without an associated error. 
+Plots the latent Z in a 2D or 3D plot, if latent_dim = 2 | 3. Either with or without an associated error. 
 """
 class LatentPlotVisitor(EvaluationVisitor):
 
-    def __init__(self, eval_cfg: EvalConfig, loss_name: str = None):
+    def __init__(self, eval_cfg: EvalConfig, latent_dim: int, loss_name: str = None):
         super().__init__(eval_cfg = eval_cfg)
 
         self.loss_name = loss_name
+        self.latent_dim = latent_dim
 
 
     def visit(self, eval: Evaluation):
+        """
+        Plots a 2D or 3D latent representation scatterplot of an AE model output.
+        Optionally colour-coding the samples by their loss if Visitor was initialised with a loss name.
+        """
+        if self.latent_dim == 2:
+            self.create_2D_latent_scatter(eval = eval)
+        elif self.latent_dim == 3:
+            self.create_3D_latent_scatter(eval = eval)
+        else:
+            print(f'Cannot create a scatterplot for latent dimension {self.latent_dim}')
+
+
+    def create_3D_latent_scatter(self, eval: Evaluation):
         """
         Plots the 3D latent representation of an AE model output as a scatterplot,
         optionally colour-coding the samples by their loss if Visitor was initialised with a loss name.
@@ -49,6 +63,38 @@ class LatentPlotVisitor(EvaluationVisitor):
         ax.set_xlabel('$x_l$')
         ax.set_ylabel('$y_l$')
         ax.set_zlabel('$z_l$')
+
+        title = f'Latent Space with {self.loss_name} Error' if self.loss_name else 'Latent Space'
+        plt.title(title)
+
+        plt.show()
+
+    
+    def create_2D_latent_scatter(self, eval: Evaluation):
+        """
+        Plots the 2D latent representation of an AE model output as a scatterplot,
+        optionally colour-coding the samples by their loss if Visitor was initialised with a loss name.
+        """
+        model_output = eval.model_outputs[self.output_name]
+        latent_tensor = model_output.Z_batch
+
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111)
+
+        if self.loss_name:
+            loss_tensor = eval.results.losses[self.loss_name]
+
+            scatter = ax.scatter(latent_tensor[:, 0], latent_tensor[:, 1], c = loss_tensor, cmap = 'RdYlGn_r')
+
+            colorbar = fig.colorbar(scatter)
+            colorbar.set_label(self.loss_name)
+
+        else:
+            scatter = ax.scatter(latent_tensor[:, 0], latent_tensor[:, 1])
+
+        
+        ax.set_xlabel('$x_l$')
+        ax.set_ylabel('$y_l$')
 
         title = f'Latent Space with {self.loss_name} Error' if self.loss_name else 'Latent Space'
         plt.title(title)

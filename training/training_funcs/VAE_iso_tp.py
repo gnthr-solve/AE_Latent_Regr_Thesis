@@ -46,7 +46,6 @@ from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from observers import LossTermObserver, CompositeLossTermObserver, ModelObserver
 from observers.training_observer import TrainingObserver
-from observers.observations_converter import TrainingObsConverter
 
 from ..procedure_iso import AEIsoTrainingProcedure
 
@@ -61,7 +60,7 @@ from evaluation.eval_visitors import (
 from helper_tools.setup import create_normaliser
 from helper_tools import dict_str
 from visualisation.eval_plot_funcs import plot_3Dlatent_with_error, plot_3Dlatent_with_attribute
-from visualisation.training_history_plots import plot_agg_training_losses, plot_2Dlatent_by_epoch
+from visualisation.training_history_plots import plot_agg_training_losses, plot_2Dlatent_by_epoch, plot_dist_params
 
 
 
@@ -269,7 +268,9 @@ def VAE_iso_observer_testing():
 
 
     ###--- Training Procedure ---###
-    for epoch in range(epochs):
+    pbar = tqdm(range(epochs))
+
+    for epoch in pbar:
         
         ###--- Training Loop AE---###
         for iter_idx, (X_batch, _) in enumerate(dataloader):
@@ -288,7 +289,7 @@ def VAE_iso_observer_testing():
                 infrm_dist_params = infrm_dist_params,
             )
 
-            observer(latent_vars = Z_batch, loss = loss_ae)
+            observer(latent_vars = Z_batch, loss = loss_ae, infrm_dist_params = infrm_dist_params)
 
             #--- Backward Pass ---#
             loss_ae.backward()
@@ -298,12 +299,11 @@ def VAE_iso_observer_testing():
 
 
     ###--- Handle Observations ---###
-    observations = observer.get_tensor(name = 'latent_vars')
+    latent_observations = observer.get_tensor(name = 'latent_vars')
+    plot_2Dlatent_by_epoch(latent_observations = latent_observations, n_epochs = epochs, batch_size = batch_size)
 
-    converter = TrainingObsConverter(observations)
-    batch_agg_observations = converter.to_dict_by_epoch_batch_split(n_epochs = epochs, batch_size = batch_size)
-
-    plot_2Dlatent_by_epoch(latent_observations = batch_agg_observations)
+    infrm_dist_observations = observer.get_tensor(name = 'infrm_dist_params')
+    plot_dist_params(dist_params_tensor = infrm_dist_observations, n_epochs = epochs)
 
 
     ###--- Test Loss ---###
@@ -316,12 +316,12 @@ def VAE_iso_observer_testing():
         models = {'AE_model': ae_model},
     )
 
-    eval_cfg_reconstr = EvalConfig(data_key = 'unlabelled', output_name = 'ae_iso', mode = 'iso')
+    eval_cfg_reconstr = EvalConfig(data_key = 'joint', output_name = 'ae_iso', mode = 'iso')
     
     visitors = [
         VAEOutputVisitor(eval_cfg = eval_cfg_reconstr),
         LossTermVisitorS(reconstr_loss_term, loss_name = 'L2_norm', eval_cfg = eval_cfg_reconstr),
-        #LatentPlotVisitor(eval_cfg = eval_cfg_reconstr)
+        LatentPlotVisitor(eval_cfg = eval_cfg_reconstr, latent_dim = latent_dim, loss_name = 'L2_norm')
     ]
 
     evaluation.accept_sequence(visitors = visitors)

@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from observers.observations_converter import TrainingObsConverter
+from observers.observations_converter import training_observations_converter as toc
 
 from .plot_matrix import PlotMatrix, PlotMosaic
 from .components.line_components import SingleTrajectoryPlot, TrajectoryPlotFill
@@ -90,14 +90,19 @@ def plot_agg_training_losses(
 Plotting Functions - Plot iteration loss development for (multiple) loss(es)
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def plot_2Dlatent_by_epoch(latent_observations: dict[int,Tensor], title: str = None, save_path: Path = None):
+def plot_2Dlatent_by_epoch(latent_observations: Tensor, n_epochs: int, batch_size: int, title: str = None, save_path: Path = None):
     """
-    Args:
+    Expects dist_params_tensor of shape (n_epochs * dataset_size, latent_dim, n_dist_params)
+    Converts to 
         latent_observations: dict[int, Tensor]
             Assumes batched tensor values of shape (b, z_1, z_2)
     """
     
-
+    latent_observations = toc.to_dict_by_epoch_batch_split(
+        latent_observations, 
+        n_epochs = n_epochs, 
+        batch_size = batch_size
+    )
     ###--- Plotting ---###
     if title:
         plot_matrix = PlotMatrix(title=title, save_path=save_path)
@@ -125,10 +130,13 @@ def plot_2Dlatent_by_epoch(latent_observations: dict[int,Tensor], title: str = N
 Plotting Functions - Distribution parameter history
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def plot_dist_params(dist_params_tensor: Tensor, functional = torch.max):
+def plot_dist_params(dist_params_tensor: Tensor, n_epochs: int, functional = torch.max):
     """
-    Expects dist_params_tensor of shape (n_epochs, dataset_size, latent_dim, n_dist_params)
+    Expects dist_params_tensor of shape (n_epochs * dataset_size, latent_dim, n_dist_params)
+    Transforms to shape (n_epochs, dataset_size, latent_dim, n_dist_params)
     """
+    dist_params_tensor = toc.to_tensor_by_epoch_split(dist_params_tensor, n_epochs=n_epochs)
+
     dist_params = dist_params_tensor.unbind(dim = -1)
 
     n_params = len(dist_params)
@@ -174,10 +182,13 @@ def plot_dist_params(dist_params_tensor: Tensor, functional = torch.max):
 
 
 
-def plot_dist_params_batch(dist_params_tensor: Tensor, batch_size: int, functional: Callable[[Tensor], Tensor] = torch.max):
+def plot_dist_params_batch(dist_params_tensor: Tensor, n_epochs: int, batch_size: int, functional: Callable[[Tensor], Tensor] = torch.max):
     """
-    Expects dist_params_tensor of shape (n_epochs, dataset_size, latent_dim, n_dist_params)
+    Expects dist_params_tensor of shape (n_epochs * dataset_size, latent_dim, n_dist_params)
+    Transforms to shape (n_epochs, dataset_size, latent_dim, n_dist_params)
     """
+    dist_params_tensor = toc.to_tensor_by_epoch_split(dist_params_tensor, n_epochs=n_epochs)
+
     dist_params = dist_params_tensor.unbind(dim = -1)
 
     n_params = len(dist_params)

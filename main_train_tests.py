@@ -19,11 +19,12 @@ if __name__=="__main__":
 
     ###--- AE in isolation ---###
     #AE_iso_training_procedure()
-    AE_iso_observer_testing()
+    #AE_iso_observer_testing()
     
 
     ###--- VAE in isolation ---###
-    #train_VAE_iso()
+    #VAE_iso()
+    VAE_iso_observer_testing()
     #VAE_iso_training_procedure()
     #VAE_latent_visualisation()
 

@@ -9,21 +9,16 @@ Full observations from training procedures have shape (n_epochs * n_samples, *t)
 
 """
 
-class TrainingObsConverter:
-    
-    def __init__(self, observations_tensor: Tensor):
-        """
-        Initialises Converter for observations tensor of shape (n_epochs * n_samples, *t).
-        Where
-            n_epochs: number of epochs.
-            n_samples: size of training dataset.
-            t: shape of tracked tensor.
-        """
-        self.observations_tensor = observations_tensor
-        self.tracked_tensor_shape = observations_tensor.shape[1:]
+class TrainingObservationsConverter:
+    """
+    Converter for observations tensor of shape (n_epochs * n_samples, *t).
+    Where
+        n_epochs: number of epochs.
+        n_samples: size of training dataset.
+        t: shape of tracked tensor.
+    """
 
-
-    def to_tensor_by_epoch_split(self, n_epochs: int):
+    def to_tensor_by_epoch_split(self, tensor: Tensor, n_epochs: int):
         """
         Transform observations by epoch-stacking
             (n_epochs * n_samples, *t) 
@@ -36,11 +31,12 @@ class TrainingObsConverter:
         Returns:
             torch.Tensor: Transformed tensor of shape (n_epochs, n_samples, *t).
         """
-        n_samples = self.observations_tensor.shape[0] // n_epochs  # Calculate dataset size based on epochs
-        return self.observations_tensor.view(n_epochs, n_samples, *self.tracked_tensor_shape)
+        tracked_tensor_shape = tensor.shape[1:]
+        n_samples = tensor.shape[0] // n_epochs  # Calculate dataset size based on epochs
+        return tensor.view(n_epochs, n_samples, *tracked_tensor_shape)
 
 
-    def to_tensor_by_iteration_agg(self, n_epochs: int, n_iters: int, aggregation_fn=torch.mean):
+    def to_tensor_by_iteration_agg(self, tensor: Tensor, n_epochs: int, n_iters: int, aggregation_fn=torch.mean):
         """
         Transform observations by epoch-stacking and batch aggregation,
             (n_epochs * n_samples, *t) 
@@ -57,16 +53,17 @@ class TrainingObsConverter:
             torch.Tensor: Transformed tensor of shape (n_epochs, n_iters, *t).
         """
         # First reshape to (n_epochs, n_samples, *t)
-        epoch_sample_tensor = self.to_tensor_by_epoch_split(n_epochs = n_epochs)
+        tracked_tensor_shape = tensor.shape[1:]
+        epoch_sample_tensor = self.to_tensor_by_epoch_split(tensor = tensor, n_epochs = n_epochs)
         n_samples = epoch_sample_tensor.shape[1]
         
         # Calculate batch size (samples per iteration)
         batch_size = max(1, n_samples // n_iters)  # Ensure at least 1 sample per batch
         
         result = torch.zeros(
-            (n_epochs, n_iters) + tuple(self.tracked_tensor_shape), 
-            dtype=self.observations_tensor.dtype, 
-            device=self.observations_tensor.device,
+            (n_epochs, n_iters) + tuple(tracked_tensor_shape), 
+            dtype=tensor.dtype, 
+            device=tensor.device,
         )
         
         for epoch in range(n_epochs):
@@ -82,7 +79,7 @@ class TrainingObsConverter:
         return result
 
 
-    def to_list_dict_by_epoch_split(self, n_epochs: int, batch_size: int = None):
+    def to_list_dict_by_epoch_split(self, tensor: Tensor, n_epochs: int, batch_size: int = None):
         """
         Transform observations by epoch and optional batch decomposition
             (n_epochs * n_samples, *t) 
@@ -96,7 +93,7 @@ class TrainingObsConverter:
             batch_size (int): Size of a training batch (except last)
         """
         # First reshape to (n_epochs, n_samples, *t)
-        epoch_sample_tensor = self.to_tensor_by_epoch_split(n_epochs = n_epochs)
+        epoch_sample_tensor = self.to_tensor_by_epoch_split(tensor = tensor, n_epochs = n_epochs)
         n_samples = epoch_sample_tensor.shape[1]
         
         if batch_size is None:
@@ -116,8 +113,8 @@ class TrainingObsConverter:
         
         return result
 
-
-    def to_dict_by_epoch_batch_split(self, n_epochs: int, batch_size: int):
+    
+    def to_dict_by_epoch_batch_split(self, tensor: Tensor, n_epochs: int, batch_size: int):
         """
         Transform observations by epoch and optional batch decomposition
             (n_epochs * n_samples, *t) 
@@ -129,7 +126,7 @@ class TrainingObsConverter:
             batch_size (int): Size of a training batch (except last)
         """
         # First reshape to (n_epochs, n_samples, *t)
-        epoch_sample_tensor = self.to_tensor_by_epoch_split(n_epochs = n_epochs)
+        epoch_sample_tensor = self.to_tensor_by_epoch_split(tensor = tensor, n_epochs = n_epochs)
         
         result = {}
         for epoch in range(n_epochs):
@@ -144,7 +141,7 @@ class TrainingObsConverter:
         
        
 
-
+training_observations_converter = TrainingObservationsConverter()
 
 
 # batch_agg_observations = {
