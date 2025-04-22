@@ -6,14 +6,18 @@ import math
 
 from torch import Tensor
 
-from .attention_head import SelfAttentionHeadDV
+from .attention_head import AttentionHead
 
 
-class MultiHeadAttention(nn.Module):
+"""
+Multi Head Attention - Self-MultiHeadAttention with d_v == d_k implicitly defined
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+class MultiHeadSelfAttention(nn.Module):
     """
     Multi-Head Attention Module for Transformer AE
     """
-    def __init__(self, d_model: int, num_heads: int):
+    def __init__(self, d_model: int, num_heads: int, bias: bool = True):
         super().__init__()
         assert d_model % num_heads == 0
         
@@ -21,13 +25,13 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = num_heads
         self.d_k = d_model // num_heads
         
-        self.W_q = nn.Linear(d_model, d_model)
-        self.W_k = nn.Linear(d_model, d_model)
-        self.W_v = nn.Linear(d_model, d_model)
-        self.W_o = nn.Linear(d_model, d_model)
+        self.W_q = nn.Linear(d_model, d_model, bias = bias)
+        self.W_k = nn.Linear(d_model, d_model, bias = bias)
+        self.W_v = nn.Linear(d_model, d_model, bias = bias)
+        self.W_o = nn.Linear(d_model, d_model, bias = bias)
         
         
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor = None):
+    def forward(self, query: Tensor, key: Tensor, value: Tensor, lengths: Tensor = None):
         batch_size = query.size(0)
         
         # Linear projections and reshape for multi-head
@@ -37,8 +41,11 @@ class MultiHeadAttention(nn.Module):
         
         # Scaled dot-product attention
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
-        if mask is not None:
+
+        if lengths is not None:
+            mask = self.create_scores_mask(lengths = lengths)
             scores = scores.masked_fill(mask == 0, -1e9)
+
         attention = F.softmax(scores, dim=-1)
         
         # Apply attention to values
@@ -50,8 +57,37 @@ class MultiHeadAttention(nn.Module):
         return self.W_o(output)
 
 
+    def create_scores_mask(self, lengths: Tensor):
+        batch_size = lengths.size(0)
+        seq_len = lengths.max().item()
+
+        positions = torch.arange(seq_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
+
+        # Create validity mask [batch, seq_len] 
+        # True where position < length, False otherwise
+        valid_positions = positions < lengths.unsqueeze(1)
+        
+        # Which token can pose a query - padding cannot
+        # First expansion: [batch, seq_len, 1]
+        # Second expansion: [batch, seq_len, seq_len]
+        query_mask = valid_positions.unsqueeze(2).expand(-1, -1, seq_len)
+        # Which token can provide a key - padding cannot
+        key_mask = valid_positions.unsqueeze(1).expand(-1, seq_len, -1)
+
+        attention_mask = query_mask & key_mask
+
+        # Later tokens cannot influence earlier ones
+        causal_mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
+
+        return attention_mask & ~causal_mask
 
 
+
+
+"""
+Multi Head Attention - MultiHeadAttention with parameter d_v
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class MultiHeadAttentionDV(nn.Module):
     """
     Multi-Head Attention Module for Transformer AE
@@ -98,13 +134,17 @@ class MultiHeadAttentionDV(nn.Module):
 
 
 
+"""
+Multi Head Attention - MultiHeadAttention as composition of individual heads
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class MultiHeadAttentionFromSingleHeads(nn.Module):
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
         assert d_model % num_heads == 0
         self.d_k = d_model // num_heads
         self.heads = nn.ModuleList([
-            SelfAttentionHeadDV(d_model, self.d_k, self.d_k)
+            AttentionHead(d_model, self.d_k, self.d_k)
             for _ in range(num_heads)
         ])
         self.W_o = nn.Linear(num_heads * self.d_k, d_model)

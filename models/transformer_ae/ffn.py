@@ -8,6 +8,10 @@ from torch import Tensor
 from ..activations import ACTIVATIONS
 
 
+"""
+Feed Forward Network - FFN as in 'Attention is all you need' paper
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class FFN(nn.Module):
 
     def __init__(self, d_model: int, d_inner: int, activation = 'ReLU'):

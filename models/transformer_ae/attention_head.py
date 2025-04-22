@@ -7,18 +7,22 @@ import math
 from torch import Tensor
 
 
+"""
+Single Attention Head - SelfAttentionHead
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class SelfAttentionHead(nn.Module):
 
-    def __init__(self, d_model: int, d_k: int):
+    def __init__(self, d_model: int, d_k: int, bias: bool = True):
         super().__init__()
 
-        self.W_q = nn.Linear(d_model, d_k)
-        self.W_k = nn.Linear(d_model, d_k)
-        self.W_v = nn.Linear(d_model, d_model)
+        self.W_q = nn.Linear(d_model, d_k, bias = bias)
+        self.W_k = nn.Linear(d_model, d_k, bias = bias)
+        self.W_v = nn.Linear(d_model, d_model, bias = bias)
         self.d_k = d_k
 
 
-    def forward(self, input, lengths: Tensor = None):
+    def forward(self, input: Tensor, lengths: Tensor = None):
 
         key = self.W_q(input)  # [batch, seq_len, d_k]
         query = self.W_k(input)    # [batch, seq_len, d_k]
@@ -56,24 +60,29 @@ class SelfAttentionHead(nn.Module):
         # True where position < length, False otherwise
         valid_positions = positions < lengths.unsqueeze(1)
         
-        # Expand to attention matrix shape [batch, seq_len, seq_len]
-        # Each position can attend to all valid tokens
+        # Which token can pose a query - padding cannot
         # First expansion: [batch, seq_len, 1]
         # Second expansion: [batch, seq_len, seq_len]
-        attention_mask = valid_positions.unsqueeze(2).expand(-1, -1, seq_len)
-        
-        # For key positions: only attend to valid keys
+        query_mask = valid_positions.unsqueeze(2).expand(-1, -1, seq_len)
+        # Which token can provide a key - padding cannot
         key_mask = valid_positions.unsqueeze(1).expand(-1, seq_len, -1)
 
-        # causal mask
+        attention_mask = query_mask & key_mask
+
+        # Later tokens cannot influence earlier ones
         causal_mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
+        print(
+            f'causal_mask: \n{causal_mask[:10, :10]}\n'
+        )
+        return attention_mask & ~causal_mask
 
-        return attention_mask & key_mask & ~causal_mask
 
 
 
-
-
+"""
+Single Attention Head - AttentionHead for composed MultiHeadAttention - implemented for understanding, less efficient
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class AttentionHead(nn.Module):
 
     def __init__(self, d_model: int, d_k: int, d_v: int):
@@ -85,7 +94,7 @@ class AttentionHead(nn.Module):
         self.d_k = d_k
 
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor = None):
+    def forward(self, query: Tensor, key: Tensor, value: Tensor, lengths: Tensor = None):
         
         Q = self.W_q(query)  # [batch, seq_len, d_k]
         K = self.W_k(key)    # [batch, seq_len, d_k]
@@ -94,7 +103,8 @@ class AttentionHead(nn.Module):
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
         
         # Masking (optional)
-        if mask is not None:
+        if lengths is not None:
+            mask = self.create_scores_mask(lengths = lengths)
             scores = scores.masked_fill(mask == 0, -1e9)
         
         # Attention weights
@@ -104,3 +114,25 @@ class AttentionHead(nn.Module):
         output = torch.matmul(attention, V)  # [batch, seq_len, d_v]
         
         return output
+
+
+    def create_scores_mask(self, lengths: Tensor):
+        batch_size = lengths.size(0)
+        seq_len = lengths.max().item()
+
+        positions = torch.arange(seq_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
+
+        # Create validity mask [batch, seq_len] 
+        # True where position < length, False otherwise
+        valid_positions = positions < lengths.unsqueeze(1)
+        
+        # Which token can pose a query - padding cannot
+        # First expansion: [batch, seq_len, 1]
+        # Second expansion: [batch, seq_len, seq_len]
+        query_mask = valid_positions.unsqueeze(2).expand(-1, -1, seq_len)
+        # Which token can provide a key - padding cannot
+        key_mask = valid_positions.unsqueeze(1).expand(-1, seq_len, -1)
+
+        attention_mask = query_mask & key_mask
+
+        return attention_mask

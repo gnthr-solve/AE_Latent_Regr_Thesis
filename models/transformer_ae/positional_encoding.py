@@ -15,6 +15,10 @@ def print_t(tensor: Tensor, name: str = '', n: int = 3):
     )
 
 
+"""
+Positional Encoding - Positional Encoding for unconventional input shape: (batch_size, sequence_length, d_model)
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class PositionalEncoding(nn.Module):
 
     pe: Tensor
@@ -45,13 +49,17 @@ class PositionalEncoding(nn.Module):
 
 
     def forward(self, x: Tensor):
-        print_t(x, name = 'x')
+        # x shape: (batch_size, sequence_length, d_model)
         x = x + self.pe[:, :x.size(1)]
 
         return x
 
 
 
+"""
+Positional Encoding - Positional Encoding for 'standard' input shape: (sequence_length, batch_size, d_model)
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
 class PositionalEncoding0(nn.Module):
 
     def __init__(self, d_model: int, max_len: int = 5000):

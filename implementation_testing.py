@@ -2,7 +2,7 @@
 import torch
 
 from torch import Tensor
-from torch.nn import Module
+from torch.nn import Module, LayerNorm
 from torch.utils.data import DataLoader
 
 from pathlib import Path
@@ -333,6 +333,8 @@ def transformer_approach():
     pos_encoding = PositionalEncoding(d_model=d_model, max_len=max_len)
     attention_head = SelfAttentionHead(d_model = d_model, d_k = d_k)
     ffn = FFN(d_model = d_model, d_inner = d_inner)
+    attention_layer_norm = LayerNorm(d_model)
+    ffn_layer_norm = LayerNorm(d_model)
 
     for batch_idx, (X_seq_batch, lengths) in enumerate(loader):
 
@@ -357,10 +359,10 @@ def transformer_approach():
         )
 
         ###--- Attention Head Residual Connection ---###
-        X_seq_batch = X_seq_batch + attention_head(input = X_seq_batch, lengths = lengths)
+        X_seq_batch = attention_layer_norm(X_seq_batch + attention_head(input = X_seq_batch, lengths = lengths))
 
         print(
-            f'Batch {batch_idx+1} after Attention Head:\n'
+            f'Batch {batch_idx+1} after Layer Norm(Residual Connection Attention Head):\n'
             f'------------------------------------------------------------\n'
             f'X_seq_batch shape: {X_seq_batch.shape}\n'
             f'Sample sequence (first in batch):\n{X_seq_batch[0, :5, :5]}\n'
@@ -368,10 +370,10 @@ def transformer_approach():
         )
 
         ###--- FFN pass ---###
-        X_seq_batch = ffn(X_seq_batch)
+        X_seq_batch = ffn_layer_norm(X_seq_batch + ffn(X_seq_batch))
 
         print(
-            f'Batch {batch_idx+1} after FFN:\n'
+            f'Batch {batch_idx+1} after LayerNorm(Residual Connection FFN):\n'
             f'------------------------------------------------------------\n'
             f'X_seq_batch shape: {X_seq_batch.shape}\n'
             f'Sample sequence (first in batch):\n{X_seq_batch[0, :5, :5]}\n'
