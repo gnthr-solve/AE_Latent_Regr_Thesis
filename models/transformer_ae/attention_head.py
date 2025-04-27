@@ -22,7 +22,7 @@ class SelfAttentionHead(nn.Module):
         self.d_k = d_k
 
 
-    def forward(self, input: Tensor, lengths: Tensor = None):
+    def forward(self, input: Tensor, lengths: Tensor = None) -> Tensor:
 
         key = self.W_q(input)  # [batch, seq_len, d_k]
         query = self.W_k(input)    # [batch, seq_len, d_k]
@@ -50,7 +50,7 @@ class SelfAttentionHead(nn.Module):
         return output
 
 
-    def create_scores_mask(self, lengths: Tensor):
+    def create_scores_mask(self, lengths: Tensor) -> Tensor:
         batch_size = lengths.size(0)
         seq_len = lengths.max().item()
 
@@ -70,6 +70,7 @@ class SelfAttentionHead(nn.Module):
         attention_mask = query_mask & key_mask
 
         # Later tokens cannot influence earlier ones
+        # Creates lower triangular matrix
         causal_mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
         print(
             f'causal_mask: \n{causal_mask[:10, :10]}\n'
@@ -85,16 +86,16 @@ Single Attention Head - AttentionHead for composed MultiHeadAttention - implemen
 """
 class AttentionHead(nn.Module):
 
-    def __init__(self, d_model: int, d_k: int, d_v: int):
+    def __init__(self, d_model: int, d_k: int, d_v: int, bias: bool = True):
         super().__init__()
 
-        self.W_q = nn.Linear(d_model, d_k)
-        self.W_k = nn.Linear(d_model, d_k)
-        self.W_v = nn.Linear(d_model, d_v)
+        self.W_q = nn.Linear(d_model, d_k, bias = bias)
+        self.W_k = nn.Linear(d_model, d_k, bias = bias)
+        self.W_v = nn.Linear(d_model, d_v, bias = bias)
         self.d_k = d_k
 
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, lengths: Tensor = None):
+    def forward(self, query: Tensor, key: Tensor, value: Tensor, lengths: Tensor = None) -> Tensor:
         
         Q = self.W_q(query)  # [batch, seq_len, d_k]
         K = self.W_k(key)    # [batch, seq_len, d_k]
@@ -116,7 +117,7 @@ class AttentionHead(nn.Module):
         return output
 
 
-    def create_scores_mask(self, lengths: Tensor):
+    def create_scores_mask(self, lengths: Tensor) -> Tensor:
         batch_size = lengths.size(0)
         seq_len = lengths.max().item()
 
