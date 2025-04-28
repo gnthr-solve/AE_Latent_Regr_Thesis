@@ -6,6 +6,7 @@ import math
 
 from torch import Tensor
 
+from helper_tools import create_padding_mask
 
 """
 Single Attention Head - SelfAttentionHead
@@ -38,7 +39,7 @@ class SelfAttentionHead(nn.Module):
         )
         # Masking (optional)
         if lengths is not None:
-            mask = self.create_scores_mask(lengths = lengths)
+            mask = create_padding_mask(lengths = lengths, is_causal = True)
             scores = scores.masked_fill(mask == 0, -1e9)
         
         # Attention weights
@@ -50,33 +51,7 @@ class SelfAttentionHead(nn.Module):
         return output
 
 
-    def create_scores_mask(self, lengths: Tensor) -> Tensor:
-        batch_size = lengths.size(0)
-        seq_len = lengths.max().item()
-
-        positions = torch.arange(seq_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
-
-        # Create validity mask [batch, seq_len] 
-        # True where position < length, False otherwise
-        valid_positions = positions < lengths.unsqueeze(1)
-        
-        # Which token can pose a query - padding cannot
-        # First expansion: [batch, seq_len, 1]
-        # Second expansion: [batch, seq_len, seq_len]
-        query_mask = valid_positions.unsqueeze(2).expand(-1, -1, seq_len)
-        # Which token can provide a key - padding cannot
-        key_mask = valid_positions.unsqueeze(1).expand(-1, seq_len, -1)
-
-        attention_mask = query_mask & key_mask
-
-        # Later tokens cannot influence earlier ones
-        # Creates lower triangular matrix
-        causal_mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
-        print(
-            f'causal_mask: \n{causal_mask[:10, :10]}\n'
-        )
-        return attention_mask & ~causal_mask
-
+    
 
 
 
@@ -105,7 +80,7 @@ class AttentionHead(nn.Module):
         
         # Masking (optional)
         if lengths is not None:
-            mask = self.create_scores_mask(lengths = lengths)
+            mask = create_padding_mask(lengths = lengths)
             scores = scores.masked_fill(mask == 0, -1e9)
         
         # Attention weights
@@ -117,23 +92,3 @@ class AttentionHead(nn.Module):
         return output
 
 
-    def create_scores_mask(self, lengths: Tensor) -> Tensor:
-        batch_size = lengths.size(0)
-        seq_len = lengths.max().item()
-
-        positions = torch.arange(seq_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
-
-        # Create validity mask [batch, seq_len] 
-        # True where position < length, False otherwise
-        valid_positions = positions < lengths.unsqueeze(1)
-        
-        # Which token can pose a query - padding cannot
-        # First expansion: [batch, seq_len, 1]
-        # Second expansion: [batch, seq_len, seq_len]
-        query_mask = valid_positions.unsqueeze(2).expand(-1, -1, seq_len)
-        # Which token can provide a key - padding cannot
-        key_mask = valid_positions.unsqueeze(1).expand(-1, seq_len, -1)
-
-        attention_mask = query_mask & key_mask
-
-        return attention_mask

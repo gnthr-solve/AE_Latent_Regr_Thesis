@@ -74,3 +74,40 @@ def constant_mask(tensor: Tensor, axis: int):
     constant_mask = (min_vals == max_vals).squeeze(axis)
     
     return constant_mask
+
+
+
+"""
+Torch General - Padding (& Causal) Mask
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def create_padding_mask(lengths: Tensor, is_causal: bool = False) -> Tensor:
+        """
+        Assume lengths is batch of lengths
+        """
+        batch_size = lengths.size(0)
+        max_len = lengths.max().item()
+
+        positions = torch.arange(max_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
+
+        # Create validity mask [batch, max_len] 
+        # True where position < length, False otherwise
+        valid_positions = positions < lengths.unsqueeze(1)
+        
+        # Which token can pose a query - padding cannot
+        # First expansion: [batch, max_len, 1]
+        # Second expansion: [batch, max_len, max_len]
+        query_mask = valid_positions.unsqueeze(2).expand(-1, -1, max_len)
+        # Which token can provide a key - padding cannot
+        key_mask = valid_positions.unsqueeze(1).expand(-1, max_len, -1)
+
+        attention_mask = query_mask & key_mask
+
+        if is_causal:
+            # Later tokens cannot influence earlier ones
+            # Creates lower triangular matrix (assumes $QK^T$)
+            causal_mask = torch.tril(torch.ones(max_len, max_len)).bool()
+            return attention_mask & ~causal_mask
+        
+        else:
+             return attention_mask

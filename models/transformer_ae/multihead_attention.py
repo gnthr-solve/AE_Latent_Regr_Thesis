@@ -8,6 +8,7 @@ from torch import Tensor
 
 from .attention_head import AttentionHead
 
+from helper_tools import create_padding_mask
 
 """
 Multi Head Attention - Self-MultiHeadAttention with d_v == d_k implicitly defined
@@ -43,7 +44,7 @@ class MultiHeadSelfAttention(nn.Module):
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
 
         if lengths is not None:
-            mask = self.create_scores_mask(lengths = lengths)
+            mask = create_padding_mask(lengths = lengths, is_causal = True)
             scores = scores.masked_fill(mask == 0, -1e9)
 
         attention = F.softmax(scores, dim=-1)
@@ -56,30 +57,6 @@ class MultiHeadSelfAttention(nn.Module):
         
         return self.W_o(output)
 
-
-    def create_scores_mask(self, lengths: Tensor) -> Tensor:
-        batch_size = lengths.size(0)
-        seq_len = lengths.max().item()
-
-        positions = torch.arange(seq_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
-
-        # Create validity mask [batch, seq_len] 
-        # True where position < length, False otherwise
-        valid_positions = positions < lengths.unsqueeze(1)
-        
-        # Which token can pose a query - padding cannot
-        # First expansion: [batch, seq_len, 1]
-        # Second expansion: [batch, seq_len, seq_len]
-        query_mask = valid_positions.unsqueeze(2).expand(-1, -1, seq_len)
-        # Which token can provide a key - padding cannot
-        key_mask = valid_positions.unsqueeze(1).expand(-1, seq_len, -1)
-
-        attention_mask = query_mask & key_mask
-
-        # Later tokens cannot influence earlier ones
-        causal_mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
-
-        return attention_mask & ~causal_mask
 
 
 
@@ -125,7 +102,7 @@ class MultiHeadAttention(nn.Module):
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
 
         if lengths is not None:
-            mask = self.create_scores_mask(lengths = lengths)
+            mask = create_padding_mask(lengths = lengths)
             scores = scores.masked_fill(mask == 0, -1e9)
 
         attention = F.softmax(scores, dim=-1)
@@ -139,27 +116,7 @@ class MultiHeadAttention(nn.Module):
         return self.W_o(output)
 
 
-    def create_scores_mask(self, lengths: Tensor) -> Tensor:
-        batch_size = lengths.size(0)
-        seq_len = lengths.max().item()
 
-        positions = torch.arange(seq_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
-
-        # Create validity mask [batch, seq_len] 
-        # True where position < length, False otherwise
-        valid_positions = positions < lengths.unsqueeze(1)
-        
-        # Which token can pose a query - padding cannot
-        # First expansion: [batch, seq_len, 1]
-        # Second expansion: [batch, seq_len, seq_len]
-        query_mask = valid_positions.unsqueeze(2).expand(-1, -1, seq_len)
-        # Which token can provide a key - padding cannot
-        key_mask = valid_positions.unsqueeze(1).expand(-1, seq_len, -1)
-
-        attention_mask = query_mask & key_mask
-
-        return attention_mask
-    
 
 """
 Multi Head Attention - MultiHeadAttention as composition of individual heads
