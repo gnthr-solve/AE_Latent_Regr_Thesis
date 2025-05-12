@@ -6,7 +6,7 @@ from torch.nn import Module, LayerNorm
 from torch.utils.data import DataLoader
 
 from pathlib import Path
-
+from typing import Iterable
 
 ###--- Custom Imports ---###
 from data_utils import DatasetBuilder, TimeSeriesDataset, AlignmentTS, custom_collate_fn, get_subset_by_label_status
@@ -46,6 +46,34 @@ from loss.vae_ll import GaussianDiagLL, IndBetaLL, GaussianUnitVarLL
 
 from helper_tools import map_loader
 from helper_tools.setup import create_normaliser
+
+
+"""
+Test Functions - Helper Tools
+-------------------------------------------------------------------------------------------------------------------------------------------
+"""
+def test_nested_dict_str():
+    from helper_tools import nested_dict_str
+    d = {
+        'A': 0,
+        'B': {
+            'B_10': (1,0),
+            'B_11': {
+                'B_20': (2,0),
+                'B_21': (2,1),
+                'B_22': (2,2),
+            }
+        },
+        'C': {
+            'C_10': (1,0),
+            'B_11': (1,1),
+        },
+    }
+
+    print(nested_dict_str(d))
+
+
+
 
 """
 Test Functions - Module
@@ -282,6 +310,244 @@ def loss_term_composition():
 
 
 
+def loss_term_conf():
+    from dataclasses import dataclass
+    from loss import LossTerm, CompositeLossTerm, WeightedCompositeLoss
+
+    ###--- (C)LT Config DCs ---###
+    @dataclass
+    class LTConfig:
+        name: str
+        type_name: str
+        type_kwargs: dict
+
+
+    @dataclass
+    class AdaptationConfig:
+        name: str
+        term_names: list[str]
+
+
+    ###--- (C)LT Builder ---###
+    class LTBuilder:
+
+        def create_from_config(self, cfgs: list[LTConfig]):
+            
+            loss_terms = {
+                cfg.name: LossTerm._registry.get(cfg.type_name)(**cfg.type_kwargs)
+                for cfg in cfgs
+            }
+            return loss_terms
+
+
+        def create_from_clt_configs(self, clt_cfgs):
+            clts = {}
+
+            for clt_cfg in clt_cfgs:
+                member_terms = self.create_from_config(clt_cfg.terms)
+
+                clts[clt_cfg.name] = CompositeLossTerm(member_terms)
+            
+            return clts
+
+
+    ###--- create_from_config LT Test ---###
+    cfgs = [
+        LTConfig(name = 'L2-Error', type_name = 'LpNorm', type_kwargs={'p': 2}),
+        LTConfig(name = 'L1-Error', type_name = 'LpNorm', type_kwargs={'p': 1}),
+        LTConfig(name = 'Topo', type_name = 'Topological', type_kwargs={'p': 2}),
+        LTConfig(name = 'KMeans', type_name = 'KMeansLoss', type_kwargs={'n_clusters': 5, 'latent_dim': 2}),
+    ]
+
+    lt_builder = LTBuilder()
+    loss_terms = lt_builder.create_from_config(cfgs = cfgs)
+
+    for name, lt in loss_terms.items():
+        print(
+            f'LT {name}: \n'
+            f'----------------------\n'
+            f'{lt}\n'
+            f'{lt.__dict__}\n'
+            f'----------------------\n'
+        )
+
+
+    ###--- create_from_config CLT Test ---###
+    composition_cfgs = {
+        'AE_terms':[
+            LTConfig(name = 'L2-Error', type_name = 'LpNorm', type_kwargs={'p': 2}),
+            LTConfig(name = 'KMeans', type_name = 'KMeansLoss', type_kwargs={'n_clusters': 5, 'latent_dim': 2}),
+        ],
+        'VAE_terms':[
+            LTConfig(name = 'LL', type_name = 'GaussianDiagLL', type_kwargs={}),
+            LTConfig(name = 'KLD', type_name = 'GaussianAnaKLDiv', type_kwargs={}),
+        ]
+    }
+
+    composition_loss_terms = {
+        name: lt_builder.create_from_config(cfgs = cfgs)
+        for name, cfgs in composition_cfgs.items()
+    }
+
+    clts = {name: CompositeLossTerm(terms) for name, terms in composition_loss_terms.items()}
+    
+    for name, lt in clts.items():
+        print(
+            f'LT {name}: \n'
+            f'----------------------\n'
+            f'{lt}\n'
+            f'{lt.__dict__}\n'
+            f'----------------------\n'
+        )
+
+
+
+def loss_term_conf_dict_builder():
+    from dataclasses import dataclass
+    from loss import LossTerm, CompositeLossTerm, WeightedCompositeLoss
+
+    from helper_tools import flatten_nested_dict_keys, nested_dict_str
+    
+    ###--- (C)LT Config DCs ---###
+    @dataclass
+    class LTConfig:
+        name: str
+        type_name: str
+        type_kwargs: dict
+
+
+    @dataclass
+    class GroupingConfig:
+        name: str
+        term_names: list[str]
+
+
+    ###--- (C)LT Builder ---###
+    class LTDictBuilder:
+
+        def __init__(self):
+            self.loss_terms = {}
+
+        def create_from_config(self, lt_cfgs: list[LTConfig]):
+            
+            loss_terms = {
+                cfg.name: LossTerm._registry.get(cfg.type_name)(**cfg.type_kwargs)
+                for cfg in lt_cfgs
+            }
+            
+            self.loss_terms.update(loss_terms)
+
+
+        def generate_grouping(self, grouping_cfg: GroupingConfig):
+
+            lt_group = {}
+
+            for lt_name in grouping_cfg.term_names:
+
+                lt_group[lt_name] = self.loss_terms.pop(lt_name)
+            
+            self.loss_terms[grouping_cfg.name] = lt_group
+
+
+        def generate_groupings(self, grouping_cfgs: Iterable[GroupingConfig]):
+
+            for grouping_cfg in grouping_cfgs:
+                
+                self.generate_grouping(grouping_cfg = grouping_cfg)
+
+
+        def construct_CLT(self, loss_terms: dict = {}, members: list[str] = None):
+
+            loss_terms = self.loss_terms if not loss_terms else loss_terms
+            
+            members = flatten_nested_dict_keys(loss_terms) if members is None else members
+
+            clt_loss_terms = {}
+            for name, element in loss_terms.items():
+                if isinstance(element, dict):
+                    clt_loss_terms[name] = self.construct_CLT(loss_terms = element, members = members)
+                elif name in members:
+                    clt_loss_terms[name] = element
+                else:
+                    continue
+                
+
+            return CompositeLossTerm(clt_loss_terms)
+        
+
+        def construct_CLT_alt1(self, loss_terms: dict = {}, members: list[str] = None):
+
+            loss_terms = self.loss_terms if not loss_terms else loss_terms
+            
+            clt_loss_terms = {}
+            for name, element in loss_terms.items():
+                if isinstance(element, dict):
+                    clt_loss_terms[name] = self.construct_CLT(loss_terms = element, members = members)
+                elif members is not None:
+                    if name in members:
+                        clt_loss_terms[name] = element
+                    else:
+                        continue
+                else:
+                    clt_loss_terms[name] = element
+
+            return CompositeLossTerm(clt_loss_terms)
+
+
+    ###--- LTDictBuilder Test ---###
+    cfgs = [
+        LTConfig(name = 'L2-Error', type_name = 'LpNorm', type_kwargs={'p': 2}),
+        LTConfig(name = 'L1-Error', type_name = 'LpNorm', type_kwargs={'p': 1}),
+        LTConfig(name = 'Topo', type_name = 'Topological', type_kwargs={'p': 2}),
+        LTConfig(name = 'KMeans', type_name = 'KMeansLoss', type_kwargs={'n_clusters': 5, 'latent_dim': 2}),
+        LTConfig(name = 'LL', type_name = 'GaussianDiagLL', type_kwargs={}),
+        LTConfig(name = 'KLD', type_name = 'GaussianAnaKLDiv', type_kwargs={}),
+    ]
+
+    grouping_cfgs = [
+        GroupingConfig(name = 'VAE Loss', term_names = ['LL', 'KLD']),
+        GroupingConfig(name = 'Regr. Loss', term_names = ['L2-Error', 'L1-Error']),
+    ]
+
+    lt_builder = LTDictBuilder()
+    lt_builder.create_from_config(lt_cfgs = cfgs)
+    # print(
+    #     f'Builder loss_terms after create_from_config: \n'
+    #     f'----------------------\n'
+    #     f'{lt_builder.loss_terms}\n'
+    #     f'----------------------\n'
+    # )
+
+    for i, group_cfg in enumerate(grouping_cfgs, start = 1):
+
+        lt_builder.generate_grouping(grouping_cfg = group_cfg)
+
+        # print(
+        #     f'Builder loss_terms after group {i}: \n'
+        #     f'----------------------\n'
+        #     f'{lt_builder.loss_terms}\n'
+        #     f'----------------------\n'
+        # )
+
+    print(nested_dict_str(lt_builder.loss_terms))
+
+    members = ['L2-Error', 'L1-Error', 'LL', 'KLD']
+    main_clt = lt_builder.construct_CLT(members = members)
+    #main_clt = lt_builder.construct_CLT(members = None)
+    
+    print(
+        f'Main CLT by construct_CLT method: \n'
+        f'----------------------\n'
+        f'{main_clt}\n'
+        f'{main_clt.__dict__}\n'
+        f'----------------------\n'
+    )
+
+
+    
+    
+
+
 """
 Test Functions - Transformer Approach Testing
 -------------------------------------------------------------------------------------------------------------------------------------------
@@ -392,6 +658,10 @@ Test Functions - Execution
 
 if __name__=="__main__":
 
+    ###--- Helper Tools ---###
+    #test_nested_dict_str()
+
+
     ###--- Module ---###
     #module_properties_test()
 
@@ -412,7 +682,12 @@ if __name__=="__main__":
     #test_hyperop_cfg()
 
 
+    ###--- Loss Terms ---###
+    #loss_term_conf()
+    loss_term_conf_dict_builder()
+
+
     ###--- Transformer build Tests ---###
     #positional_encoding_test()
-    transformer_approach()
+    #transformer_approach()
     

@@ -155,6 +155,7 @@ def AE_iso_training_procedure():
     train_loss = Loss(CompositeLossTerm(loss_terms = loss_terms))
     test_reconstr_term = AEAdapter(RelativeLpNorm(p = 2))
 
+
     ###--- Optimizer & Scheduler ---###
     optimizer = Adam(model.parameters(), lr = lr)
     scheduler = ExponentialLR(optimizer, gamma = gamma)

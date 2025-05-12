@@ -15,6 +15,17 @@ class LossTerm(ABC):
     """
     LossTerm abstract base class (leaf) for Composite pattern.
     """
+    _registry = {}
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        Registers a concrete implementation for retrieval - NOTE experimental.
+        """
+        super().__init_subclass__(**kwargs)
+        
+        LossTerm._registry[cls.__name__] = cls
+
+
     @abstractmethod
     def __call__(self, **tensors: Tensor) -> Tensor:
         """

@@ -42,18 +42,6 @@ def simple_timer(func):
 Miscellaneous
 -------------------------------------------------------------------------------------------------------------------------------------------
 """
-def print_nested_dict(d: dict, indent: int = 0):
-    
-    for key, value in d.items():
-        print('\t' * indent + str(key))
-        if isinstance(value, dict):
-            print_nested_dict(value, indent + 1)
-        else:
-            print('\t' * (indent + 1) + str(value))
-
-
-
-
 def dict_str(d: dict):
     """
     Create a dictionary string representation that allows printing key value pairs line by line.
@@ -74,6 +62,19 @@ def dict_str(d: dict):
 
     return ',\n'.join(dict_strs)
 
+
+
+def nested_dict_str(d: dict, indent: int = 0, d_str: str = ''):
+    
+    for key, value in d.items():
+        d_str += '\t' * indent + f'{key}:'
+        if isinstance(value, dict):
+            sub_d_str = '\n'
+            d_str += nested_dict_str(value, indent + 1, d_str = sub_d_str)
+        else:
+            d_str += f' {value}\n'
+
+    return d_str
 
 
 
@@ -134,6 +135,29 @@ def map_dict_keys(d: dict[str, Any], key_map: dict[str, str]):
     return {key_map.get(k, k): v for k, v in d.items()}
     
 
+
+def flatten_nested_dict_keys(d: dict[str, Any]):
+    """
+    Given a nested dictionary, finds all keys for values that are not dictionaries themselves.
+    
+    Parameters
+    ----------
+        d: dict
+            Input dictionary
+    
+    Returns:
+        list
+            List of all leaf-like keys in nested dictionary.
+    """
+    leaf_keys = []
+
+    for k, v in d.items():
+        if isinstance(v, dict):
+            leaf_keys.extend(flatten_nested_dict_keys(v))
+        else:
+            leaf_keys.append(k)
+
+    return leaf_keys
 
 
 """
