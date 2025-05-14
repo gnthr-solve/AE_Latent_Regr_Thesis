@@ -77,6 +77,44 @@ def nested_dict_str(d: dict, indent: int = 0, d_str: str = ''):
     return d_str
 
 
+def nested_container_str(container: dict | list, indent: int = 0, c_str: str = ''):
+    """
+    Create a print-able representation string for nested dictionary and list containers recursively.
+    
+    Args:
+        container: Dict or list that may contain nested containers
+        indent: Current indentation level
+        c_str: Current string being built
+        
+    Returns:
+        Formatted string representing the nested structure
+    """
+    if isinstance(container, dict):
+
+        for key, value in container.items():
+            c_str += '\t' * indent + f'{key}:'
+
+            if isinstance(value, dict) or isinstance(value, list):
+                sub_c_str = '\n'
+                c_str += nested_container_str(value, indent + 1, c_str = sub_c_str)
+
+            else:
+                c_str += f' {value}\n'
+
+    elif isinstance(container, list):
+
+        for i, item in enumerate(container):
+            c_str += '\t' * indent + f'[{i}]:'
+
+            if isinstance(item, dict) or isinstance(item, list):
+                sub_c_str = '\n'
+                c_str += nested_container_str(item, indent + 1, c_str = sub_c_str)
+
+            else:
+                c_str += f' {item}\n'
+    
+    return c_str
+
 
 """
 Dictionaries
